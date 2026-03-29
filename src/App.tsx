@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Toaster, toast } from 'sonner';
+import { io, Socket } from 'socket.io-client';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { ChatView } from './components/ChatView';
@@ -58,8 +59,76 @@ export default function App() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pullAbortController = useRef<AbortController | null>(null);
+  const socketRef = useRef<Socket | null>(null);
 
   const activeChat = chats.find(c => c.id === activeChatId);
+
+  // Socket.io initialization
+  useEffect(() => {
+    const socket = io();
+    socketRef.current = socket;
+
+    socket.on('chat:start', ({ chatId, userMessage, assistantMessage, model }) => {
+      setChats(prev => {
+        const chatExists = prev.some(c => c.id === chatId);
+        if (chatExists) {
+          return prev.map(c => 
+            c.id === chatId 
+              ? { ...c, messages: [...c.messages, userMessage, assistantMessage] }
+              : c
+          );
+        } else {
+          const newChat: Chat = {
+            id: chatId,
+            title: userMessage.content.slice(0, 30) + (userMessage.content.length > 30 ? '...' : ''),
+            messages: [userMessage, assistantMessage],
+            model: model,
+            createdAt: Date.now(),
+          };
+          return [newChat, ...prev];
+        }
+      });
+      setIsLoading(true);
+    });
+
+    socket.on('chat:chunk', ({ chatId, chunk }) => {
+      setChats(prev => prev.map(c => 
+        c.id === chatId 
+          ? { 
+              ...c, 
+              messages: c.messages.map((m, idx) => 
+                (m.role === 'assistant' && idx === c.messages.length - 1) 
+                  ? { ...m, content: m.content + chunk } 
+                  : m
+              ) 
+            }
+          : c
+      ));
+    });
+
+    socket.on('chat:end', ({ chatId, finalContent }) => {
+      setIsLoading(false);
+      // Sync final content just in case
+      if (finalContent) {
+        setChats(prev => prev.map(c => 
+          c.id === chatId 
+            ? { 
+                ...c, 
+                messages: c.messages.map((m, idx) => 
+                  (m.role === 'assistant' && idx === c.messages.length - 1) 
+                    ? { ...m, content: finalContent } 
+                    : m
+                ) 
+              }
+            : c
+        ));
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   // Initial load from backend
   useEffect(() => {
@@ -464,6 +533,14 @@ When you want to create code or save information, use the write_file tool.
           : c
       ));
 
+      // Emit start event to other tabs
+      socketRef.current?.emit('chat:start', {
+        chatId: currentChatId,
+        userMessage,
+        assistantMessage,
+        model: selectedModel
+      });
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -476,7 +553,15 @@ When you want to create code or save information, use the write_file tool.
           try {
             const json = JSON.parse(line);
             if (json.message?.content) {
-              assistantContent += json.message.content;
+              const contentChunk = json.message.content;
+              assistantContent += contentChunk;
+              
+              // Emit chunk to other tabs
+              socketRef.current?.emit('chat:chunk', {
+                chatId: currentChatId,
+                chunk: contentChunk
+              });
+
               setChats(prev => prev.map(c => 
                 c.id === currentChatId 
                   ? { 
@@ -494,6 +579,12 @@ When you want to create code or save information, use the write_file tool.
         }
       }
       
+      // Emit end event to other tabs
+      socketRef.current?.emit('chat:end', {
+        chatId: currentChatId,
+        finalContent: assistantContent
+      });
+
       // Extract memory after assistant finishes
       extractMemory(currentChatId);
       

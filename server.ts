@@ -1,5 +1,7 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -47,9 +49,38 @@ async function startServer() {
   await ensureDataDir();
   
   const app = express();
+  const httpServer = createServer(app);
+  const io = new Server(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    }
+  });
+
   const PORT = 3000;
 
   app.use(express.json({ limit: '50mb' }));
+
+  // Socket.io logic
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+
+    socket.on('chat:start', (data) => {
+      socket.broadcast.emit('chat:start', data);
+    });
+
+    socket.on('chat:chunk', (data) => {
+      socket.broadcast.emit('chat:chunk', data);
+    });
+
+    socket.on('chat:end', (data) => {
+      socket.broadcast.emit('chat:end', data);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+    });
+  });
 
   // API: Get all chats
   app.get('/api/chats', async (req, res) => {
@@ -182,7 +213,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
