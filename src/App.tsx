@@ -166,6 +166,10 @@ export default function App() {
     } catch (error) {
       console.error('Connection error:', error);
       setConnectionStatus('disconnected');
+      toast.error('Cannot connect to Ollama. Please check if Ollama is running and CORS is enabled.', {
+        id: 'connection-error',
+        duration: 5000,
+      });
     }
   };
 
@@ -573,6 +577,12 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-2">
+            {connectionStatus === 'disconnected' && (
+              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 rounded-full text-xs font-bold border border-red-100">
+                <AlertCircle size={14} />
+                OFFLINE
+              </div>
+            )}
             <button 
               onClick={checkConnection}
               className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
@@ -582,6 +592,19 @@ export default function App() {
             </button>
           </div>
         </header>
+
+        {connectionStatus === 'disconnected' && (
+          <div className="bg-red-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-center gap-2 animate-in slide-in-from-top duration-300">
+            <AlertCircle size={14} />
+            <span>Ollama is unreachable at {ollamaUrl}. Please check your settings and CORS configuration.</span>
+            <button 
+              onClick={() => setShowSettings(true)}
+              className="underline font-bold hover:text-red-100 transition-colors"
+            >
+              Open Settings
+            </button>
+          </div>
+        )}
 
         {/* View Switcher */}
         <div className="flex-1 overflow-y-auto">
@@ -966,14 +989,29 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div className="p-4 bg-blue-50 rounded-2xl space-y-2">
+                  <div className="p-4 bg-blue-50 rounded-2xl space-y-3">
                     <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider">CORS Configuration</h4>
                     <p className="text-xs text-blue-700 leading-relaxed">
-                      If you can't connect, you must set the OLLAMA_ORIGINS environment variable on your machine:
+                      If you can't connect, you must enable CORS on your Ollama server.
                     </p>
-                    <div className="bg-blue-900 text-blue-50 p-2 rounded-lg text-[10px] font-mono overflow-x-auto">
-                      export OLLAMA_ORIGINS="*" && ollama serve
+                    
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-blue-600 uppercase">macOS / Linux</p>
+                      <div className="bg-blue-900 text-blue-50 p-2 rounded-lg text-[10px] font-mono overflow-x-auto">
+                        export OLLAMA_ORIGINS="*" && ollama serve
+                      </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-blue-600 uppercase">Windows (PowerShell)</p>
+                      <div className="bg-blue-900 text-blue-50 p-2 rounded-lg text-[10px] font-mono overflow-x-auto">
+                        $env:OLLAMA_ORIGINS="*"; ollama serve
+                      </div>
+                    </div>
+                    
+                    <p className="text-[10px] text-blue-500 italic">
+                      Note: Restart Ollama after setting these variables.
+                    </p>
                   </div>
                 </div>
                 <div className="p-6 bg-gray-50 flex justify-end">
