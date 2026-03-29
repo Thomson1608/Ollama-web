@@ -735,6 +735,8 @@ When you write code, briefly explain your plan in the chat, then immediately use
       console.error(error);
     } finally {
       setIsLoading(false);
+      setIsAiTypingGlobally(false);
+      localStorage.setItem('ollama_is_loading', 'false');
     }
   };
 
