@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -14,6 +15,8 @@ const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
+const DEBUG_LOG_FILE = path.join(DATA_DIR, 'debug.log');
+const RELEASE_LOG_FILE = path.join(DATA_DIR, 'release.log');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
@@ -21,14 +24,31 @@ const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
 const logger = {
   debug: (message: string, data?: any) => {
     if (LOG_LEVEL === 'debug') {
-      console.log(`[DEBUG] ${new Date().toISOString()} - ${message}`, data ? JSON.stringify(data, null, 2) : '');
+      const logMsg = `[DEBUG] ${new Date().toISOString()} - ${message}${data ? ' ' + JSON.stringify(data, null, 2) : ''}\n`;
+      process.stdout.write(logMsg);
+      try {
+        fsSync.appendFileSync(DEBUG_LOG_FILE, logMsg);
+      } catch (e) {}
     }
   },
   release: (message: string, data?: any) => {
-    console.log(`[RELEASE] ${new Date().toISOString()} - ${message}`, data ? JSON.stringify(data, null, 2) : '');
+    const logMsg = `[RELEASE] ${new Date().toISOString()} - ${message}${data ? ' ' + JSON.stringify(data, null, 2) : ''}\n`;
+    process.stdout.write(logMsg);
+    try {
+      if (LOG_LEVEL === 'release') {
+        fsSync.appendFileSync(RELEASE_LOG_FILE, logMsg);
+      } else if (LOG_LEVEL === 'debug') {
+        fsSync.appendFileSync(DEBUG_LOG_FILE, logMsg);
+      }
+    } catch (e) {}
   },
   error: (message: string, error?: any) => {
-    console.error(`[ERROR] ${new Date().toISOString()} - ${message}`, error);
+    const logMsg = `[ERROR] ${new Date().toISOString()} - ${message}${error ? ' ' + JSON.stringify(error, null, 2) : ''}\n`;
+    process.stderr.write(logMsg);
+    try {
+      const targetFile = LOG_LEVEL === 'release' ? RELEASE_LOG_FILE : DEBUG_LOG_FILE;
+      fsSync.appendFileSync(targetFile, logMsg);
+    } catch (e) {}
   }
 };
 
@@ -269,7 +289,7 @@ async function startServer() {
       const data = await response.json();
       res.json(data);
     } catch (error) {
-      console.error('Ollama PS Error:', error);
+      logger.error('Ollama PS Error:', error);
       res.status(500).json({ error: 'Failed to fetch running models from Ollama' });
     }
   });
@@ -352,7 +372,7 @@ async function startServer() {
       processPostChatLogic(chatId, assistantContent, model, messages);
       
     } catch (error) {
-      console.error('Ollama Chat Error:', error);
+      logger.error('Ollama Chat Error:', error);
       res.status(500).json({ error: 'Failed to communicate with Ollama' });
     }
   });
@@ -400,7 +420,7 @@ async function startServer() {
       }
       res.end();
     } catch (error) {
-      console.error('Ollama Pull Error:', error);
+      logger.error('Ollama Pull Error:', error);
       res.status(500).json({ error: 'Failed to pull model from Ollama' });
     }
   });
@@ -416,7 +436,7 @@ async function startServer() {
       const data = await response.json();
       res.json(data);
     } catch (error) {
-      console.error('Ollama Delete Error:', error);
+      logger.error('Ollama Delete Error:', error);
       res.status(500).json({ error: 'Failed to delete model from Ollama' });
     }
   });
