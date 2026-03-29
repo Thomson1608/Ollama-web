@@ -60,6 +60,8 @@ When you write code, briefly explain your plan in the chat, then immediately use
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
+  const [modelFilter, setModelFilter] = useState<'local' | 'claude'>('local');
+  const [claudeUsage, setClaudeUsage] = useState({ used: 0, total: 1000000 }); // Mock usage
 
   const allOllamaModels = [
     'llama3.2', 'llama3.1', 'llama3', 'llama2', 'mistral', 'mistral-nemo', 'mixtral',
@@ -72,14 +74,17 @@ When you write code, briefly explain your plan in the chat, then immediately use
   ];
 
   const popularModels = [
-    { name: 'llama3.2', description: 'Meta\'s latest lightweight model' },
-    { name: 'llama3.1', description: 'Meta\'s most capable open model' },
-    { name: 'mistral', description: 'High performance 7B model' },
-    { name: 'phi3', description: 'Microsoft\'s efficient small model' },
-    { name: 'gemma2', description: 'Google\'s lightweight open model' },
-    { name: 'qwen2.5', description: 'Alibaba\'s powerful language model' },
-    { name: 'deepseek-v2', description: 'Strong reasoning and coding model' },
-    { name: 'codellama', description: 'Specialized for code generation' },
+    { name: 'llama3.2', description: 'Meta\'s latest lightweight model', type: 'local' },
+    { name: 'llama3.1', description: 'Meta\'s most capable open model', type: 'local' },
+    { name: 'mistral', description: 'High performance 7B model', type: 'local' },
+    { name: 'phi3', description: 'Microsoft\'s efficient small model', type: 'local' },
+    { name: 'gemma2', description: 'Google\'s lightweight open model', type: 'local' },
+    { name: 'qwen2.5', description: 'Alibaba\'s powerful language model', type: 'local' },
+    { name: 'deepseek-v2', description: 'Strong reasoning and coding model', type: 'local' },
+    { name: 'codellama', description: 'Specialized for code generation', type: 'local' },
+    { name: 'claude-3-5-sonnet-20240620', description: 'Anthropic\'s most intelligent model', type: 'claude' },
+    { name: 'claude-3-opus-20240229', description: 'Anthropic\'s most powerful model', type: 'claude' },
+    { name: 'claude-3-haiku-20240307', description: 'Anthropic\'s fastest model', type: 'claude' },
   ];
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -233,6 +238,11 @@ When you write code, briefly explain your plan in the chat, then immediately use
       setMemory(updatedMemory);
     });
 
+    socket.on('usage:updated', (newUsage: any) => {
+      console.log('Socket.io: usage:updated event received');
+      setClaudeUsage(newUsage.claude);
+    });
+
     socket.on('tool:result', ({ chatId, tool, result }) => {
       console.log(`Socket.io: tool:result event received (${tool}):`, result);
       toast.info(result, { id: `tool-${chatId}-${tool}` });
@@ -349,6 +359,13 @@ When you write code, briefly explain your plan in the chat, then immediately use
         if (memoryRes.ok) {
           const data = await memoryRes.json();
           setMemory(data);
+        }
+
+        // Fetch usage
+        const usageRes = await fetch('/api/usage');
+        if (usageRes.ok) {
+          const data = await usageRes.json();
+          setClaudeUsage(data.claude);
         }
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
@@ -770,6 +787,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
           checkConnection={checkConnection}
           setShowSettings={() => setCurrentView('settings')}
           isBusy={isLoading || isAiTypingGlobally}
+          claudeUsage={claudeUsage}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -825,6 +843,9 @@ When you write code, briefly explain your plan in the chat, then immediately use
                 setShowSuggestions={setShowSuggestions}
                 suggestions={suggestions}
                 popularModels={popularModels}
+                modelFilter={modelFilter}
+                setModelFilter={setModelFilter}
+                claudeUsage={claudeUsage}
               />
             </div>
           )}

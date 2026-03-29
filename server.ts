@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import Anthropic from '@anthropic-ai/sdk';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,12 +15,18 @@ const DATA_DIR = path.join(__dirname, 'data');
 const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
+const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
 const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
 const DEBUG_LOG_FILE = path.join(DATA_DIR, 'debug.log');
 const RELEASE_LOG_FILE = path.join(DATA_DIR, 'release.log');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
+
+const anthropic = new Anthropic({
+  apiKey: ANTHROPIC_API_KEY,
+});
 
 const logger = {
   debug: (message: string, data?: any) => {
@@ -79,6 +86,12 @@ async function ensureDataDir() {
     await fs.access(MEMORY_FILE);
   } catch {
     await fs.writeFile(MEMORY_FILE, JSON.stringify({ facts: [] }, null, 2));
+  }
+
+  try {
+    await fs.access(USAGE_FILE);
+  } catch {
+    await fs.writeFile(USAGE_FILE, JSON.stringify({ claude: { used: 0, total: 1000000 } }, null, 2));
   }
 }
 
@@ -211,6 +224,16 @@ async function startServer() {
     }
   });
 
+  // API: Get usage
+  app.get('/api/usage', async (req, res) => {
+    try {
+      const data = await fs.readFile(USAGE_FILE, 'utf-8');
+      res.json(JSON.parse(data));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to read usage' });
+    }
+  });
+
   // Helper: Get all files recursively
   async function getAllFiles(dirPath: string, baseDir: string = WORKSPACE_DIR): Promise<any[]> {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -327,9 +350,73 @@ async function startServer() {
   app.post('/api/ollama/chat', async (req, res) => {
     const { chatId, messages, model } = req.body;
     
-    logger.release(`Ollama Proxy: Starting chat session for ${chatId} using ${model}`);
-    logger.debug(`Ollama Proxy: Chat request payload for ${chatId}`, { model, messageCount: messages.length });
+    const isClaude = model.startsWith('claude-');
 
+    logger.release(`Proxy: Starting chat session for ${chatId} using ${model} (Type: ${isClaude ? 'Claude' : 'Ollama'})`);
+    
+    if (isClaude) {
+      if (!ANTHROPIC_API_KEY) {
+        return res.status(400).json({ error: 'Anthropic API Key is not configured. Please add it to your environment variables.' });
+      }
+
+      try {
+        const stream = await anthropic.messages.create({
+          model: model,
+          max_tokens: 4096,
+          messages: messages.filter((m: any) => m.role !== 'system').map((m: any) => ({ role: m.role, content: m.content })),
+          system: messages.find((m: any) => m.role === 'system')?.content || '',
+          stream: true,
+        });
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        let assistantContent = '';
+        
+        io.emit('chat:start', {
+          chatId,
+          model,
+          userMessage: messages[messages.length - 1],
+          assistantMessage: { role: 'assistant', content: '', timestamp: Date.now() }
+        });
+
+        for await (const chunk of stream) {
+          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+            const text = chunk.delta.text;
+            assistantContent += text;
+            io.emit('chat:chunk', { chatId, chunk: text });
+            res.write(`data: ${JSON.stringify({ message: { content: text } })}\n\n`);
+          } else if (chunk.type === 'message_delta' && chunk.usage) {
+            // Update usage
+            try {
+              const usageData = JSON.parse(await fs.readFile(USAGE_FILE, 'utf-8'));
+              usageData.claude.used += (chunk.usage.output_tokens || 0);
+              await fs.writeFile(USAGE_FILE, JSON.stringify(usageData, null, 2));
+              io.emit('usage:updated', usageData);
+            } catch (e) {}
+          } else if (chunk.type === 'message_start' && chunk.message.usage) {
+            // Initial usage
+            try {
+              const usageData = JSON.parse(await fs.readFile(USAGE_FILE, 'utf-8'));
+              usageData.claude.used += (chunk.message.usage.input_tokens || 0);
+              await fs.writeFile(USAGE_FILE, JSON.stringify(usageData, null, 2));
+              io.emit('usage:updated', usageData);
+            } catch (e) {}
+          }
+        }
+
+        io.emit('chat:end', { chatId, finalContent: assistantContent });
+        res.end();
+        processPostChatLogic(chatId, assistantContent, model, messages);
+        return;
+      } catch (error) {
+        logger.error('Claude Chat Error:', error);
+        return res.status(500).json({ error: 'Failed to communicate with Claude' });
+      }
+    }
+
+    // Original Ollama logic
     try {
       const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
