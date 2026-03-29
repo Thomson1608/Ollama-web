@@ -16,6 +16,7 @@ const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
+const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
 const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
 const DEBUG_LOG_FILE = path.join(DATA_DIR, 'debug.log');
@@ -109,6 +110,12 @@ async function ensureDataDir() {
   } catch {
     await fs.writeFile(USAGE_FILE, JSON.stringify({ claude: { used: 0, total: 1000000 } }, null, 2));
   }
+
+  try {
+    await fs.access(STATS_FILE);
+  } catch {
+    await fs.writeFile(STATS_FILE, JSON.stringify({ sent: 0, success: 0, fail: 0 }, null, 2));
+  }
 }
 
 async function cleanupOldChats() {
@@ -171,6 +178,17 @@ async function startServer() {
       logger.release(`Socket.io: Client disconnected: ${socket.id} (Reason: ${reason})`);
     });
   });
+
+  async function updateStats(type: 'sent' | 'success' | 'fail') {
+    try {
+      const data = await fs.readFile(STATS_FILE, 'utf-8');
+      const stats = JSON.parse(data);
+      stats[type]++;
+      await fs.writeFile(STATS_FILE, JSON.stringify(stats, null, 2));
+    } catch (error) {
+      logger.error('Failed to update stats', error);
+    }
+  }
 
   // API: Get all chats
   app.get('/api/chats', async (req, res) => {
@@ -240,13 +258,25 @@ async function startServer() {
     }
   });
 
-  // API: Get usage
-  app.get('/api/usage', async (req, res) => {
+  // API: Get stats
+  app.get('/api/stats', async (req, res) => {
     try {
-      const data = await fs.readFile(USAGE_FILE, 'utf-8');
+      const data = await fs.readFile(STATS_FILE, 'utf-8');
       res.json(JSON.parse(data));
     } catch (error) {
-      res.status(500).json({ error: 'Failed to read usage' });
+      res.status(500).json({ error: 'Failed to read stats' });
+    }
+  });
+
+  // API: Get error logs
+  app.get('/api/logs/errors', async (req, res) => {
+    try {
+      const data = await fs.readFile(DEBUG_LOG_FILE, 'utf-8');
+      const lines = data.split('\n');
+      const errorLogs = lines.filter(line => line.includes('[ERROR]')).slice(-50); // Get last 50 errors
+      res.json({ logs: errorLogs });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to read error logs' });
     }
   });
 
@@ -389,6 +419,8 @@ async function startServer() {
   app.post('/api/ollama/chat', async (req, res) => {
     const { chatId, messages, model } = req.body;
     
+    await updateStats('sent');
+
     const isClaude = model.startsWith('claude-');
 
     logger.release(`Proxy: Starting chat session for ${chatId} using ${model} (Type: ${isClaude ? 'Claude' : 'Ollama'})`);
@@ -449,10 +481,12 @@ async function startServer() {
 
         io.emit('chat:end', { chatId, finalContent: assistantContent });
         res.end();
+        await updateStats('success');
         processPostChatLogic(chatId, assistantContent, model, messages);
         return;
       } catch (error) {
         logger.error('Claude Chat Error:', error);
+        await updateStats('fail');
         return res.status(500).json({ error: 'Failed to communicate with Claude' });
       }
     }
@@ -524,12 +558,14 @@ async function startServer() {
       logger.debug(`Ollama Proxy: Final assistant content for ${chatId}`, { length: assistantContent.length });
       
       res.end();
+      await updateStats('success');
 
       // --- Post-chat logic: Tool calls and Memory extraction ---
       processPostChatLogic(chatId, assistantContent, model, messages);
       
     } catch (error) {
       logger.error('Ollama Chat Error:', error);
+      await updateStats('fail');
       res.status(500).json({ error: 'Failed to communicate with Ollama' });
     }
   });

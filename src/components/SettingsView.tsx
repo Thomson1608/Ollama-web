@@ -33,21 +33,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   claudeUsage
 }) => {
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
+  const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
   const [claudeApiKey, setClaudeApiKey] = useState('');
-  const hasChanges = localPrompt !== systemPrompt;
+  const hasChanges = localPrompt !== systemPrompt || JSON.stringify(localMemory) !== JSON.stringify(memory.facts);
 
   // Update local state if parent state changes (e.g. on initial load)
   useEffect(() => {
     setLocalPrompt(systemPrompt);
+    setLocalMemory(memory.facts);
     fetch('/api/secrets')
       .then(res => res.json())
       .then(data => setClaudeApiKey(data.ANTHROPIC_API_KEY))
       .catch(console.error);
-  }, [systemPrompt]);
+  }, [systemPrompt, memory]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
-    saveSettings();
+    // Update memory via API
+    fetch('/api/memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ facts: localMemory }),
+    }).then(() => {
+        // We need a way to update parent state, but for now we just save and reload
+        saveSettings();
+    });
   };
 
   const handleSaveApiKey = async () => {
@@ -187,20 +197,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <p className="text-xs text-gray-500 leading-relaxed">
                     Information the AI has learned about you over time. This is used to personalize your experience.
                   </p>
-                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 h-[180px] overflow-y-auto">
-                    {memory.facts.length > 0 ? (
-                      <ul className="space-y-2">
-                        {memory.facts.map((fact, i) => (
-                          <li key={i} className="text-xs text-gray-600 flex gap-2">
-                            <span className="text-blue-400">•</span>
-                            {fact}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-xs text-gray-400 italic">No facts extracted yet.</p>
-                    )}
-                  </div>
+                  <textarea
+                    value={localMemory.join('\n')}
+                    onChange={(e) => setLocalMemory(e.target.value.split('\n').filter(line => line.trim() !== ''))}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-600 font-mono h-[180px] focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    placeholder="Enter facts about yourself, one per line..."
+                  />
                 </div>
               </div>
 

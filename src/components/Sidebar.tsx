@@ -10,7 +10,8 @@ import {
   Download,
   FileDown,
   FileUp,
-  Folder
+  Folder,
+  BarChart
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -201,6 +202,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Workspace"
           >
             <Folder size={16} />
+          </button>
+          <button 
+            onClick={() => {
+              setCurrentView('stats');
+              if (isMobile) setIsSidebarOpen(false);
+            }}
+            className={cn(
+              "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
+              currentView === 'stats' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+            )}
+            title="Stats"
+          >
+            <BarChart size={16} />
           </button>
         </div>
         <button 
