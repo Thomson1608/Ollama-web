@@ -35,7 +35,12 @@ const ToolCallRenderer = ({ content }: { content: string }) => {
     const match = content.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
     if (!match) return null;
     
-    const toolCall = JSON.parse(match[1]);
+    let jsonString = match[1].trim();
+    if (jsonString.startsWith('```')) {
+      jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    }
+    
+    const toolCall = JSON.parse(jsonString);
     const tool = toolCall.tool;
     const args = toolCall.args;
     

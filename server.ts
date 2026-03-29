@@ -426,6 +426,8 @@ async function startServer() {
 
       let assistantContent = '';
       let lastProcessedToolCallIndex = 0;
+      let buffer = '';
+      const decoder = new TextDecoder();
       
       // Emit start event via Socket.io
       io.emit('chat:start', {
@@ -437,10 +439,51 @@ async function startServer() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          // Process any remaining buffer
+          if (buffer.trim()) {
+            try {
+              const json = JSON.parse(buffer);
+              if (json.message?.content) {
+                assistantContent += json.message.content;
+                io.emit('chat:chunk', { chatId, chunk: json.message.content });
+              }
+            } catch (e) {
+              // Ignore final parse error
+            }
+          }
+          
+          // Check for any remaining tool calls at the very end
+          const toolCallEndTag = '</tool_call>';
+          let toolCallEndIndex = assistantContent.indexOf(toolCallEndTag, lastProcessedToolCallIndex);
+          while (toolCallEndIndex !== -1) {
+            const toolCallEnd = toolCallEndIndex + toolCallEndTag.length;
+            const newContent = assistantContent.substring(lastProcessedToolCallIndex, toolCallEnd);
+            const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+            let match;
+            while ((match = toolCallRegex.exec(newContent)) !== null) {
+              try {
+                let jsonString = match[1].trim();
+                if (jsonString.startsWith('```')) {
+                  jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+                }
+                const call = JSON.parse(jsonString);
+                executeToolCall(chatId, call);
+              } catch (e) {
+                logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
+              }
+            }
+            lastProcessedToolCallIndex = toolCallEnd;
+            toolCallEndIndex = assistantContent.indexOf(toolCallEndTag, lastProcessedToolCallIndex);
+          }
+          break;
+        }
         
-        const chunkStr = new TextDecoder().decode(value);
-        const lines = chunkStr.split('\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        
+        // Keep the last partial line in the buffer
+        buffer = lines.pop() || '';
         
         for (const line of lines) {
           if (!line.trim()) continue;
@@ -466,11 +509,17 @@ async function startServer() {
                 let match;
                 while ((match = toolCallRegex.exec(newContent)) !== null) {
                   try {
-                    const call = JSON.parse(match[1]);
+                    let jsonString = match[1].trim();
+                    // Remove markdown code block formatting if present
+                    if (jsonString.startsWith('```')) {
+                      jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+                    }
+                    const call = JSON.parse(jsonString);
                     // Execute tool call asynchronously
                     executeToolCall(chatId, call);
                   } catch (e) {
                     logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
+                    logger.debug(`Failed JSON string: ${match[1]}`);
                   }
                 }
                 
@@ -479,7 +528,7 @@ async function startServer() {
               }
             }
           } catch (e) {
-            // Ignore parse errors for partial lines
+            // Ignore parse errors for partial lines (should be rare now with buffering)
           }
         }
         
