@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Settings, 
   Globe, 
@@ -30,14 +30,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   saveSettings,
   connectionStatus
 }) => {
+  const [localPrompt, setLocalPrompt] = useState(systemPrompt);
+  const hasChanges = localPrompt !== systemPrompt;
+
+  // Update local state if parent state changes (e.g. on initial load)
+  useEffect(() => {
+    setLocalPrompt(systemPrompt);
+  }, [systemPrompt]);
+
+  const handleSave = () => {
+    setSystemPrompt(localPrompt);
+    // We need to wait for the state to update or just call saveSettings
+    // Since setSystemPrompt is likely async in React's eyes, 
+    // we just trigger the save logic which App.tsx handles.
+    saveSettings();
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4 md:p-8">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="max-w-3xl mx-auto space-y-8"
-      >
-        <div className="flex items-center justify-between">
+    <div className="flex-1 flex flex-col overflow-hidden bg-gray-50/30">
+      {/* Header - Fixed at top */}
+      <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 md:px-8 py-6 z-10">
+        <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
               <Settings size={24} />
@@ -48,106 +61,135 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
           <button 
-            onClick={saveSettings}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-200"
+            onClick={handleSave}
+            disabled={!hasChanges}
+            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${
+              hasChanges 
+                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 cursor-pointer" 
+                : "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
+            }`}
           >
             <Save size={18} />
             Save Changes
           </button>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Connection Status */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
-            <div className="space-y-4">
+      {/* Body - Scrollable */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-4xl mx-auto space-y-8 pb-12"
+        >
+          <div className="space-y-6">
+            {/* System Prompt - Full Width */}
+            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                  <Globe size={16} className="text-blue-500" />
-                  Ollama Server Status
+                <label className="text-base font-bold text-gray-700 flex items-center gap-2">
+                  <UserCircle size={20} className="text-blue-500" />
+                  System Prompt
                 </label>
-                <div className="flex items-center gap-1.5">
-                  {connectionStatus === 'connected' ? (
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
-                      <CheckCircle2 size={10} />
-                      CONNECTED
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
-                      <AlertCircle size={10} />
-                      DISCONNECTED
-                    </div>
-                  )}
-                </div>
+                {hasChanges && (
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 animate-pulse">
+                    UNSAVED CHANGES
+                  </span>
+                )}
               </div>
               <p className="text-xs text-gray-500 leading-relaxed">
-                The application is configured to connect to Ollama via the backend server. 
-                {connectionStatus === 'connected' 
-                  ? " The connection is currently active and healthy." 
-                  : " The backend is unable to reach Ollama. Please ensure Ollama is running on the server."}
+                Define the AI's personality, knowledge boundaries, and response style. This prompt is sent with every message to guide the AI's behavior.
               </p>
-            </div>
-
-            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
-              <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
-                <Terminal size={16} />
-                Server-Side Logic
-              </div>
-              <p className="text-[11px] text-blue-700 leading-relaxed">
-                All AI processing and model management are now handled by the backend server for improved security and reliability when deployed on a VPS.
-              </p>
-            </div>
-          </div>
-
-          {/* Memory & Personalization */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
-            <div className="space-y-4">
-              <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                <UserCircle size={16} className="text-blue-500" />
-                System Prompt
-              </label>
               <textarea 
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
+                value={localPrompt}
+                onChange={(e) => setLocalPrompt(e.target.value)}
                 placeholder="Tell the AI who you are and how it should behave..."
-                rows={4}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm resize-none"
+                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-6 py-5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-mono min-h-[400px] leading-relaxed"
               />
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                  <Brain size={16} className="text-blue-500" />
-                  Long-term Memory
-                </label>
-                {memory.facts.length > 0 && (
-                  <button 
-                    onClick={clearMemory}
-                    className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
-                  >
-                    <Trash2 size={10} />
-                    CLEAR
-                  </button>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Connection Status */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6 flex flex-col">
+                <div className="space-y-4 flex-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                      <Globe size={16} className="text-blue-500" />
+                      Ollama Server Status
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      {connectionStatus === 'connected' ? (
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+                          <CheckCircle2 size={10} />
+                          CONNECTED
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+                          <AlertCircle size={10} />
+                          DISCONNECTED
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    The application is configured to connect to Ollama via the backend server. 
+                    {connectionStatus === 'connected' 
+                      ? " The connection is currently active and healthy." 
+                      : " The backend is unable to reach Ollama. Please ensure Ollama is running on the server."}
+                  </p>
+                </div>
+
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
+                  <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
+                    <Terminal size={16} />
+                    Server-Side Logic
+                  </div>
+                  <p className="text-[11px] text-blue-700 leading-relaxed">
+                    All AI processing and model management are now handled by the backend server for improved security and reliability when deployed on a VPS.
+                  </p>
+                </div>
               </div>
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 max-h-40 overflow-y-auto">
-                {memory.facts.length > 0 ? (
-                  <ul className="space-y-2">
-                    {memory.facts.map((fact, i) => (
-                      <li key={i} className="text-xs text-gray-600 flex gap-2">
-                        <span className="text-blue-400">•</span>
-                        {fact}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-gray-400 italic">No facts extracted yet.</p>
-                )}
+
+              {/* Memory & Personalization */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                      <Brain size={16} className="text-blue-500" />
+                      Long-term Memory
+                    </label>
+                    {memory.facts.length > 0 && (
+                      <button 
+                        onClick={clearMemory}
+                        className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
+                      >
+                        <Trash2 size={10} />
+                        CLEAR
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Information the AI has learned about you over time. This is used to personalize your experience.
+                  </p>
+                  <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 h-[180px] overflow-y-auto">
+                    {memory.facts.length > 0 ? (
+                      <ul className="space-y-2">
+                        {memory.facts.map((fact, i) => (
+                          <li key={i} className="text-xs text-gray-600 flex gap-2">
+                            <span className="text-blue-400">•</span>
+                            {fact}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-gray-400 italic">No facts extracted yet.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 };

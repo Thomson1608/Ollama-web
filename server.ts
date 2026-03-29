@@ -211,16 +211,34 @@ async function startServer() {
     }
   });
 
+  // Helper: Get all files recursively
+  async function getAllFiles(dirPath: string, baseDir: string = WORKSPACE_DIR): Promise<any[]> {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const files = await Promise.all(entries.map(async (entry) => {
+      const fullPath = path.join(dirPath, entry.name);
+      const relativePath = path.relative(baseDir, fullPath);
+      
+      if (entry.isDirectory()) {
+        const subFiles = await getAllFiles(fullPath, baseDir);
+        return [{ name: relativePath, isDirectory: true }, ...subFiles];
+      } else {
+        const stats = await fs.stat(fullPath);
+        return { name: relativePath, isDirectory: false, size: stats.size, mtime: stats.mtime };
+      }
+    }));
+    return files.flat();
+  }
+
   // API: List workspace files
   app.get('/api/workspace', async (req, res) => {
     try {
-      const files = await fs.readdir(WORKSPACE_DIR);
-      const stats = await Promise.all(files.map(async f => {
-        const s = await fs.stat(path.join(WORKSPACE_DIR, f));
-        return { name: f, isDirectory: s.isDirectory(), size: s.size, mtime: s.mtime };
-      }));
+      if (!fsSync.existsSync(WORKSPACE_DIR)) {
+        await fs.mkdir(WORKSPACE_DIR, { recursive: true });
+      }
+      const stats = await getAllFiles(WORKSPACE_DIR);
       res.json(stats);
     } catch (error) {
+      logger.error('Failed to list workspace', error);
       res.status(500).json({ error: 'Failed to list workspace' });
     }
   });
@@ -230,10 +248,12 @@ async function startServer() {
     try {
       const fileName = req.query.name as string;
       if (!fileName) return res.status(400).json({ error: 'Missing filename' });
-      const filePath = path.join(WORKSPACE_DIR, fileName);
+      const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
+      const filePath = path.join(WORKSPACE_DIR, safeName);
       const content = await fs.readFile(filePath, 'utf-8');
       res.json({ content });
     } catch (error) {
+      logger.error('Failed to read file', error);
       res.status(500).json({ error: 'Failed to read file' });
     }
   });
@@ -243,11 +263,18 @@ async function startServer() {
     try {
       const { name, content } = req.body;
       if (!name) return res.status(400).json({ error: 'Missing filename' });
-      const filePath = path.join(WORKSPACE_DIR, name);
+      const safeName = path.normalize(name).replace(/^(\.\.[\/\\])+/, '');
+      const filePath = path.join(WORKSPACE_DIR, safeName);
+      const dirPath = path.dirname(filePath);
+      
+      // Ensure directory exists
+      await fs.mkdir(dirPath, { recursive: true });
+      
       await fs.writeFile(filePath, content, 'utf-8');
       io.emit('workspace:updated');
       res.json({ success: true });
     } catch (error) {
+      logger.error('Failed to write file', error);
       res.status(500).json({ error: 'Failed to write file' });
     }
   });
@@ -257,11 +284,13 @@ async function startServer() {
     try {
       const fileName = req.query.name as string;
       if (!fileName) return res.status(400).json({ error: 'Missing filename' });
-      const filePath = path.join(WORKSPACE_DIR, fileName);
+      const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
+      const filePath = path.join(WORKSPACE_DIR, safeName);
       await fs.unlink(filePath);
       io.emit('workspace:updated');
       res.json({ success: true });
     } catch (error) {
+      logger.error('Failed to delete file', error);
       res.status(500).json({ error: 'Failed to delete file' });
     }
   });
@@ -445,6 +474,7 @@ async function startServer() {
 
   async function processPostChatLogic(chatId: string, content: string, model: string, messages: any[]) {
     logger.debug(`Post-chat logic: Processing tools and memory for chat: ${chatId}`);
+    logger.debug(`Post-chat logic: Content length: ${content.length}`);
     
     // 1. Tool Calls
     const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
@@ -467,31 +497,42 @@ async function startServer() {
           logger.debug(`Post-chat logic: Executing tool ${call.tool}`, call.args);
           switch (call.tool) {
             case 'list_files':
-              const files = await fs.readdir(WORKSPACE_DIR);
-              io.emit('tool:result', { chatId, tool: 'list_files', result: files });
-              logger.debug(`Post-chat logic: Tool list_files success: ${files.length} files`);
+              const allFiles = await getAllFiles(WORKSPACE_DIR);
+              io.emit('tool:result', { chatId, tool: 'list_files', result: allFiles.map(f => f.name) });
+              logger.debug(`Post-chat logic: Tool list_files success: ${allFiles.length} files`);
               break;
             case 'read_file':
               if (call.args.name) {
-                const fileContent = await fs.readFile(path.join(WORKSPACE_DIR, call.args.name), 'utf-8');
+                const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
+                const filePath = path.join(WORKSPACE_DIR, safeName);
+                const fileContent = await fs.readFile(filePath, 'utf-8');
                 io.emit('tool:result', { chatId, tool: 'read_file', result: fileContent });
-                logger.debug(`Post-chat logic: Tool read_file success: ${call.args.name}`);
+                logger.debug(`Post-chat logic: Tool read_file success: ${safeName}`);
               }
               break;
             case 'write_file':
               if (call.args.name && call.args.content !== undefined) {
-                await fs.writeFile(path.join(WORKSPACE_DIR, call.args.name), call.args.content, 'utf-8');
+                const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
+                const filePath = path.join(WORKSPACE_DIR, safeName);
+                const dirPath = path.dirname(filePath);
+                
+                // Ensure directory exists
+                await fs.mkdir(dirPath, { recursive: true });
+                
+                await fs.writeFile(filePath, call.args.content, 'utf-8');
                 io.emit('workspace:updated');
-                io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${call.args.name}` });
-                logger.debug(`Post-chat logic: Tool write_file success: ${call.args.name}`);
+                io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${safeName}` });
+                logger.debug(`Post-chat logic: Tool write_file success: ${safeName}`);
               }
               break;
             case 'delete_file':
               if (call.args.name) {
-                await fs.unlink(path.join(WORKSPACE_DIR, call.args.name));
+                const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
+                const filePath = path.join(WORKSPACE_DIR, safeName);
+                await fs.unlink(filePath);
                 io.emit('workspace:updated');
-                io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${call.args.name}` });
-                logger.debug(`Post-chat logic: Tool delete_file success: ${call.args.name}`);
+                io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${safeName}` });
+                logger.debug(`Post-chat logic: Tool delete_file success: ${safeName}`);
               }
               break;
           }

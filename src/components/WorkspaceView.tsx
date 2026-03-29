@@ -134,22 +134,33 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
             files.map(file => (
               <div 
                 key={file.name}
-                className={`group flex items-center gap-2 p-2 rounded-lg text-xs cursor-pointer transition-all ${
-                  selectedFile === file.name ? "bg-blue-50 text-blue-700 font-medium" : "hover:bg-gray-50 text-gray-600"
+                className={`group flex items-center gap-2 p-2 rounded-lg text-xs transition-all ${
+                  file.isDirectory 
+                    ? "text-gray-400 cursor-default" 
+                    : selectedFile === file.name 
+                      ? "bg-blue-50 text-blue-700 font-medium cursor-pointer" 
+                      : "hover:bg-gray-50 text-gray-600 cursor-pointer"
                 }`}
-                onClick={() => readFile(file.name)}
+                style={{ paddingLeft: `${(file.name.split('/').length - 1) * 12 + 8}px` }}
+                onClick={() => !file.isDirectory && readFile(file.name)}
               >
-                <File size={14} className={selectedFile === file.name ? "text-blue-500" : "text-gray-400"} />
-                <span className="flex-1 truncate">{file.name}</span>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteFile(file.name);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-red-500"
-                >
-                  <Trash2 size={12} />
-                </button>
+                {file.isDirectory ? (
+                  <Folder size={14} className="text-blue-400/60" />
+                ) : (
+                  <File size={14} className={selectedFile === file.name ? "text-blue-500" : "text-gray-400"} />
+                )}
+                <span className="flex-1 truncate">{file.name.split('/').pop()}</span>
+                {!file.isDirectory && (
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteFile(file.name);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-red-500"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </div>
             ))
           )}

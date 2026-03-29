@@ -746,7 +746,7 @@ When you write code, always explain what you are doing. If you create or modify 
           isBusy={isLoading || isAiTypingGlobally}
         />
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {currentView === 'chat' && (
             <div className="flex h-full overflow-hidden">
               <div className="flex-1 border-r border-gray-200">
@@ -770,33 +770,37 @@ When you write code, always explain what you are doing. If you create or modify 
           )}
           
           {currentView === 'models' && (
-            <ModelsView 
-              models={models}
-              runningModels={runningModels}
-              connectionStatus={connectionStatus}
-              modelSearchQuery={modelSearchQuery}
-              setModelSearchQuery={setModelSearchQuery}
-              deleteModel={deleteModel}
-              setSelectedModel={setSelectedModel}
-              setCurrentView={setCurrentView}
-              activeChatId={activeChatId}
-              createNewChat={createNewChat}
-              formatSize={formatSize}
-            />
+            <div className="flex-1 overflow-y-auto bg-gray-50/30">
+              <ModelsView 
+                models={models}
+                runningModels={runningModels}
+                connectionStatus={connectionStatus}
+                modelSearchQuery={modelSearchQuery}
+                setModelSearchQuery={setModelSearchQuery}
+                deleteModel={deleteModel}
+                setSelectedModel={setSelectedModel}
+                setCurrentView={setCurrentView}
+                activeChatId={activeChatId}
+                createNewChat={createNewChat}
+                formatSize={formatSize}
+              />
+            </div>
           )}
 
           {currentView === 'pull' && (
-            <PullView 
-              newModelName={newModelName}
-              setNewModelName={setNewModelName}
-              pullModel={pullModel}
-              pullingModel={pullingModel}
-              cancelPull={cancelPull}
-              showSuggestions={showSuggestions}
-              setShowSuggestions={setShowSuggestions}
-              suggestions={suggestions}
-              popularModels={popularModels}
-            />
+            <div className="flex-1 overflow-y-auto bg-gray-50/30">
+              <PullView 
+                newModelName={newModelName}
+                setNewModelName={setNewModelName}
+                pullModel={pullModel}
+                pullingModel={pullingModel}
+                cancelPull={cancelPull}
+                showSuggestions={showSuggestions}
+                setShowSuggestions={setShowSuggestions}
+                suggestions={suggestions}
+                popularModels={popularModels}
+              />
+            </div>
           )}
 
           {currentView === 'workspace' && (
