@@ -25,6 +25,41 @@ interface ChatViewProps {
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
+const ToolCallRenderer = ({ content }: { content: string }) => {
+  const [status, setStatus] = React.useState('...');
+  const [filename, setFilename] = React.useState('');
+
+  React.useEffect(() => {
+    const process = async () => {
+      const match = content.match(/<tool_call>(.*?)<\/tool_call>/);
+      if (match) {
+        try {
+          const toolCall = JSON.parse(match[1]);
+          if (toolCall.tool === 'write_file') {
+            const { name, content: fileContent } = toolCall.args;
+            setFilename(name);
+            const res = await fetch('/api/workspace/write', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name, content: fileContent })
+            });
+            if (res.ok) {
+              setStatus('Created');
+            } else {
+              setStatus('Failed');
+            }
+          }
+        } catch (e) {
+          setStatus('Error');
+        }
+      }
+    };
+    process();
+  }, [content]);
+
+  return <span className="text-xs text-gray-500 italic">... + {filename || 'file'} ({status})</span>;
+};
+
 export const ChatView: React.FC<ChatViewProps> = ({
   activeChatId,
   activeChat,
@@ -38,6 +73,85 @@ export const ChatView: React.FC<ChatViewProps> = ({
   messagesEndRef
 }) => {
   const isClaude = activeChat?.model?.startsWith('claude-');
+
+  const renderMessage = (content: string) => {
+    const parts = content.split(/(<tool_call>.*?<\/tool_call>)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('<tool_call>')) {
+        return <ToolCallRenderer key={i} content={part} />;
+      }
+      return (
+        <Markdown
+          key={i}
+          components={{
+            code({ node, className, children, ...props }: any) {
+              const match = /language-(\w+)/.exec(className || '');
+              const codeString = String(children).replace(/\n$/, '');
+              const isBlock = !!match;
+              
+              if (isBlock) {
+                // Try to extract filename from language-filename pattern
+                // e.g. language-javascript:App.tsx
+                const langPart = match ? match[1] : '';
+                const fullClassName = className || '';
+                const filenameMatch = fullClassName.match(/language-[\w.]+:(.+)/);
+                const filename = filenameMatch ? filenameMatch[1] : null;
+
+                return (
+                  <div className="relative group/code my-4">
+                    <div className="absolute right-2 top-2 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
+                      {filename && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch('/api/workspace/write', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: filename, content: codeString })
+                              });
+                              if (res.ok) {
+                                toast.success(`Applied to ${filename}`);
+                              }
+                            } catch (err) {
+                              toast.error('Failed to apply to workspace');
+                            }
+                          }}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-1 rounded shadow-sm flex items-center gap-1"
+                        >
+                          <Plus size={10} />
+                          Apply to Workspace
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(codeString);
+                          toast.success('Copied to clipboard');
+                        }}
+                        className="bg-gray-800 hover:bg-black text-white text-[10px] px-2 py-1 rounded shadow-sm"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <pre className={cn("rounded-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm", className)}>
+                      <code {...props}>{children}</code>
+                    </pre>
+                    {filename && (
+                      <div className="absolute left-4 -top-3 bg-gray-800 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-700 font-mono">
+                        {filename}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              return <code className={className} {...props}>{children}</code>;
+            }
+          }}
+        >
+          {part}
+        </Markdown>
+      );
+    });
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -104,73 +218,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     : "bg-white border border-gray-200 rounded-tl-none shadow-sm"
                 )}>
                   <div className={cn("markdown-body", msg.role === 'user' ? "text-white" : "text-gray-800")}>
-                    <Markdown
-                      components={{
-                        code({ node, className, children, ...props }: any) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          const codeString = String(children).replace(/\n$/, '');
-                          const isBlock = !!match;
-                          
-                          if (isBlock) {
-                            // Try to extract filename from language-filename pattern
-                            // e.g. language-javascript:App.tsx
-                            const langPart = match ? match[1] : '';
-                            const fullClassName = className || '';
-                            const filenameMatch = fullClassName.match(/language-[\w.]+:(.+)/);
-                            const filename = filenameMatch ? filenameMatch[1] : null;
-
-                            return (
-                              <div className="relative group/code my-4">
-                                <div className="absolute right-2 top-2 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
-                                  {filename && (
-                                    <button
-                                      onClick={async () => {
-                                        try {
-                                          const res = await fetch('/api/workspace/write', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ name: filename, content: codeString })
-                                          });
-                                          if (res.ok) {
-                                            toast.success(`Applied to ${filename}`);
-                                          }
-                                        } catch (err) {
-                                          toast.error('Failed to apply to workspace');
-                                        }
-                                      }}
-                                      className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-1 rounded shadow-sm flex items-center gap-1"
-                                    >
-                                      <Plus size={10} />
-                                      Apply to Workspace
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => {
-                                      navigator.clipboard.writeText(codeString);
-                                      toast.success('Copied to clipboard');
-                                    }}
-                                    className="bg-gray-800 hover:bg-black text-white text-[10px] px-2 py-1 rounded shadow-sm"
-                                  >
-                                    Copy
-                                  </button>
-                                </div>
-                                <pre className={cn("rounded-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm", className)}>
-                                  <code {...props}>{children}</code>
-                                </pre>
-                                {filename && (
-                                  <div className="absolute left-4 -top-3 bg-gray-800 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-700 font-mono">
-                                    {filename}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          }
-                          return <code className={className} {...props}>{children}</code>;
-                        }
-                      }}
-                    >
-                      {msg.content}
-                    </Markdown>
+                    {renderMessage(msg.content)}
                   </div>
                 </div>
               </motion.div>

@@ -20,8 +20,8 @@ interface PullViewProps {
   setShowSuggestions: (show: boolean) => void;
   suggestions: string[];
   popularModels: { name: string; description: string; type: string }[];
-  modelFilter: 'local' | 'claude';
-  setModelFilter: (filter: 'local' | 'claude') => void;
+  modelFilter: 'local' | 'claude' | 'cloud-local';
+  setModelFilter: (filter: 'local' | 'claude' | 'cloud-local') => void;
   claudeUsage: { used: number; total: number };
 }
 
@@ -52,6 +52,14 @@ export const PullView: React.FC<PullViewProps> = ({
           }`}
         >
           Local Models (Ollama)
+        </button>
+        <button
+          onClick={() => setModelFilter('cloud-local')}
+          className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${
+            modelFilter === 'cloud-local' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Cloud-Local Models
         </button>
         <button
           onClick={() => setModelFilter('claude')}
