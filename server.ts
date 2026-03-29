@@ -637,17 +637,19 @@ async function startServer() {
             messages: [
               { 
                 role: 'system', 
-                content: `You are a memory extraction module. Your task is to extract personal facts, preferences, or important information about the user from the conversation. 
-                CRITICAL: Also extract the user's preferred language and communication style (e.g., "User prefers communicating in Vietnamese", "User likes technical explanations").
+                content: `You are a memory consolidation module. Your task is to maintain a concise, deduplicated list of facts, preferences, and project goals about the user.
                 
-                Current Memory: ${currentMemory.facts.join(', ')}
+                Current Memory:
+                ${JSON.stringify(currentMemory.facts)}
                 
-                Output ONLY a JSON array of strings representing NEW facts found in this snippet. 
-                If no new facts are found, output []. 
-                Do NOT repeat facts already in memory.
-                Example output: ["User prefers communicating in Vietnamese", "User is a software engineer"]` 
+                Instructions:
+                1. Extract any NEW facts from the conversation snippet.
+                2. Combine them with the Current Memory.
+                3. CRITICAL: Review the combined list and REMOVE any semantic duplicates, redundancies, or overlapping information. Merge related facts into single, comprehensive sentences if possible (e.g., instead of "User wants a website" and "User wants to use Next.js", output "User wants to build a website using Next.js").
+                4. Output ONLY a JSON array of strings representing the FINAL, consolidated memory list. You MUST include the existing facts from the Current Memory unless they are superseded or merged with new facts. Do not output markdown code blocks, just the JSON array.
+                Example output: ["User prefers communicating in Vietnamese", "User is a software engineer building a Next.js medical website"]` 
               },
-              { role: 'user', content: `Extract facts from this conversation:\n${context}` }
+              { role: 'user', content: `Conversation snippet:\n${context}` }
             ],
             stream: false
           }),
@@ -659,12 +661,14 @@ async function startServer() {
           logger.debug(`Post-chat logic: Raw memory extraction response for ${chatId}`, memoryContent);
           const match = memoryContent.match(/\[.*\]/s);
           if (match) {
-            const newFacts = JSON.parse(match[0]);
-            if (Array.isArray(newFacts) && newFacts.length > 0) {
-              const updatedMemory = { facts: [...new Set([...currentMemory.facts, ...newFacts])] };
+            const consolidatedFacts = JSON.parse(match[0]);
+            if (Array.isArray(consolidatedFacts)) {
+              // Safety check: if it returns empty but we had memory, it might be a hallucination. 
+              // But we will trust the LLM for now.
+              const updatedMemory = { facts: consolidatedFacts };
               await fs.writeFile(MEMORY_FILE, JSON.stringify(updatedMemory, null, 2));
               io.emit('memory:updated', updatedMemory);
-              logger.release(`Post-chat logic: Memory updated with ${newFacts.length} new facts from ${chatId}`);
+              logger.release(`Post-chat logic: Memory consolidated. Total facts: ${consolidatedFacts.length}`);
             }
           }
         } else {
