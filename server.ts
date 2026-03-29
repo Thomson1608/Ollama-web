@@ -16,17 +16,33 @@ const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
+const SECRETS_FILE = path.join(DATA_DIR, 'secrets.json');
 const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
 const DEBUG_LOG_FILE = path.join(DATA_DIR, 'debug.log');
 const RELEASE_LOG_FILE = path.join(DATA_DIR, 'release.log');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
 
-const anthropic = new Anthropic({
-  apiKey: ANTHROPIC_API_KEY,
-});
+let anthropic: Anthropic | null = null;
+
+async function getAnthropicClient() {
+  if (anthropic) return anthropic;
+  
+  let apiKey = process.env.ANTHROPIC_API_KEY;
+  try {
+    const secretsData = await fs.readFile(SECRETS_FILE, 'utf-8');
+    const secrets = JSON.parse(secretsData);
+    if (secrets.ANTHROPIC_API_KEY) {
+      apiKey = secrets.ANTHROPIC_API_KEY;
+    }
+  } catch (e) {}
+
+  if (!apiKey) return null;
+
+  anthropic = new Anthropic({ apiKey });
+  return anthropic;
+}
 
 const logger = {
   debug: (message: string, data?: any) => {
@@ -234,6 +250,29 @@ async function startServer() {
     }
   });
 
+  // API: Get secrets (masked)
+  app.get('/api/secrets', async (req, res) => {
+    try {
+      const data = await fs.readFile(SECRETS_FILE, 'utf-8');
+      const secrets = JSON.parse(data);
+      res.json({ ANTHROPIC_API_KEY: secrets.ANTHROPIC_API_KEY ? '********' : '' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to read secrets' });
+    }
+  });
+
+  // API: Save secrets
+  app.post('/api/secrets', async (req, res) => {
+    try {
+      const { ANTHROPIC_API_KEY } = req.body;
+      await fs.writeFile(SECRETS_FILE, JSON.stringify({ ANTHROPIC_API_KEY }, null, 2));
+      anthropic = null; // Reset client to force re-initialization
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save secrets' });
+    }
+  });
+
   // Helper: Get all files recursively
   async function getAllFiles(dirPath: string, baseDir: string = WORKSPACE_DIR): Promise<any[]> {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -355,12 +394,13 @@ async function startServer() {
     logger.release(`Proxy: Starting chat session for ${chatId} using ${model} (Type: ${isClaude ? 'Claude' : 'Ollama'})`);
     
     if (isClaude) {
-      if (!ANTHROPIC_API_KEY) {
-        return res.status(400).json({ error: 'Anthropic API Key is not configured. Please add it to your environment variables.' });
+      const client = await getAnthropicClient();
+      if (!client) {
+        return res.status(400).json({ error: 'Anthropic API Key is not configured. Please add it in Settings.' });
       }
 
       try {
-        const stream = await anthropic.messages.create({
+        const stream = await client.messages.create({
           model: model,
           max_tokens: 4096,
           messages: messages.filter((m: any) => m.role !== 'system').map((m: any) => ({ role: m.role, content: m.content })),

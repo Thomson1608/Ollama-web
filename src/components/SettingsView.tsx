@@ -33,19 +33,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   claudeUsage
 }) => {
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
+  const [claudeApiKey, setClaudeApiKey] = useState('');
   const hasChanges = localPrompt !== systemPrompt;
 
   // Update local state if parent state changes (e.g. on initial load)
   useEffect(() => {
     setLocalPrompt(systemPrompt);
+    fetch('/api/secrets')
+      .then(res => res.json())
+      .then(data => setClaudeApiKey(data.ANTHROPIC_API_KEY))
+      .catch(console.error);
   }, [systemPrompt]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
-    // We need to wait for the state to update or just call saveSettings
-    // Since setSystemPrompt is likely async in React's eyes, 
-    // we just trigger the save logic which App.tsx handles.
     saveSettings();
+  };
+
+  const handleSaveApiKey = async () => {
+    try {
+      await fetch('/api/secrets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ANTHROPIC_API_KEY: claudeApiKey }),
+      });
+      alert('API Key saved successfully!');
+    } catch (error) {
+      alert('Failed to save API Key.');
+    }
   };
 
   return (
@@ -210,10 +225,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         </div>
                         Anthropic Claude
                       </div>
-                      <span className="text-[10px] font-bold text-purple-600">API CONNECTED</span>
+                      <span className="text-[10px] font-bold text-purple-600">{claudeApiKey ? 'API CONFIGURED' : 'API NOT SET'}</span>
                     </div>
                     
-                    <div className="space-y-2">
+                    <div className="space-y-3">
+                      <input 
+                        type="password"
+                        value={claudeApiKey}
+                        onChange={(e) => setClaudeApiKey(e.target.value)}
+                        placeholder="Enter your Anthropic API Key"
+                        className="w-full bg-white border border-purple-200 rounded-xl px-4 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                      />
+                      <button
+                        onClick={handleSaveApiKey}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold py-2 rounded-xl transition-all"
+                      >
+                        Save API Key
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 mt-4">
                       <div className="flex justify-between text-[10px] font-bold text-purple-700 uppercase tracking-wider">
                         <span>Token Usage</span>
                         <span>{Math.round((claudeUsage.used / claudeUsage.total) * 100)}%</span>
