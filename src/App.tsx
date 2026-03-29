@@ -263,14 +263,45 @@ export default function App() {
         const chatsRes = await fetch('/api/chats');
         if (chatsRes.ok) {
           const data = await chatsRes.json();
-          setChats(data);
+          if (data && data.length > 0) {
+            setChats(data);
+          } else {
+            // Fallback to localStorage if backend is empty
+            const saved = localStorage.getItem('ollama_chats');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (parsed.length > 0) {
+                setChats(parsed);
+                // Sync back to backend
+                await fetch('/api/chats', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: saved,
+                });
+              }
+            }
+          }
         }
         
         // Fetch config
         const configRes = await fetch('/api/config');
         if (configRes.ok) {
           const data = await configRes.json();
-          if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
+          if (data.systemPrompt) {
+            setSystemPrompt(data.systemPrompt);
+          } else {
+            // Fallback to localStorage if backend is empty
+            const saved = localStorage.getItem('ollama_system_prompt');
+            if (saved) {
+              setSystemPrompt(saved);
+              // Sync back to backend
+              await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ systemPrompt: saved }),
+              });
+            }
+          }
         }
 
         // Fetch memory
@@ -291,7 +322,8 @@ export default function App() {
   // Sync to backend whenever chats change
   useEffect(() => {
     const syncChats = async () => {
-      if (chats.length === 0) return;
+      // Don't sync if we haven't even loaded yet (to avoid overwriting with empty)
+      if (chats.length === 0 && localStorage.getItem('ollama_chats') === null) return;
       
       setIsSyncing(true);
       try {
@@ -315,20 +347,23 @@ export default function App() {
   // Sync config to backend
   useEffect(() => {
     const syncConfig = async () => {
+      // Don't sync if we haven't even loaded yet
+      if (systemPrompt === '' && localStorage.getItem('ollama_system_prompt') === null) return;
+      
       try {
         await fetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ systemPrompt }),
         });
+        localStorage.setItem('ollama_system_prompt', systemPrompt);
       } catch (error) {
         console.error('Failed to sync config to backend:', error);
       }
     };
-    if (systemPrompt) {
-      const timeoutId = setTimeout(syncConfig, 1000);
-      return () => clearTimeout(timeoutId);
-    }
+    
+    const timeoutId = setTimeout(syncConfig, 1000);
+    return () => clearTimeout(timeoutId);
   }, [systemPrompt]);
 
   useEffect(() => {
