@@ -59,7 +59,9 @@ export default function App() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pullAbortController = useRef<AbortController | null>(null);
+  const chatAbortController = useRef<AbortController | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const lastUserMessageRef = useRef<string>('');
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
@@ -143,6 +145,39 @@ export default function App() {
       socket.disconnect();
     };
   }, []);
+
+  // Handle model switch during loading
+  useEffect(() => {
+    if (isLoading && selectedModel) {
+      console.log('Model switched while loading. Aborting current chat and retrying with new model:', selectedModel);
+      
+      // Abort current chat
+      if (chatAbortController.current) {
+        chatAbortController.current.abort();
+      }
+
+      // Remove the incomplete assistant message from the active chat
+      if (activeChatId) {
+        setChats(prev => prev.map(c => {
+          if (c.id === activeChatId) {
+            const lastMsg = c.messages[c.messages.length - 1];
+            if (lastMsg && lastMsg.role === 'assistant') {
+              return { ...c, messages: c.messages.slice(0, -1) };
+            }
+          }
+          return c;
+        }));
+      }
+
+      // Re-send the last message
+      if (lastUserMessageRef.current) {
+        // Small delay to ensure state updates and abort is handled
+        setTimeout(() => {
+          handleSendMessage(undefined, true);
+        }, 100);
+      }
+    }
+  }, [selectedModel]);
 
   // Initial load from backend
   useEffect(() => {
@@ -461,15 +496,21 @@ export default function App() {
     e.target.value = '';
   };
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
+  const handleSendMessage = async (e?: React.FormEvent, isRetry = false) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading || !selectedModel) return;
+    
+    const messageContent = isRetry ? lastUserMessageRef.current : input.trim();
+    if (!messageContent || (isLoading && !isRetry) || !selectedModel) return;
+
+    if (!isRetry) {
+      lastUserMessageRef.current = messageContent;
+    }
 
     let currentChatId = activeChatId;
     if (!currentChatId) {
       const newChat: Chat = {
         id: Date.now().toString(),
-        title: input.slice(0, 30) + (input.length > 30 ? '...' : ''),
+        title: messageContent.slice(0, 30) + (messageContent.length > 30 ? '...' : ''),
         messages: [],
         model: selectedModel,
         createdAt: Date.now(),
@@ -481,17 +522,23 @@ export default function App() {
 
     const userMessage: Message = {
       role: 'user',
-      content: input,
+      content: messageContent,
       timestamp: Date.now(),
     };
 
-    setChats(prev => prev.map(c => 
-      c.id === currentChatId 
-        ? { ...c, messages: [...c.messages, userMessage], title: c.messages.length === 0 ? input.slice(0, 30) : c.title }
-        : c
-    ));
-    setInput('');
+    if (!isRetry) {
+      setChats(prev => prev.map(c => 
+        c.id === currentChatId 
+          ? { ...c, messages: [...c.messages, userMessage], title: c.messages.length === 0 ? messageContent.slice(0, 30) : c.title }
+          : c
+      ));
+      setInput('');
+    }
+    
     setIsLoading(true);
+
+    // Create new abort controller for this chat
+    chatAbortController.current = new AbortController();
 
     try {
       const toolInstructions = `
@@ -523,10 +570,11 @@ When you want to create code or save information, use the write_file tool.
               content: `${systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}\n\n${toolInstructions}` 
             },
             ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: input }
+            { role: 'user', content: messageContent }
           ],
           stream: true,
         }),
+        signal: chatAbortController.current.signal
       });
 
       if (!response.ok) throw new Error('Failed to connect to Ollama');
@@ -606,6 +654,10 @@ When you want to create code or save information, use the write_file tool.
       handleToolCalls(currentChatId, assistantContent);
       
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Chat request was aborted.');
+        return;
+      }
       toast.error('Error: Could not connect to Ollama. Make sure it is running and OLLAMA_ORIGINS is set.');
       console.error(error);
     } finally {
