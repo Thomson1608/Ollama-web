@@ -4,7 +4,12 @@ import {
   Plus, 
   Cpu, 
   AlertCircle,
-  Globe
+  Globe,
+  FileEdit,
+  FileText,
+  Trash2,
+  FolderSearch,
+  Loader2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -26,38 +31,47 @@ interface ChatViewProps {
 }
 
 const ToolCallRenderer = ({ content }: { content: string }) => {
-  const [status, setStatus] = React.useState('...');
-  const [filename, setFilename] = React.useState('');
+  try {
+    const match = content.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+    if (!match) return null;
+    
+    const toolCall = JSON.parse(match[1]);
+    const tool = toolCall.tool;
+    const args = toolCall.args;
+    
+    let icon = <Loader2 className="animate-spin text-gray-500" size={16} />;
+    let text = 'Working...';
+    
+    switch (tool) {
+      case 'write_file':
+        icon = <FileEdit size={16} className="text-blue-500" />;
+        text = `Writing to ${args.name}`;
+        break;
+      case 'read_file':
+        icon = <FileText size={16} className="text-green-500" />;
+        text = `Reading ${args.name}`;
+        break;
+      case 'delete_file':
+        icon = <Trash2 size={16} className="text-red-500" />;
+        text = `Deleting ${args.name}`;
+        break;
+      case 'list_files':
+        icon = <FolderSearch size={16} className="text-purple-500" />;
+        text = `Listing workspace files`;
+        break;
+      default:
+        text = `Using tool: ${tool}`;
+    }
 
-  React.useEffect(() => {
-    const process = async () => {
-      const match = content.match(/<tool_call>(.*?)<\/tool_call>/);
-      if (match) {
-        try {
-          const toolCall = JSON.parse(match[1]);
-          if (toolCall.tool === 'write_file') {
-            const { name, content: fileContent } = toolCall.args;
-            setFilename(name);
-            const res = await fetch('/api/workspace/write', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name, content: fileContent })
-            });
-            if (res.ok) {
-              setStatus('Created');
-            } else {
-              setStatus('Failed');
-            }
-          }
-        } catch (e) {
-          setStatus('Error');
-        }
-      }
-    };
-    process();
-  }, [content]);
-
-  return <span className="text-xs text-gray-500 italic">... + {filename || 'file'} ({status})</span>;
+    return (
+      <div className="my-3 inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm">
+        {icon}
+        <span>{text}</span>
+      </div>
+    );
+  } catch (e) {
+    return null; // Hide invalid tool calls
+  }
 };
 
 export const ChatView: React.FC<ChatViewProps> = ({
@@ -73,11 +87,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
   messagesEndRef
 }) => {
   const renderMessage = (content: string) => {
-    const parts = content.split(/(<tool_call>.*?<\/tool_call>)/g);
+    // Split by complete tool calls
+    const parts = content.split(/(<tool_call>[\s\S]*?<\/tool_call>)/g);
+    
     return parts.map((part, i) => {
-      if (part.startsWith('<tool_call>')) {
+      if (part.startsWith('<tool_call>') && part.endsWith('</tool_call>')) {
         return <ToolCallRenderer key={i} content={part} />;
       }
+      
+      // Handle incomplete tool calls during streaming
+      if (part.includes('<tool_call>')) {
+         const visibleText = part.split('<tool_call>')[0];
+         return (
+           <React.Fragment key={i}>
+             <Markdown
+               components={{
+                 code({ node, className, children, ...props }: any) {
+                   return <code className={className} {...props}>{children}</code>;
+                 }
+               }}
+             >
+               {visibleText}
+             </Markdown>
+             <div className="my-3 inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm animate-pulse">
+               <Loader2 className="animate-spin text-blue-500" size={16} />
+               <span>Working on files...</span>
+             </div>
+           </React.Fragment>
+         );
+      }
+
       return (
         <Markdown
           key={i}
