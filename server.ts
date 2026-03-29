@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = '/tmp/ollama-data';
 const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 
