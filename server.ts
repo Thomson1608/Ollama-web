@@ -6,6 +6,8 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { spawn, ChildProcess } from 'child_process';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -361,6 +363,86 @@ async function startServer() {
 
   // API: Serve workspace files for preview
   app.use('/preview', express.static(WORKSPACE_DIR));
+
+  let workspaceProcess: ChildProcess | null = null;
+  const WORKSPACE_PORT = 3001;
+
+  app.post('/api/workspace/run', async (req, res) => {
+    try {
+      if (workspaceProcess) {
+        workspaceProcess.kill();
+        workspaceProcess = null;
+      }
+
+      const packageJsonPath = path.join(WORKSPACE_DIR, 'package.json');
+      if (fsSync.existsSync(packageJsonPath)) {
+        logger.release('Starting workspace app...');
+        
+        const pkg = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+        let startCmd = 'npm run dev';
+        if (pkg.scripts?.dev) {
+          startCmd = `npm run dev -- --port ${WORKSPACE_PORT}`;
+        } else if (pkg.scripts?.start) {
+          startCmd = `npm start`;
+        }
+
+        // Run npm install then the start command
+        workspaceProcess = spawn(`npm install && ${startCmd}`, {
+          cwd: WORKSPACE_DIR,
+          shell: true,
+          env: { ...process.env, PORT: WORKSPACE_PORT.toString(), VITE_PORT: WORKSPACE_PORT.toString() }
+        });
+
+        workspaceProcess.stdout?.on('data', (data) => {
+          io.emit('workspace:log', data.toString());
+          logger.debug(`Workspace stdout: ${data}`);
+        });
+
+        workspaceProcess.stderr?.on('data', (data) => {
+          io.emit('workspace:log', data.toString());
+          logger.debug(`Workspace stderr: ${data}`);
+        });
+
+        workspaceProcess.on('close', (code) => {
+          io.emit('workspace:log', `Process exited with code ${code}`);
+          workspaceProcess = null;
+        });
+
+        res.json({ success: true, type: 'node', port: WORKSPACE_PORT });
+      } else {
+        res.json({ success: true, type: 'static' });
+      }
+    } catch (error) {
+      logger.error('Failed to run workspace', error);
+      res.status(500).json({ error: 'Failed to run workspace' });
+    }
+  });
+
+  app.post('/api/workspace/stop', (req, res) => {
+    if (workspaceProcess) {
+      workspaceProcess.kill();
+      workspaceProcess = null;
+      io.emit('workspace:log', 'Process stopped by user');
+    }
+    res.json({ success: true });
+  });
+
+  app.use('/workspace-preview', createProxyMiddleware({
+    target: `http://localhost:${WORKSPACE_PORT}`,
+    changeOrigin: true,
+    ws: true,
+    pathRewrite: {
+      '^/workspace-preview': '',
+    },
+    on: {
+      error: (err, req, res) => {
+        if ('writeHead' in res) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Workspace app is starting or not running.');
+        }
+      }
+    }
+  }));
 
   // --- Ollama Proxy Endpoints ---
 

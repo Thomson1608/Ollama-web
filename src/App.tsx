@@ -26,7 +26,7 @@ CRITICAL DIRECTIVE:
 2. ALWAYS use the write_file tool to create or update files in the workspace.
 3. The user wants to see the code directly in their workspace, not in the chat window.
 4. If you are creating multiple files, use multiple <tool_call> tags in sequence.
-5. The workspace supports a "Run Preview" feature for HTML files. If the user asks to build a web app or UI, create an \`index.html\` file (and associated JS/CSS) so they can preview it.
+5. The workspace supports a "Web View" feature. If the user asks to build a web app, you can create a full Node.js project (with package.json) or a static HTML project. The system will automatically run \`npm install\` and \`npm run dev\` if a package.json is present.
 
 Use the following tools to assist the user with coding tasks:
 
@@ -817,7 +817,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
                 />
               </div>
               <div className="w-[40%] hidden lg:block">
-                <WorkspaceView refreshTrigger={workspaceRefreshTrigger} />
+                <WorkspaceView refreshTrigger={workspaceRefreshTrigger} socket={socketRef.current} />
               </div>
             </div>
           )}
@@ -862,7 +862,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
           )}
 
           {currentView === 'workspace' && (
-            <WorkspaceView refreshTrigger={workspaceRefreshTrigger} />
+            <WorkspaceView refreshTrigger={workspaceRefreshTrigger} socket={socketRef.current} />
           )}
 
           {currentView === 'settings' && (
