@@ -16,7 +16,8 @@ import {
   Terminal,
   RefreshCw,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -51,6 +52,16 @@ interface OllamaModel {
   };
 }
 
+interface RunningModel {
+  name: string;
+  model: string;
+  size: number;
+  digest: string;
+  details: any;
+  expires_at: string;
+  size_vram: number;
+}
+
 export default function App() {
   const [chats, setChats] = useState<Chat[]>(() => {
     const saved = localStorage.getItem('ollama_chats');
@@ -63,6 +74,7 @@ export default function App() {
   const [pullingModel, setPullingModel] = useState<{ name: string; progress: number; status: string } | null>(null);
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
   const [models, setModels] = useState<OllamaModel[]>([]);
+  const [runningModels, setRunningModels] = useState<RunningModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ollama_selected_model') || '');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -70,6 +82,7 @@ export default function App() {
   const [newModelName, setNewModelName] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const pullAbortController = useRef<AbortController | null>(null);
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
@@ -86,6 +99,16 @@ export default function App() {
     localStorage.setItem('ollama_selected_model', selectedModel);
   }, [selectedModel]);
 
+  // Poll for running models every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (connectionStatus === 'connected') {
+        fetchRunningModels();
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [connectionStatus, ollamaUrl]);
+
   useEffect(() => {
     scrollToBottom();
   }, [activeChat?.messages, isLoading]);
@@ -100,16 +123,34 @@ export default function App() {
       const response = await fetch(`${ollamaUrl}/api/tags`);
       if (response.ok) {
         const data = await response.json();
-        setModels(data.models || []);
-        if (data.models?.length > 0 && !selectedModel) {
-          setSelectedModel(data.models[0].name);
+        const fetchedModels = data.models || [];
+        setModels(fetchedModels);
+        
+        // If no model is selected but we have models, select the first one
+        if (fetchedModels.length > 0 && !selectedModel) {
+          setSelectedModel(fetchedModels[0].name);
         }
+        
         setConnectionStatus('connected');
+        fetchRunningModels();
       } else {
         setConnectionStatus('disconnected');
       }
     } catch (error) {
+      console.error('Connection error:', error);
       setConnectionStatus('disconnected');
+    }
+  };
+
+  const fetchRunningModels = async () => {
+    try {
+      const response = await fetch(`${ollamaUrl}/api/ps`);
+      if (response.ok) {
+        const data = await response.json();
+        setRunningModels(data.models || []);
+      }
+    } catch (error) {
+      // Silently fail for background polling
     }
   };
 
@@ -120,11 +161,14 @@ export default function App() {
     setPullingModel({ name: modelName, progress: 0, status: 'Starting...' });
     setNewModelName('');
 
+    pullAbortController.current = new AbortController();
+
     try {
       const response = await fetch(`${ollamaUrl}/api/pull`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: modelName, stream: true }),
+        signal: pullAbortController.current.signal,
       });
 
       if (!response.ok) throw new Error('Failed to pull model');
@@ -154,11 +198,22 @@ export default function App() {
       }
       toast.success(`Model ${modelName} pulled successfully!`);
       checkConnection();
-    } catch (error) {
-      toast.error(`Failed to pull model ${modelName}`);
-      console.error(error);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        toast.info(`Pulling ${modelName} cancelled`);
+      } else {
+        toast.error(`Failed to pull model ${modelName}`);
+        console.error(error);
+      }
     } finally {
       setPullingModel(null);
+      pullAbortController.current = null;
+    }
+  };
+
+  const cancelPull = () => {
+    if (pullAbortController.current) {
+      pullAbortController.current.abort();
     }
   };
 
@@ -443,9 +498,18 @@ export default function App() {
                   {models.length === 0 ? (
                     <option value="">No models found</option>
                   ) : (
-                    models.map(m => (
-                      <option key={m.name} value={m.name}>{m.name}</option>
-                    ))
+                    <>
+                      <optgroup label="Installed Models">
+                        {models.map(m => {
+                          const isRunning = runningModels.some(rm => rm.name === m.name || rm.model === m.name);
+                          return (
+                            <option key={m.name} value={m.name}>
+                              {m.name} {isRunning ? ' (Running)' : ''}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    </>
                   )}
                 </select>
               </div>
@@ -620,7 +684,17 @@ export default function App() {
                         <p className="text-xs text-gray-500">{pullingModel.status}</p>
                       </div>
                     </div>
-                    <span className="text-sm font-mono font-bold text-blue-600">{pullingModel.progress.toFixed(1)}%</span>
+                    <div className="flex items-center gap-3">
+                      <button 
+                        onClick={cancelPull}
+                        className="p-1.5 hover:bg-red-50 text-red-500 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
+                        title="Cancel Pull"
+                      >
+                        <X size={14} />
+                        CANCEL
+                      </button>
+                      <span className="text-sm font-mono font-bold text-blue-600">{pullingModel.progress.toFixed(1)}%</span>
+                    </div>
                   </div>
                   <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                     <motion.div 
@@ -633,34 +707,64 @@ export default function App() {
               )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {models.map(model => (
-                  <div key={model.digest} className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm hover:shadow-md transition-all group">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600">
-                        <Cpu size={20} />
+                {models.length === 0 && connectionStatus === 'connected' && (
+                  <div className="col-span-full py-20 text-center text-gray-400">
+                    No models installed yet. Use the "Pull" feature above to download one.
+                  </div>
+                )}
+                {models.map(model => {
+                  const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
+                  return (
+                    <div key={model.digest} className={cn(
+                      "bg-white p-5 rounded-3xl border transition-all group relative",
+                      isRunning ? "border-green-200 shadow-md shadow-green-50" : "border-gray-200 shadow-sm hover:shadow-md"
+                    )}>
+                      {isRunning && (
+                        <div className="absolute top-4 right-12 flex items-center gap-1.5 bg-green-100 text-green-700 px-2 py-1 rounded-full text-[10px] font-bold animate-pulse">
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                          RUNNING
+                        </div>
+                      )}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center",
+                          isRunning ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-600"
+                        )}>
+                          <Cpu size={20} />
+                        </div>
+                        <button 
+                          onClick={() => deleteModel(model.name)}
+                          className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <h3 className="font-bold text-gray-800 mb-1 truncate pr-16" title={model.name}>{model.name}</h3>
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
+                          {model.details.parameter_size || 'Unknown'}
+                        </span>
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
+                          {model.details.quantization_level || 'Unknown'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-gray-400 pt-4 border-t border-gray-50">
+                        <span>{formatSize(model.size)}</span>
+                        <span>{new Date(model.modified_at).toLocaleDateString()}</span>
                       </div>
                       <button 
-                        onClick={() => deleteModel(model.name)}
-                        className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
+                        onClick={() => {
+                          setSelectedModel(model.name);
+                          setCurrentView('chat');
+                          if (!activeChatId) createNewChat();
+                        }}
+                        className="w-full mt-4 py-2 bg-gray-50 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-blue-100"
                       >
-                        <Trash2 size={16} />
+                        Select for Chat
                       </button>
                     </div>
-                    <h3 className="font-bold text-gray-800 mb-1 truncate" title={model.name}>{model.name}</h3>
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
-                        {model.details.parameter_size || 'Unknown'}
-                      </span>
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
-                        {model.details.quantization_level || 'Unknown'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-gray-400 pt-4 border-t border-gray-50">
-                      <span>{formatSize(model.size)}</span>
-                      <span>{new Date(model.modified_at).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
