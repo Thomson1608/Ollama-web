@@ -5,7 +5,8 @@ import {
   Globe, 
   Terminal, 
   CheckCircle2, 
-  AlertCircle 
+  AlertCircle,
+  UserCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ConnectionStatus } from '../types';
@@ -15,6 +16,8 @@ interface SettingsModalProps {
   setShowSettings: (show: boolean) => void;
   ollamaUrl: string;
   setOllamaUrl: (url: string) => void;
+  systemPrompt: string;
+  setSystemPrompt: (prompt: string) => void;
   saveSettings: () => void;
   connectionStatus: ConnectionStatus;
 }
@@ -24,6 +27,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   setShowSettings,
   ollamaUrl,
   setOllamaUrl,
+  systemPrompt,
+  setSystemPrompt,
   saveSettings,
   connectionStatus
 }) => {
@@ -84,6 +89,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm"
                 />
                 <p className="text-xs text-gray-400 italic">Default is http://localhost:11434</p>
+              </div>
+
+              <div className="space-y-4">
+                <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                  <UserCircle size={16} className="text-blue-500" />
+                  Personalization (System Prompt)
+                </label>
+                <textarea 
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  placeholder="Tell the AI who you are and how it should behave (e.g., 'I am a software engineer, be concise and technical')."
+                  rows={4}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm resize-none"
+                />
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  This information will be sent to the AI model with every message to help it understand your context and preferences.
+                </p>
               </div>
 
               <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 space-y-3">

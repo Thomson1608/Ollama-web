@@ -14,10 +14,9 @@ import { SettingsModal } from './components/SettingsModal';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus } from './types';
 
 export default function App() {
-  const [chats, setChats] = useState<Chat[]>(() => {
-    const saved = localStorage.getItem('ollama_chats');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>('chat');
   const [input, setInput] = useState('');
@@ -61,9 +60,74 @@ export default function App() {
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
+  // Initial load from backend
   useEffect(() => {
-    localStorage.setItem('ollama_chats', JSON.stringify(chats));
+    const fetchInitialData = async () => {
+      try {
+        // Fetch chats
+        const chatsRes = await fetch('/api/chats');
+        if (chatsRes.ok) {
+          const data = await chatsRes.json();
+          setChats(data);
+        }
+        
+        // Fetch config
+        const configRes = await fetch('/api/config');
+        if (configRes.ok) {
+          const data = await configRes.json();
+          if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
+        }
+      } catch (error) {
+        console.error('Failed to fetch data from backend:', error);
+        const saved = localStorage.getItem('ollama_chats');
+        if (saved) setChats(JSON.parse(saved));
+      }
+    };
+    fetchInitialData();
+  }, []);
+
+  // Sync to backend whenever chats change
+  useEffect(() => {
+    const syncChats = async () => {
+      if (chats.length === 0) return;
+      
+      setIsSyncing(true);
+      try {
+        await fetch('/api/chats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(chats),
+        });
+        localStorage.setItem('ollama_chats', JSON.stringify(chats));
+      } catch (error) {
+        console.error('Failed to sync chats to backend:', error);
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    const timeoutId = setTimeout(syncChats, 1000); // Debounce sync
+    return () => clearTimeout(timeoutId);
   }, [chats]);
+
+  // Sync config to backend
+  useEffect(() => {
+    const syncConfig = async () => {
+      try {
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ systemPrompt }),
+        });
+      } catch (error) {
+        console.error('Failed to sync config to backend:', error);
+      }
+    };
+    if (systemPrompt) {
+      const timeoutId = setTimeout(syncConfig, 1000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [systemPrompt]);
 
   useEffect(() => {
     localStorage.setItem('ollama_url', ollamaUrl);
@@ -254,6 +318,14 @@ export default function App() {
     toast.success('Chat deleted');
   };
 
+  const clearAllChats = () => {
+    if (confirm('Are you sure you want to clear all chats? This cannot be undone.')) {
+      setChats([]);
+      setActiveChatId(null);
+      toast.success('All chats cleared');
+    }
+  };
+
   const formatSize = (bytes: number) => {
     const gb = bytes / (1024 * 1024 * 1024);
     return gb.toFixed(2) + ' GB';
@@ -337,6 +409,7 @@ export default function App() {
         body: JSON.stringify({
           model: selectedModel,
           messages: [
+            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
             ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: input }
           ],
@@ -419,9 +492,11 @@ export default function App() {
         setCurrentView={setCurrentView}
         createNewChat={createNewChat}
         deleteChat={deleteChat}
+        clearAllChats={clearAllChats}
         setShowSettings={setShowSettings}
         exportData={exportData}
         importData={importData}
+        isSyncing={isSyncing}
       />
 
       <main className="flex-1 flex flex-col relative min-w-0">
@@ -491,6 +566,8 @@ export default function App() {
         setShowSettings={setShowSettings}
         ollamaUrl={ollamaUrl}
         setOllamaUrl={setOllamaUrl}
+        systemPrompt={systemPrompt}
+        setSystemPrompt={setSystemPrompt}
         saveSettings={saveSettings}
         connectionStatus={connectionStatus}
       />

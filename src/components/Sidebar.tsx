@@ -25,9 +25,11 @@ interface SidebarProps {
   setCurrentView: (view: ViewType) => void;
   createNewChat: () => void;
   deleteChat: (id: string, e: React.MouseEvent) => void;
+  clearAllChats: () => void;
   setShowSettings: (show: boolean) => void;
   exportData: () => void;
   importData: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isSyncing?: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -40,9 +42,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setCurrentView,
   createNewChat,
   deleteChat,
+  clearAllChats,
   setShowSettings,
   exportData,
-  importData
+  importData,
+  isSyncing
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -103,6 +107,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center justify-between text-xs px-1">
           <span className="text-gray-500">Status</span>
           <div className="flex items-center gap-1.5">
+            {isSyncing && (
+              <RefreshCw size={10} className="animate-spin text-blue-500 mr-1" />
+            )}
             {connectionStatus === 'connected' ? (
               <>
                 <div className="w-2 h-2 rounded-full bg-green-500" />
@@ -185,6 +192,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="hidden" 
           />
         </div>
+        <button 
+          onClick={clearAllChats}
+          className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors border border-red-100"
+        >
+          <Trash2 size={14} />
+          Clear All Chats
+        </button>
       </div>
     </motion.aside>
   );
