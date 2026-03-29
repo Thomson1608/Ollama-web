@@ -4,7 +4,11 @@ import { motion } from 'motion/react';
 import { WorkspaceFile } from '../types';
 import { toast } from 'sonner';
 
-export const WorkspaceView: React.FC = () => {
+interface WorkspaceViewProps {
+  refreshTrigger?: number;
+}
+
+export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) => {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -27,7 +31,7 @@ export const WorkspaceView: React.FC = () => {
 
   useEffect(() => {
     fetchFiles();
-  }, []);
+  }, [refreshTrigger]);
 
   const readFile = async (name: string) => {
     setSelectedFile(name);

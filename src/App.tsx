@@ -35,6 +35,7 @@ export default function App() {
   const [modelSearchQuery, setModelSearchQuery] = useState('');
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
 
   const allOllamaModels = [
     'llama3.2', 'llama3.1', 'llama3', 'llama2', 'mistral', 'mistral-nemo', 'mixtral',
@@ -114,6 +115,7 @@ export default function App() {
 
     socket.on('chat:start', ({ chatId, userMessage, assistantMessage, model }) => {
       console.log('Socket.io: chat:start event received for chat:', chatId);
+      
       setChats(prev => {
         const chat = prev.find(c => c.id === chatId);
         if (chat) {
@@ -121,6 +123,10 @@ export default function App() {
           const lastMsg = chat.messages[chat.messages.length - 1];
           const alreadyHasUserMsg = lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage.content;
           
+          // Check if assistant message already exists (to avoid duplication)
+          const hasAssistantMsg = chat.messages.some(m => m.role === 'assistant' && m.timestamp === assistantMessage.timestamp);
+          if (hasAssistantMsg) return prev;
+
           return prev.map(c => 
             c.id === chatId 
               ? { 
@@ -142,8 +148,6 @@ export default function App() {
           return [newChat, ...prev];
         }
       });
-      // We don't set local isLoading here because we use isAiTypingGlobally via storage/sockets
-      // But we should ensure the UI knows AI is busy
       setIsAiTypingGlobally(true);
     });
 
@@ -165,7 +169,7 @@ export default function App() {
     socket.on('chat:end', ({ chatId, finalContent }) => {
       console.log('Socket.io: chat:end event received for chat:', chatId);
       setIsAiTypingGlobally(false);
-      // Sync final content just in case
+      // Sync final content
       if (finalContent) {
         setChats(prev => prev.map(c => 
           c.id === chatId 
@@ -180,6 +184,21 @@ export default function App() {
             : c
         ));
       }
+    });
+
+    socket.on('memory:updated', (updatedMemory) => {
+      console.log('Socket.io: memory:updated event received');
+      setMemory(updatedMemory);
+    });
+
+    socket.on('tool:result', ({ chatId, tool, result }) => {
+      console.log(`Socket.io: tool:result event received (${tool}):`, result);
+      toast.info(result, { id: `tool-${chatId}-${tool}` });
+    });
+
+    socket.on('workspace:updated', () => {
+      console.log('Socket.io: workspace:updated event received');
+      setWorkspaceRefreshTrigger(prev => prev + 1);
     });
 
     socket.on('ollama:pull:progress', (data) => {
@@ -401,6 +420,7 @@ export default function App() {
     pullAbortController.current = new AbortController();
 
     try {
+      // We just initiate the pull, Socket.io handles the progress updates
       const response = await fetch('/api/ollama/pull', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -409,33 +429,10 @@ export default function App() {
       });
 
       if (!response.ok) throw new Error('Failed to pull model');
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No reader available');
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = new TextDecoder().decode(value);
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const json = JSON.parse(line);
-            if (json.status) {
-              const progress = json.completed && json.total ? (json.completed / json.total) * 100 : 0;
-              setPullingModel(prev => prev ? { ...prev, status: json.status, progress } : null);
-              
-              if (json.status === 'success') {
-                toast.success(`Model ${modelName} pulled successfully!`);
-                checkConnection();
-              }
-            }
-          } catch (e) {}
-        }
-      }
+      
+      // Wait for completion (the endpoint stays open until done)
+      await response.text();
+      
     } catch (error: any) {
       if (error.name === 'AbortError') {
         toast.info(`Pulling ${modelName} cancelled`);
@@ -634,57 +631,9 @@ When you want to create code or save information, use the write_file tool.
 
       if (!response.ok) throw new Error('Failed to connect to Ollama via backend');
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No reader available');
-
-      let assistantContent = '';
-      const assistantMessage: Message = {
-        role: 'assistant',
-        content: '',
-        timestamp: Date.now(),
-      };
-
-      setChats(prev => prev.map(c => 
-        c.id === currentChatId 
-          ? { ...c, messages: [...c.messages, assistantMessage] }
-          : c
-      ));
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = new TextDecoder().decode(value);
-        const lines = chunk.split('\n');
-        
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const json = JSON.parse(line);
-            if (json.message?.content) {
-              const contentChunk = json.message.content;
-              assistantContent += contentChunk;
-              
-              setChats(prev => prev.map(c => 
-                c.id === currentChatId 
-                  ? { 
-                      ...c, 
-                      messages: c.messages.map((m, idx) => 
-                        idx === c.messages.length - 1 ? { ...m, content: assistantContent } : m
-                      ) 
-                    }
-                  : c
-              ));
-            }
-          } catch (e) {}
-        }
-      }
-      
-      // Extract memory after assistant finishes
-      extractMemory(currentChatId);
-      
-      // Check for tool calls in the assistant's response
-      handleToolCalls(currentChatId, assistantContent);
+      // We just wait for the request to complete. 
+      // Socket.io handles all the UI updates (messages, typing status).
+      await response.text();
       
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -699,129 +648,11 @@ When you want to create code or save information, use the write_file tool.
   };
 
   const extractMemory = async (chatId: string) => {
-    // We need to get the latest state of chats
-    setChats(prevChats => {
-      const chat = prevChats.find(c => c.id === chatId);
-      if (!chat || chat.messages.length < 2) return prevChats;
-
-      // Run extraction in background
-      (async () => {
-        const recentMessages = chat.messages.slice(-6);
-        const context = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
-
-        try {
-          const response = await fetch('/api/ollama/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chatId: 'memory-extraction',
-              model: selectedModel,
-              messages: [
-                { 
-                  role: 'system', 
-                  content: `You are a memory extraction module. Your task is to extract personal facts, preferences, or important information about the user from the conversation. 
-                  CRITICAL: Also extract the user's preferred language and communication style (e.g., "User prefers communicating in Vietnamese", "User likes technical explanations").
-                  
-                  Current Memory: ${memory.facts.join(', ')}
-                  
-                  Output ONLY a JSON array of strings representing NEW facts found in this snippet. 
-                  If no new facts are found, output []. 
-                  Do NOT repeat facts already in memory.
-                  Example output: ["User prefers communicating in Vietnamese", "User is a software engineer"]` 
-                },
-                { role: 'user', content: `Extract facts from this conversation:\n${context}` }
-              ],
-            }),
-          });
-
-          if (response.ok) {
-            const json = await response.json();
-            const content = json.message?.content || '[]';
-            try {
-              const match = content.match(/\[.*\]/s);
-              if (match) {
-                const newFacts = JSON.parse(match[0]);
-                if (Array.isArray(newFacts) && newFacts.length > 0) {
-                  setMemory(prevMemory => {
-                    const updatedMemory = { facts: [...new Set([...prevMemory.facts, ...newFacts])] };
-                    fetch('/api/memory', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify(updatedMemory),
-                    });
-                    return updatedMemory;
-                  });
-                }
-              }
-            } catch (e) {
-              console.error('Failed to parse memory extraction result', e);
-            }
-          }
-        } catch (error) {
-          console.error('Memory extraction failed', error);
-        }
-      })();
-
-      return prevChats;
-    });
+    // This is now handled by the backend
   };
 
   const handleToolCalls = async (chatId: string, content: string) => {
-    const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
-    let match;
-    const toolCalls: ToolCall[] = [];
-
-    while ((match = toolCallRegex.exec(content)) !== null) {
-      try {
-        const call = JSON.parse(match[1]);
-        toolCalls.push(call);
-      } catch (e) {
-        console.error('Failed to parse tool call', e);
-      }
-    }
-
-    if (toolCalls.length === 0) return;
-
-    for (const call of toolCalls) {
-      let result = '';
-      try {
-        switch (call.tool) {
-          case 'write_file':
-            const writeRes = await fetch('/api/workspace/write', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(call.args),
-            });
-            result = writeRes.ok ? `Successfully wrote to ${call.args.name}` : 'Failed to write file';
-            break;
-          case 'read_file':
-            const readRes = await fetch(`/api/workspace/read?name=${encodeURIComponent(call.args.name)}`);
-            const readData = await readRes.json();
-            result = readRes.ok ? `Content of ${call.args.name}:\n${readData.content}` : 'Failed to read file';
-            break;
-          case 'list_files':
-            const listRes = await fetch('/api/workspace');
-            const listData = await listRes.json();
-            result = listRes.ok ? `Files in workspace:\n${listData.map((f: any) => f.name).join('\n')}` : 'Failed to list files';
-            break;
-          case 'delete_file':
-            const delRes = await fetch(`/api/workspace/delete?name=${encodeURIComponent(call.args.name)}`, {
-              method: 'DELETE'
-            });
-            result = delRes.ok ? `Successfully deleted ${call.args.name}` : 'Failed to delete file';
-            break;
-        }
-
-        // Add tool result as a hidden system message or just inform the user
-        toast.info(`Agent action: ${call.tool} on ${call.args.name || 'workspace'}`);
-        
-        // Optionally send the result back to the AI to continue the chain
-        // For now, we'll just log it to the console and show a toast
-        console.log(`Tool ${call.tool} result:`, result);
-      } catch (error) {
-        console.error(`Tool ${call.tool} execution failed`, error);
-      }
-    }
+    // This is now handled by the backend
   };
 
   const clearMemory = () => {
@@ -924,7 +755,7 @@ When you want to create code or save information, use the write_file tool.
           )}
 
           {currentView === 'workspace' && (
-            <WorkspaceView />
+            <WorkspaceView refreshTrigger={workspaceRefreshTrigger} />
           )}
 
           {currentView === 'settings' && (

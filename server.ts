@@ -129,6 +129,7 @@ async function startServer() {
     try {
       const memory = req.body;
       await fs.writeFile(MEMORY_FILE, JSON.stringify(memory, null, 2));
+      io.emit('memory:updated', memory);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save memory' });
@@ -169,6 +170,7 @@ async function startServer() {
       if (!name) return res.status(400).json({ error: 'Missing filename' });
       const filePath = path.join(WORKSPACE_DIR, name);
       await fs.writeFile(filePath, content, 'utf-8');
+      io.emit('workspace:updated');
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to write file' });
@@ -182,6 +184,7 @@ async function startServer() {
       if (!fileName) return res.status(400).json({ error: 'Missing filename' });
       const filePath = path.join(WORKSPACE_DIR, fileName);
       await fs.unlink(filePath);
+      io.emit('workspace:updated');
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete file' });
@@ -281,6 +284,10 @@ async function startServer() {
       io.emit('chat:end', { chatId, finalContent: assistantContent });
       
       res.end();
+
+      // --- Post-chat logic: Tool calls and Memory extraction ---
+      processPostChatLogic(chatId, assistantContent, model, messages);
+      
     } catch (error) {
       console.error('Ollama Chat Error:', error);
       res.status(500).json({ error: 'Failed to communicate with Ollama' });
@@ -350,6 +357,101 @@ async function startServer() {
   });
 
   // --- End Ollama Proxy Endpoints ---
+
+  async function processPostChatLogic(chatId: string, content: string, model: string, messages: any[]) {
+    console.log('Post-chat logic: Processing tools and memory for chat:', chatId);
+    
+    // 1. Tool Calls
+    const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+    let match;
+    const toolCalls = [];
+
+    while ((match = toolCallRegex.exec(content)) !== null) {
+      try {
+        const call = JSON.parse(match[1]);
+        toolCalls.push(call);
+      } catch (e) {
+        console.error('Failed to parse tool call', e);
+      }
+    }
+
+    if (toolCalls.length > 0) {
+      console.log('Post-chat logic: Executing tool calls:', toolCalls.length);
+      for (const call of toolCalls) {
+        try {
+          switch (call.tool) {
+            case 'write_file':
+              if (call.args.name && call.args.content !== undefined) {
+                await fs.writeFile(path.join(WORKSPACE_DIR, call.args.name), call.args.content, 'utf-8');
+                io.emit('workspace:updated');
+                io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${call.args.name}` });
+              }
+              break;
+            case 'delete_file':
+              if (call.args.name) {
+                await fs.unlink(path.join(WORKSPACE_DIR, call.args.name));
+                io.emit('workspace:updated');
+                io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${call.args.name}` });
+              }
+              break;
+          }
+        } catch (error) {
+          console.error(`Tool execution failed (${call.tool}):`, error);
+        }
+      }
+    }
+
+    // 2. Memory Extraction
+    if (chatId !== 'memory-extraction') {
+      try {
+        const currentMemoryData = await fs.readFile(MEMORY_FILE, 'utf-8');
+        const currentMemory = JSON.parse(currentMemoryData);
+        
+        const context = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
+        
+        const memoryResponse = await fetch(`${OLLAMA_URL}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { 
+                role: 'system', 
+                content: `You are a memory extraction module. Your task is to extract personal facts, preferences, or important information about the user from the conversation. 
+                CRITICAL: Also extract the user's preferred language and communication style (e.g., "User prefers communicating in Vietnamese", "User likes technical explanations").
+                
+                Current Memory: ${currentMemory.facts.join(', ')}
+                
+                Output ONLY a JSON array of strings representing NEW facts found in this snippet. 
+                If no new facts are found, output []. 
+                Do NOT repeat facts already in memory.
+                Example output: ["User prefers communicating in Vietnamese", "User is a software engineer"]` 
+              },
+              { role: 'user', content: `Extract facts from this conversation:\n${context}` }
+            ],
+            stream: false
+          }),
+        });
+
+        if (memoryResponse.ok) {
+          const json = await memoryResponse.json();
+          const memoryContent = json.message?.content || '[]';
+          const match = memoryContent.match(/\[.*\]/s);
+          if (match) {
+            const newFacts = JSON.parse(match[0]);
+            if (Array.isArray(newFacts) && newFacts.length > 0) {
+              const updatedMemory = { facts: [...new Set([...currentMemory.facts, ...newFacts])] };
+              await fs.writeFile(MEMORY_FILE, JSON.stringify(updatedMemory, null, 2));
+              io.emit('memory:updated', updatedMemory);
+              console.log('Post-chat logic: Memory updated with', newFacts.length, 'new facts');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Post-chat logic: Memory extraction failed:', error);
+      }
+    }
+  }
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
