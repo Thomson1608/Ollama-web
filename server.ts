@@ -16,6 +16,21 @@ const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
+
+const logger = {
+  debug: (message: string, data?: any) => {
+    if (LOG_LEVEL === 'debug') {
+      console.log(`[DEBUG] ${new Date().toISOString()} - ${message}`, data ? JSON.stringify(data, null, 2) : '');
+    }
+  },
+  release: (message: string, data?: any) => {
+    console.log(`[RELEASE] ${new Date().toISOString()} - ${message}`, data ? JSON.stringify(data, null, 2) : '');
+  },
+  error: (message: string, error?: any) => {
+    console.error(`[ERROR] ${new Date().toISOString()} - ${message}`, error);
+  }
+};
 
 async function ensureDataDir() {
   try {
@@ -65,19 +80,25 @@ async function startServer() {
 
   // Socket.io logic
   io.on('connection', (socket) => {
-    console.log('Socket.io: Client connected:', socket.id);
+    logger.release(`Socket.io: Client connected: ${socket.id}`);
+    logger.debug(`Socket.io: Connection details for ${socket.id}`, {
+      handshake: socket.handshake,
+      address: socket.handshake.address
+    });
 
-    socket.on('disconnect', () => {
-      console.log('Socket.io: Client disconnected:', socket.id);
+    socket.on('disconnect', (reason) => {
+      logger.release(`Socket.io: Client disconnected: ${socket.id} (Reason: ${reason})`);
     });
   });
 
   // API: Get all chats
   app.get('/api/chats', async (req, res) => {
     try {
+      logger.debug('API: Fetching all chats');
       const data = await fs.readFile(CHATS_FILE, 'utf-8');
       res.json(JSON.parse(data));
     } catch (error) {
+      logger.error('API Error: Failed to read chats', error);
       res.status(500).json({ error: 'Failed to read chats' });
     }
   });
@@ -86,9 +107,11 @@ async function startServer() {
   app.post('/api/chats', async (req, res) => {
     try {
       const chats = req.body;
+      logger.debug(`API: Saving ${chats.length} chats`);
       await fs.writeFile(CHATS_FILE, JSON.stringify(chats, null, 2));
       res.json({ success: true });
     } catch (error) {
+      logger.error('API Error: Failed to save chats', error);
       res.status(500).json({ error: 'Failed to save chats' });
     }
   });
@@ -196,11 +219,13 @@ async function startServer() {
   // List models
   app.get('/api/ollama/tags', async (req, res) => {
     try {
+      logger.debug('Ollama Proxy: Fetching tags');
       const response = await fetch(`${OLLAMA_URL}/api/tags`);
       const data = await response.json();
+      logger.debug('Ollama Proxy: Tags fetched successfully', { count: data.models?.length });
       res.json(data);
     } catch (error) {
-      console.error('Ollama Tags Error:', error);
+      logger.error('Ollama Proxy Error: Tags fetch failed', error);
       res.status(500).json({ error: 'Failed to fetch models from Ollama' });
     }
   });
@@ -219,8 +244,11 @@ async function startServer() {
 
   // Chat with streaming
   app.post('/api/ollama/chat', async (req, res) => {
-    const { chatId, messages, model, systemPrompt, memoryFacts, toolInstructions } = req.body;
+    const { chatId, messages, model } = req.body;
     
+    logger.release(`Ollama Proxy: Starting chat session for ${chatId} using ${model}`);
+    logger.debug(`Ollama Proxy: Chat request payload for ${chatId}`, { model, messageCount: messages.length });
+
     try {
       const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
@@ -234,6 +262,7 @@ async function startServer() {
 
       if (!response.ok) {
         const error = await response.text();
+        logger.error(`Ollama Proxy Error: Chat request failed for ${chatId}`, error);
         return res.status(response.status).send(error);
       }
 
@@ -282,6 +311,8 @@ async function startServer() {
 
       // Emit end event via Socket.io
       io.emit('chat:end', { chatId, finalContent: assistantContent });
+      logger.release(`Ollama Proxy: Chat session complete for ${chatId}`);
+      logger.debug(`Ollama Proxy: Final assistant content for ${chatId}`, { length: assistantContent.length });
       
       res.end();
 
@@ -297,6 +328,7 @@ async function startServer() {
   // Pull model with streaming
   app.post('/api/ollama/pull', async (req, res) => {
     const { name } = req.body;
+    logger.release(`Ollama Proxy: Pulling model ${name}`);
     try {
       const response = await fetch(`${OLLAMA_URL}/api/pull`, {
         method: 'POST',
@@ -306,6 +338,7 @@ async function startServer() {
 
       if (!response.ok) {
         const error = await response.text();
+        logger.error(`Ollama Proxy Error: Pull failed for ${name}`, error);
         return res.status(response.status).send(error);
       }
 
@@ -359,7 +392,7 @@ async function startServer() {
   // --- End Ollama Proxy Endpoints ---
 
   async function processPostChatLogic(chatId: string, content: string, model: string, messages: any[]) {
-    console.log('Post-chat logic: Processing tools and memory for chat:', chatId);
+    logger.debug(`Post-chat logic: Processing tools and memory for chat: ${chatId}`);
     
     // 1. Tool Calls
     const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
@@ -371,20 +404,22 @@ async function startServer() {
         const call = JSON.parse(match[1]);
         toolCalls.push(call);
       } catch (e) {
-        console.error('Failed to parse tool call', e);
+        logger.error(`Post-chat logic Error: Failed to parse tool call in ${chatId}`, e);
       }
     }
 
     if (toolCalls.length > 0) {
-      console.log('Post-chat logic: Executing tool calls:', toolCalls.length);
+      logger.release(`Post-chat logic: Executing ${toolCalls.length} tool calls for ${chatId}`);
       for (const call of toolCalls) {
         try {
+          logger.debug(`Post-chat logic: Executing tool ${call.tool}`, call.args);
           switch (call.tool) {
             case 'write_file':
               if (call.args.name && call.args.content !== undefined) {
                 await fs.writeFile(path.join(WORKSPACE_DIR, call.args.name), call.args.content, 'utf-8');
                 io.emit('workspace:updated');
                 io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${call.args.name}` });
+                logger.debug(`Post-chat logic: Tool write_file success: ${call.args.name}`);
               }
               break;
             case 'delete_file':
@@ -392,11 +427,12 @@ async function startServer() {
                 await fs.unlink(path.join(WORKSPACE_DIR, call.args.name));
                 io.emit('workspace:updated');
                 io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${call.args.name}` });
+                logger.debug(`Post-chat logic: Tool delete_file success: ${call.args.name}`);
               }
               break;
           }
         } catch (error) {
-          console.error(`Tool execution failed (${call.tool}):`, error);
+          logger.error(`Post-chat logic Error: Tool execution failed (${call.tool}) for ${chatId}`, error);
         }
       }
     }
@@ -404,6 +440,7 @@ async function startServer() {
     // 2. Memory Extraction
     if (chatId !== 'memory-extraction') {
       try {
+        logger.debug(`Post-chat logic: Starting memory extraction for ${chatId}`);
         const currentMemoryData = await fs.readFile(MEMORY_FILE, 'utf-8');
         const currentMemory = JSON.parse(currentMemoryData);
         
@@ -436,6 +473,7 @@ async function startServer() {
         if (memoryResponse.ok) {
           const json = await memoryResponse.json();
           const memoryContent = json.message?.content || '[]';
+          logger.debug(`Post-chat logic: Raw memory extraction response for ${chatId}`, memoryContent);
           const match = memoryContent.match(/\[.*\]/s);
           if (match) {
             const newFacts = JSON.parse(match[0]);
@@ -443,12 +481,14 @@ async function startServer() {
               const updatedMemory = { facts: [...new Set([...currentMemory.facts, ...newFacts])] };
               await fs.writeFile(MEMORY_FILE, JSON.stringify(updatedMemory, null, 2));
               io.emit('memory:updated', updatedMemory);
-              console.log('Post-chat logic: Memory updated with', newFacts.length, 'new facts');
+              logger.release(`Post-chat logic: Memory updated with ${newFacts.length} new facts from ${chatId}`);
             }
           }
+        } else {
+          logger.error(`Post-chat logic Error: Memory extraction request failed for ${chatId}`);
         }
       } catch (error) {
-        console.error('Post-chat logic: Memory extraction failed:', error);
+        logger.error(`Post-chat logic Error: Memory extraction failed for ${chatId}`, error);
       }
     }
   }
@@ -469,7 +509,13 @@ async function startServer() {
   }
 
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    logger.release(`Server status: Running on http://localhost:${PORT}`);
+    logger.debug(`Server configuration:`, {
+      OLLAMA_URL,
+      LOG_LEVEL,
+      DATA_DIR,
+      WORKSPACE_DIR
+    });
   });
 }
 
