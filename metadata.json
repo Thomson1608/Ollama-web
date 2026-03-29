@@ -1,0 +1,5 @@
+{
+  "name": "Ollama Web UI",
+  "description": "A modern web interface for interacting with local AI models via Ollama.",
+  "requestFramePermissions": []
+}
