@@ -84,6 +84,18 @@ export default function App() {
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const [newModelName, setNewModelName] = useState('');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  const allOllamaModels = [
+    'llama3.2', 'llama3.1', 'llama3', 'llama2', 'mistral', 'mistral-nemo', 'mixtral',
+    'phi3', 'phi3.5', 'gemma2', 'gemma', 'qwen2.5', 'qwen2', 'deepseek-v2', 'deepseek-coder',
+    'codellama', 'llava', 'dolphin-mistral', 'dolphin-llama3', 'orca-mini', 'vicuna',
+    'tinydolphin', 'openhermes', 'starcoder2', 'stable-code', 'medllama2', 'wizard-vicuna',
+    'sqlcoder', 'nous-hermes2', 'stable-beluga', 'yarn-llama2', 'command-r', 'command-r-plus',
+    'nomic-embed-text', 'mxbai-embed-large', 'all-minilm', 'snowflake-arctic-embed',
+    'moondream', 'bakllava', 'tinyllama', 'stable-diffusion', 'stable-video-diffusion'
+  ];
 
   const popularModels = [
     { name: 'llama3.2', description: 'Meta\'s latest lightweight model' },
@@ -169,12 +181,27 @@ export default function App() {
     }
   };
 
-  const pullModel = async () => {
-    if (!newModelName.trim()) return;
+  useEffect(() => {
+    if (newModelName.trim().length > 0) {
+      const filtered = allOllamaModels
+        .filter(m => m.toLowerCase().includes(newModelName.toLowerCase()))
+        .filter(m => !models.some(installed => installed.name.split(':')[0] === m)) // Don't suggest if already installed
+        .slice(0, 10);
+      setSuggestions(filtered);
+      setShowSuggestions(true);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [newModelName, models]);
+
+  const pullModel = async (nameOverride?: string) => {
+    const modelName = (nameOverride || newModelName).trim();
+    if (!modelName) return;
     
-    const modelName = newModelName.trim();
     setPullingModel({ name: modelName, progress: 0, status: 'Starting...' });
     setNewModelName('');
+    setShowSuggestions(false);
 
     pullAbortController.current = new AbortController();
 
@@ -766,19 +793,52 @@ export default function App() {
                   <p className="text-gray-500">Enter a model name from the Ollama library to download it to your machine.</p>
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-col sm:flex-row gap-3 relative">
                   <div className="relative flex-1">
                     <Download className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                     <input 
                       type="text" 
                       value={newModelName}
                       onChange={(e) => setNewModelName(e.target.value)}
+                      onFocus={() => newModelName.trim().length > 0 && setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                       placeholder="e.g. llama3.2, mistral, codellama..."
                       className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-12 pr-4 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                     />
+                    
+                    {/* Suggestions Dropdown */}
+                    <AnimatePresence>
+                      {showSuggestions && suggestions.length > 0 && (
+                        <motion.div 
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute left-0 right-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl z-20 overflow-hidden"
+                        >
+                          <div className="p-2 border-b border-gray-50 bg-gray-50/50">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2">Suggestions</span>
+                          </div>
+                          <div className="max-height-[300px] overflow-y-auto">
+                            {suggestions.map((suggestion) => (
+                              <button
+                                key={suggestion}
+                                onClick={() => pullModel(suggestion)}
+                                className="w-full flex items-center justify-between px-4 py-3 hover:bg-blue-50 text-left transition-colors group"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <Cpu size={16} className="text-gray-400 group-hover:text-blue-500" />
+                                  <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700">{suggestion}</span>
+                                </div>
+                                <Download size={14} className="text-gray-300 group-hover:text-blue-400" />
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                   <button 
-                    onClick={pullModel}
+                    onClick={() => pullModel()}
                     disabled={!newModelName.trim() || !!pullingModel}
                     className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white px-8 py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:shadow-none"
                   >
