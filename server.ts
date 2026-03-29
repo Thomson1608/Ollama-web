@@ -404,7 +404,7 @@ async function startServer() {
         const stream = await client.messages.create({
           model: model,
           max_tokens: 4096,
-          messages: messages.filter((m: any) => m.role !== 'system').map((m: any) => ({ role: m.role, content: m.content })),
+          messages: messages.filter((m: any) => m.role !== 'system').map((m: any) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content })),
           system: messages.find((m: any) => m.role === 'system')?.content || '',
           stream: true,
         });

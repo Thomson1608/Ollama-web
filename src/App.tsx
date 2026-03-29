@@ -60,7 +60,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
-  const [modelFilter, setModelFilter] = useState<'local' | 'claude'>('local');
+  const [modelFilter, setModelFilter] = useState<'local' | 'claude' | 'cloud-local'>('local');
   const [claudeUsage, setClaudeUsage] = useState({ used: 0, total: 1000000 }); // Mock usage
 
   const allOllamaModels = [
