@@ -66,7 +66,7 @@ export default function App() {
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
-  // Sync isLoading across tabs using localStorage (very reliable)
+  // Sync isAiTypingGlobally across tabs using localStorage
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'ollama_is_loading') {
@@ -77,18 +77,14 @@ export default function App() {
     window.addEventListener('storage', handleStorage);
     
     // Initial check
-    setIsAiTypingGlobally(localStorage.getItem('ollama_is_loading') === 'true');
+    const initialLoading = localStorage.getItem('ollama_is_loading') === 'true';
+    setIsAiTypingGlobally(initialLoading);
 
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  // Update localStorage when local isLoading changes
+  // Reset global loading on tab close if this tab was the one loading
   useEffect(() => {
-    localStorage.setItem('ollama_is_loading', isLoading.toString());
-    // Also update local global state for consistency
-    setIsAiTypingGlobally(isLoading);
-
-    // Reset on tab close to avoid stuck state
     const handleBeforeUnload = () => {
       if (isLoading) {
         localStorage.setItem('ollama_is_loading', 'false');
@@ -173,6 +169,8 @@ export default function App() {
     socket.on('chat:end', ({ chatId, finalContent }) => {
       console.log('Socket.io: chat:end event received for chat:', chatId);
       setIsAiTypingGlobally(false);
+      localStorage.setItem('ollama_is_loading', 'false');
+      
       // Sync final content
       if (finalContent) {
         setChats(prev => prev.map(c => 

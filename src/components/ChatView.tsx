@@ -101,7 +101,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 </div>
               </motion.div>
             ))}
-            {isLoading && (
+            {(isLoading || isAiTypingGlobally) && (
               <div className="flex gap-4">
                 <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 animate-pulse">
                   <Cpu size={16} />
@@ -113,7 +113,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.2s]" />
                       <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.4s]" />
                     </div>
-                    {isAiTypingGlobally && (
+                    {isAiTypingGlobally && !isLoading && (
                       <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
                         AI is responding in another tab...
                       </span>
