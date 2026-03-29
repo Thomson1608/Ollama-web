@@ -11,7 +11,7 @@ import { ChatView } from './components/ChatView';
 import { ModelsView } from './components/ModelsView';
 import { PullView } from './components/PullView';
 import { WorkspaceView } from './components/WorkspaceView';
-import { SettingsModal } from './components/SettingsModal';
+import { SettingsView } from './components/SettingsView';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall } from './types';
 
 export default function App() {
@@ -29,7 +29,6 @@ export default function App() {
   const [runningModels, setRunningModels] = useState<RunningModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ollama_selected_model') || '');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
   const [newModelName, setNewModelName] = useState('');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
@@ -517,7 +516,7 @@ When you want to create code or save information, use the write_file tool.
 
       // Run extraction in background
       (async () => {
-        const recentMessages = chat.messages.slice(-4);
+        const recentMessages = chat.messages.slice(-6);
         const context = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
 
         try {
@@ -530,12 +529,14 @@ When you want to create code or save information, use the write_file tool.
                 { 
                   role: 'system', 
                   content: `You are a memory extraction module. Your task is to extract personal facts, preferences, or important information about the user from the conversation. 
+                  CRITICAL: Also extract the user's preferred language and communication style (e.g., "User prefers communicating in Vietnamese", "User likes technical explanations").
+                  
                   Current Memory: ${memory.facts.join(', ')}
                   
                   Output ONLY a JSON array of strings representing NEW facts found in this snippet. 
                   If no new facts are found, output []. 
                   Do NOT repeat facts already in memory.
-                  Example output: ["User likes spicy food", "User is a software engineer"]` 
+                  Example output: ["User prefers communicating in Vietnamese", "User is a software engineer"]` 
                 },
                 { role: 'user', content: `Extract facts from this conversation:\n${context}` }
               ],
@@ -647,7 +648,7 @@ When you want to create code or save information, use the write_file tool.
   };
 
   const saveSettings = () => {
-    setShowSettings(false);
+    setCurrentView('chat');
     checkConnection();
     toast.success('Settings saved');
   };
@@ -667,7 +668,6 @@ When you want to create code or save information, use the write_file tool.
         createNewChat={createNewChat}
         deleteChat={deleteChat}
         clearAllChats={clearAllChats}
-        setShowSettings={setShowSettings}
         exportData={exportData}
         importData={importData}
         isSyncing={isSyncing}
@@ -685,7 +685,7 @@ When you want to create code or save information, use the write_file tool.
           connectionStatus={connectionStatus}
           checkConnection={checkConnection}
           ollamaUrl={ollamaUrl}
-          setShowSettings={setShowSettings}
+          setShowSettings={() => setCurrentView('settings')}
         />
 
         <div className="flex-1 overflow-y-auto">
@@ -736,21 +736,21 @@ When you want to create code or save information, use the write_file tool.
           {currentView === 'workspace' && (
             <WorkspaceView />
           )}
+
+          {currentView === 'settings' && (
+            <SettingsView 
+              ollamaUrl={ollamaUrl}
+              setOllamaUrl={setOllamaUrl}
+              systemPrompt={systemPrompt}
+              setSystemPrompt={setSystemPrompt}
+              memory={memory}
+              clearMemory={clearMemory}
+              saveSettings={saveSettings}
+              connectionStatus={connectionStatus}
+            />
+          )}
         </div>
       </main>
-
-      <SettingsModal 
-        showSettings={showSettings}
-        setShowSettings={setShowSettings}
-        ollamaUrl={ollamaUrl}
-        setOllamaUrl={setOllamaUrl}
-        systemPrompt={systemPrompt}
-        setSystemPrompt={setSystemPrompt}
-        memory={memory}
-        clearMemory={clearMemory}
-        saveSettings={saveSettings}
-        connectionStatus={connectionStatus}
-      />
     </div>
   );
 }

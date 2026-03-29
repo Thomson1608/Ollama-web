@@ -27,7 +27,6 @@ interface SidebarProps {
   createNewChat: () => void;
   deleteChat: (id: string, e: React.MouseEvent) => void;
   clearAllChats: () => void;
-  setShowSettings: (show: boolean) => void;
   exportData: () => void;
   importData: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isSyncing?: boolean;
@@ -44,7 +43,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   createNewChat,
   deleteChat,
   clearAllChats,
-  setShowSettings,
   exportData,
   importData,
   isSyncing
@@ -172,8 +170,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
         <button 
-          onClick={() => setShowSettings(true)}
-          className="w-full flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg text-sm text-gray-600 transition-colors"
+          onClick={() => setCurrentView('settings')}
+          className={cn(
+            "w-full flex items-center gap-2 p-2 rounded-lg text-sm transition-colors",
+            currentView === 'settings' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+          )}
         >
           <Settings size={16} />
           <span>Settings</span>
