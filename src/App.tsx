@@ -431,15 +431,28 @@ When you write code, briefly explain your plan in the chat, then immediately use
     localStorage.setItem('ollama_selected_model', selectedModel);
   }, [selectedModel]);
 
-  // Poll for running models every 5 seconds
+  // Poll for running models
   useEffect(() => {
     const interval = setInterval(() => {
       if (connectionStatus === 'connected') {
         fetchRunningModels();
       }
-    }, 5000);
+    }, isLoading ? 1000 : 5000); // Poll every 1s if loading, 5s otherwise
     return () => clearInterval(interval);
-  }, [connectionStatus]);
+  }, [connectionStatus, isLoading]);
+
+  // Check if model is still running while loading
+  useEffect(() => {
+    if (isLoading && runningModels.length > 0) {
+      const isModelRunning = runningModels.some(m => m.name === selectedModel);
+      if (!isModelRunning) {
+        // Model crashed!
+        setIsLoading(false);
+        setIsAiTypingGlobally(false);
+        toast.error('Model stopped unexpectedly.');
+      }
+    }
+  }, [isLoading, runningModels, selectedModel]);
 
   useEffect(() => {
     scrollToBottom();
