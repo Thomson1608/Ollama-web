@@ -718,7 +718,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
         console.log('Chat request was aborted.');
         return;
       }
-      toast.error('Error: Could not connect to Ollama via backend. Make sure it is running on the server.');
+      toast.error('Error: Failed to connect to AI service. Please check your connection and API keys.');
       console.error(error);
     } finally {
       setIsLoading(false);

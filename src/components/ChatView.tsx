@@ -3,7 +3,8 @@ import {
   Send, 
   Plus, 
   Cpu, 
-  AlertCircle
+  AlertCircle,
+  Globe
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -36,6 +37,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   connectionStatus,
   messagesEndRef
 }) => {
+  const isClaude = activeChat?.model?.startsWith('claude-');
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
@@ -45,9 +48,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
               <Cpu size={32} />
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-gray-800">Ollama Local AI</h2>
+              <h2 className="text-2xl font-bold text-gray-800">AI Chat Interface</h2>
               <p className="text-gray-500">
-                Select a model and start a conversation. Your data stays on your machine.
+                Select a model from the Models tab to start. You can choose between local Ollama models or cloud-based Claude models.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-3 w-full">
@@ -86,9 +89,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
               >
                 <div className={cn(
                   "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                  msg.role === 'user' ? "bg-gray-800 text-white" : "bg-blue-100 text-blue-600"
+                  msg.role === 'user' 
+                    ? "bg-gray-800 text-white" 
+                    : isClaude 
+                      ? "bg-purple-100 text-purple-600" 
+                      : "bg-blue-100 text-blue-600"
                 )}>
-                  {msg.role === 'user' ? 'U' : <Cpu size={16} />}
+                  {msg.role === 'user' ? 'U' : isClaude ? <Globe size={16} /> : <Cpu size={16} />}
                 </div>
                 <div className={cn(
                   "max-w-[85%] p-4 rounded-2xl",
@@ -170,10 +177,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
             ))}
             {(isLoading || isAiTypingGlobally) && (
               <div className="flex gap-4">
-                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 animate-pulse">
-                  <Cpu size={16} />
+                <div className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 animate-pulse",
+                  isClaude ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"
+                )}>
+                  {isClaude ? <Globe size={16} /> : <Cpu size={16} />}
                 </div>
-                <div className="bg-white border border-gray-200 p-4 rounded-2xl rounded-tl-none shadow-sm">
+                <div className={cn(
+                  "bg-white border p-4 rounded-2xl rounded-tl-none shadow-sm",
+                  isClaude ? "border-purple-200" : "border-gray-200"
+                )}>
                   <div className="flex flex-col gap-2">
                     <div className="flex gap-1">
                       <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" />
