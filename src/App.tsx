@@ -10,8 +10,9 @@ import { Header } from './components/Header';
 import { ChatView } from './components/ChatView';
 import { ModelsView } from './components/ModelsView';
 import { PullView } from './components/PullView';
+import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsModal } from './components/SettingsModal';
-import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory } from './types';
+import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall } from './types';
 
 export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
@@ -411,16 +412,34 @@ export default function App() {
     setIsLoading(true);
 
     try {
+      const toolInstructions = `
+You have access to a workspace file system. You can perform the following actions by including a JSON block in your response using the format:
+<tool_call>
+{
+  "tool": "write_file",
+  "args": { "name": "filename.txt", "content": "file content" }
+}
+</tool_call>
+
+Available tools:
+- write_file: Create or overwrite a file. Args: { "name": string, "content": string }
+- read_file: Read a file's content. Args: { "name": string }
+- list_files: List all files in the workspace. Args: {}
+- delete_file: Delete a file. Args: { "name": string }
+
+When you want to create code or save information, use the write_file tool.
+`;
+
       const response = await fetch(`${ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: selectedModel,
           messages: [
-            ...(systemPrompt || memory.facts.length > 0 ? [{ 
+            { 
               role: 'system', 
-              content: `${systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}` 
-            }] : []),
+              content: `${systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}\n\n${toolInstructions}` 
+            },
             ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: input }
           ],
@@ -478,6 +497,9 @@ export default function App() {
       
       // Extract memory after assistant finishes
       extractMemory(currentChatId);
+      
+      // Check for tool calls in the assistant's response
+      handleToolCalls(currentChatId, assistantContent);
       
     } catch (error) {
       toast.error('Error: Could not connect to Ollama. Make sure it is running and OLLAMA_ORIGINS is set.');
@@ -551,6 +573,64 @@ export default function App() {
 
       return prevChats;
     });
+  };
+
+  const handleToolCalls = async (chatId: string, content: string) => {
+    const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+    let match;
+    const toolCalls: ToolCall[] = [];
+
+    while ((match = toolCallRegex.exec(content)) !== null) {
+      try {
+        const call = JSON.parse(match[1]);
+        toolCalls.push(call);
+      } catch (e) {
+        console.error('Failed to parse tool call', e);
+      }
+    }
+
+    if (toolCalls.length === 0) return;
+
+    for (const call of toolCalls) {
+      let result = '';
+      try {
+        switch (call.tool) {
+          case 'write_file':
+            const writeRes = await fetch('/api/workspace/write', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(call.args),
+            });
+            result = writeRes.ok ? `Successfully wrote to ${call.args.name}` : 'Failed to write file';
+            break;
+          case 'read_file':
+            const readRes = await fetch(`/api/workspace/read?name=${encodeURIComponent(call.args.name)}`);
+            const readData = await readRes.json();
+            result = readRes.ok ? `Content of ${call.args.name}:\n${readData.content}` : 'Failed to read file';
+            break;
+          case 'list_files':
+            const listRes = await fetch('/api/workspace');
+            const listData = await listRes.json();
+            result = listRes.ok ? `Files in workspace:\n${listData.map((f: any) => f.name).join('\n')}` : 'Failed to list files';
+            break;
+          case 'delete_file':
+            const delRes = await fetch(`/api/workspace/delete?name=${encodeURIComponent(call.args.name)}`, {
+              method: 'DELETE'
+            });
+            result = delRes.ok ? `Successfully deleted ${call.args.name}` : 'Failed to delete file';
+            break;
+        }
+
+        // Add tool result as a hidden system message or just inform the user
+        toast.info(`Agent action: ${call.tool} on ${call.args.name || 'workspace'}`);
+        
+        // Optionally send the result back to the AI to continue the chain
+        // For now, we'll just log it to the console and show a toast
+        console.log(`Tool ${call.tool} result:`, result);
+      } catch (error) {
+        console.error(`Tool ${call.tool} execution failed`, error);
+      }
+    }
   };
 
   const clearMemory = () => {
@@ -651,6 +731,10 @@ export default function App() {
               suggestions={suggestions}
               popularModels={popularModels}
             />
+          )}
+
+          {currentView === 'workspace' && (
+            <WorkspaceView />
           )}
         </div>
       </main>

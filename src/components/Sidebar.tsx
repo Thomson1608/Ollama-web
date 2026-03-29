@@ -9,7 +9,8 @@ import {
   Settings,
   Download,
   FileDown,
-  FileUp
+  FileUp,
+  Folder
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -128,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           <button 
             onClick={() => setCurrentView('chat')}
             className={cn(
@@ -158,6 +159,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title="Pull"
           >
             <Download size={16} />
+          </button>
+          <button 
+            onClick={() => setCurrentView('workspace')}
+            className={cn(
+              "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
+              currentView === 'workspace' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+            )}
+            title="Workspace"
+          >
+            <Folder size={16} />
           </button>
         </div>
         <button 

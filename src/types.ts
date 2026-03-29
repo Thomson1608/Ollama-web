@@ -41,9 +41,21 @@ export interface RunningModel {
   size_vram: number;
 }
 
-export type ViewType = 'chat' | 'models' | 'pull';
+export type ViewType = 'chat' | 'models' | 'pull' | 'workspace';
 export type ConnectionStatus = 'connected' | 'disconnected' | 'checking';
 
 export interface Memory {
   facts: string[];
+}
+
+export interface WorkspaceFile {
+  name: string;
+  isDirectory: boolean;
+  size: number;
+  mtime: string;
+}
+
+export interface ToolCall {
+  tool: 'write_file' | 'read_file' | 'list_files' | 'delete_file';
+  args: any;
 }

@@ -11,6 +11,7 @@ const DATA_DIR = '/tmp/ollama-data';
 const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
+const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
 
 async function ensureDataDir() {
   try {
@@ -18,6 +19,10 @@ async function ensureDataDir() {
   } catch {
     await fs.mkdir(DATA_DIR, { recursive: true });
   }
+
+  try {
+    await fs.mkdir(WORKSPACE_DIR, { recursive: true });
+  } catch {}
   
   try {
     await fs.access(CHATS_FILE);
@@ -106,6 +111,59 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save memory' });
+    }
+  });
+
+  // API: List workspace files
+  app.get('/api/workspace', async (req, res) => {
+    try {
+      const files = await fs.readdir(WORKSPACE_DIR);
+      const stats = await Promise.all(files.map(async f => {
+        const s = await fs.stat(path.join(WORKSPACE_DIR, f));
+        return { name: f, isDirectory: s.isDirectory(), size: s.size, mtime: s.mtime };
+      }));
+      res.json(stats);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to list workspace' });
+    }
+  });
+
+  // API: Read workspace file
+  app.get('/api/workspace/read', async (req, res) => {
+    try {
+      const fileName = req.query.name as string;
+      if (!fileName) return res.status(400).json({ error: 'Missing filename' });
+      const filePath = path.join(WORKSPACE_DIR, fileName);
+      const content = await fs.readFile(filePath, 'utf-8');
+      res.json({ content });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to read file' });
+    }
+  });
+
+  // API: Write workspace file
+  app.post('/api/workspace/write', async (req, res) => {
+    try {
+      const { name, content } = req.body;
+      if (!name) return res.status(400).json({ error: 'Missing filename' });
+      const filePath = path.join(WORKSPACE_DIR, name);
+      await fs.writeFile(filePath, content, 'utf-8');
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to write file' });
+    }
+  });
+
+  // API: Delete workspace file
+  app.delete('/api/workspace/delete', async (req, res) => {
+    try {
+      const fileName = req.query.name as string;
+      if (!fileName) return res.status(400).json({ error: 'Missing filename' });
+      const filePath = path.join(WORKSPACE_DIR, fileName);
+      await fs.unlink(filePath);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete file' });
     }
   });
 
