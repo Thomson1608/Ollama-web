@@ -396,6 +396,7 @@ async function startServer() {
     if (isClaude) {
       const client = await getAnthropicClient();
       if (!client) {
+        logger.error('Claude Chat Error: Anthropic API Key is not configured.');
         return res.status(400).json({ error: 'Anthropic API Key is not configured. Please add it in Settings.' });
       }
 
