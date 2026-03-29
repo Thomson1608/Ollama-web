@@ -34,6 +34,34 @@ export const Header: React.FC<HeaderProps> = ({
   setShowSettings,
   isBusy
 }) => {
+  const [now, setNow] = React.useState(new Date());
+
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const runningModel = runningModels.find(rm => rm.name === selectedModel || rm.model === selectedModel);
+
+  const formatExpiresAt = (expiresAt: string) => {
+    if (!expiresAt) return '';
+    try {
+      const date = new Date(expiresAt);
+      const diffMs = date.getTime() - now.getTime();
+      if (diffMs <= 0) return 'Expiring...';
+      
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffSecs = Math.floor((diffMs % 60000) / 1000);
+      
+      if (diffMins > 0) {
+        return `${diffMins}m ${diffSecs}s`;
+      }
+      return `${diffSecs}s`;
+    } catch (e) {
+      return expiresAt;
+    }
+  };
+
   return (
     <header className="h-16 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-10">
       <div className="flex items-center gap-3">
@@ -45,31 +73,42 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
         <div className="h-4 w-[1px] bg-gray-200 mx-1" />
         {currentView === 'chat' ? (
-          <div className="flex flex-col">
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Model</span>
-            <select 
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              disabled={isBusy}
-              className={`bg-transparent text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              {models.length === 0 ? (
-                <option value="">No models found</option>
-              ) : (
-                <>
-                  <optgroup label="Installed Models">
-                    {models.map(m => {
-                      const isRunning = runningModels.some(rm => rm.name === m.name || rm.model === m.name);
-                      return (
-                        <option key={m.name} value={m.name}>
-                          {m.name} {isRunning ? ' (Running)' : ''}
-                        </option>
-                      );
-                    })}
-                  </optgroup>
-                </>
-              )}
-            </select>
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col">
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Model</span>
+              <select 
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                disabled={isBusy}
+                className={`bg-transparent text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {models.length === 0 ? (
+                  <option value="">No models found</option>
+                ) : (
+                  <>
+                    <optgroup label="Installed Models">
+                      {models.map(m => {
+                        const isRunning = runningModels.some(rm => rm.name === m.name || rm.model === m.name);
+                        return (
+                          <option key={m.name} value={m.name}>
+                            {m.name} {isRunning ? ' (Running)' : ''}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {runningModel && (
+              <div className="flex flex-col border-l border-gray-100 pl-4">
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Until Expiry</span>
+                <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                  {formatExpiresAt(runningModel.expires_at)}
+                </span>
+              </div>
+            )}
           </div>
         ) : currentView === 'models' ? (
           <span className="font-bold text-gray-800">Installed Models</span>
