@@ -62,8 +62,40 @@ async function ensureDataDir() {
   }
 }
 
+async function cleanupOldChats() {
+  try {
+    logger.release('Cleanup: Checking for chats older than 30 days');
+    const data = await fs.readFile(CHATS_FILE, 'utf-8');
+    const chats = JSON.parse(data);
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    
+    const initialCount = chats.length;
+    const filteredChats = chats.filter((chat: any) => {
+      // Use the timestamp of the last message if available, otherwise createdAt
+      const lastMessageTime = chat.messages?.length > 0 
+        ? chat.messages[chat.messages.length - 1].timestamp 
+        : chat.createdAt;
+      
+      return lastMessageTime > thirtyDaysAgo;
+    });
+
+    if (filteredChats.length < initialCount) {
+      await fs.writeFile(CHATS_FILE, JSON.stringify(filteredChats, null, 2));
+      logger.release(`Cleanup: Removed ${initialCount - filteredChats.length} old chats`);
+    } else {
+      logger.debug('Cleanup: No old chats to remove');
+    }
+  } catch (error) {
+    logger.error('Cleanup Error: Failed to cleanup old chats', error);
+  }
+}
+
 async function startServer() {
   await ensureDataDir();
+  await cleanupOldChats();
+  
+  // Run cleanup every 24 hours
+  setInterval(cleanupOldChats, 24 * 60 * 60 * 1000);
   
   const app = express();
   const httpServer = createServer(app);
