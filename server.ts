@@ -359,6 +359,9 @@ async function startServer() {
     }
   });
 
+  // API: Serve workspace files for preview
+  app.use('/preview', express.static(WORKSPACE_DIR));
+
   // --- Ollama Proxy Endpoints ---
 
   // List models

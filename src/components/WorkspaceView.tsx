@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Folder, File, Trash2, RefreshCw, FileText, Plus } from 'lucide-react';
+import { Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code } from 'lucide-react';
 import { motion } from 'motion/react';
 import { WorkspaceFile } from '../types';
 import { toast } from 'sonner';
@@ -16,6 +16,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0);
 
   const fetchFiles = async () => {
     setIsLoading(true);
@@ -34,11 +36,23 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
 
   useEffect(() => {
     fetchFiles();
+    if (selectedFile && !isEditing) {
+      // Fetch content without resetting preview mode
+      fetch(`/api/workspace/read?name=${encodeURIComponent(selectedFile)}`)
+        .then(res => res.ok ? res.json() : Promise.reject())
+        .then(data => {
+          setFileContent(data.content);
+          setPreviewKey(prev => prev + 1);
+        })
+        .catch(() => {});
+    }
   }, [refreshTrigger]);
 
   const readFile = async (name: string) => {
     setSelectedFile(name);
     setIsEditing(false);
+    setIsPreviewMode(false);
+    setPreviewKey(prev => prev + 1);
     try {
       const res = await fetch(`/api/workspace/read?name=${encodeURIComponent(name)}`);
       if (res.ok) {
@@ -62,6 +76,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
       if (res.ok) {
         toast.success('File saved');
         setIsEditing(false);
+        setPreviewKey(prev => prev + 1);
         fetchFiles();
       }
     } catch (error) {
@@ -212,24 +227,56 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
                     </button>
                   </>
                 ) : (
-                  <button 
-                    onClick={() => setIsEditing(true)}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium px-3 py-1 rounded-lg border border-blue-100 hover:bg-blue-50"
-                  >
-                    Edit File
-                  </button>
+                  <>
+                    {isPreviewMode && (
+                      <button 
+                        onClick={() => setPreviewKey(prev => prev + 1)}
+                        className="text-xs text-gray-500 hover:text-gray-700 font-medium px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50 flex items-center gap-1"
+                        title="Reload Preview"
+                      >
+                        <RefreshCw size={14} />
+                      </button>
+                    )}
+                    <button 
+                      onClick={() => setIsPreviewMode(!isPreviewMode)}
+                      className={`text-xs font-medium px-3 py-1 rounded-lg border flex items-center gap-1 transition-colors ${
+                        isPreviewMode 
+                          ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' 
+                          : 'text-purple-600 border-purple-100 hover:bg-purple-50'
+                      }`}
+                    >
+                      {isPreviewMode ? <Code size={14} /> : <Play size={14} />}
+                      {isPreviewMode ? 'View Code' : 'Run Preview'}
+                    </button>
+                    <button 
+                      onClick={() => setIsEditing(true)}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium px-3 py-1 rounded-lg border border-blue-100 hover:bg-blue-50"
+                    >
+                      Edit File
+                    </button>
+                  </>
                 )}
               </div>
             </div>
             <div className="flex-1 p-6 overflow-hidden">
               <div className="h-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-                <textarea 
-                  value={fileContent}
-                  onChange={(e) => setFileContent(e.target.value)}
-                  readOnly={!isEditing}
-                  className={`flex-1 p-6 font-mono text-sm text-gray-800 focus:outline-none resize-none bg-transparent ${isEditing ? 'cursor-text' : 'cursor-default'}`}
-                  placeholder="Start typing..."
-                />
+                {isPreviewMode ? (
+                  <iframe 
+                    key={previewKey}
+                    src={`/preview/${selectedFile?.split('/').map(encodeURIComponent).join('/')}`} 
+                    className="w-full h-full border-none bg-white"
+                    title="Preview"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  />
+                ) : (
+                  <textarea 
+                    value={fileContent}
+                    onChange={(e) => setFileContent(e.target.value)}
+                    readOnly={!isEditing}
+                    className={`flex-1 p-6 font-mono text-sm text-gray-800 focus:outline-none resize-none bg-transparent ${isEditing ? 'cursor-text' : 'cursor-default'}`}
+                    placeholder="Start typing..."
+                  />
+                )}
               </div>
             </div>
           </>

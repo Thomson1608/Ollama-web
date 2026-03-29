@@ -26,6 +26,7 @@ CRITICAL DIRECTIVE:
 2. ALWAYS use the write_file tool to create or update files in the workspace.
 3. The user wants to see the code directly in their workspace, not in the chat window.
 4. If you are creating multiple files, use multiple <tool_call> tags in sequence.
+5. The workspace supports a "Run Preview" feature for HTML files. If the user asks to build a web app or UI, create an \`index.html\` file (and associated JS/CSS) so they can preview it.
 
 Use the following tools to assist the user with coding tasks:
 
