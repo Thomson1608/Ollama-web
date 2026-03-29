@@ -7,7 +7,9 @@ import {
   Terminal,
   RefreshCw,
   Settings,
-  Download
+  Download,
+  FileDown,
+  FileUp
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -24,6 +26,8 @@ interface SidebarProps {
   createNewChat: () => void;
   deleteChat: (id: string, e: React.MouseEvent) => void;
   setShowSettings: (show: boolean) => void;
+  exportData: () => void;
+  importData: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -36,8 +40,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setCurrentView,
   createNewChat,
   deleteChat,
-  setShowSettings
+  setShowSettings,
+  exportData,
+  importData
 }) => {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
   return (
     <motion.aside 
       initial={false}
@@ -152,6 +160,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Settings size={16} />
           <span>Settings</span>
         </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button 
+            onClick={exportData}
+            className="flex items-center justify-center gap-2 p-2 hover:bg-gray-100 rounded-lg text-xs text-gray-500 transition-colors border border-gray-100"
+            title="Export JSON"
+          >
+            <FileDown size={14} />
+            <span>Export</span>
+          </button>
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center justify-center gap-2 p-2 hover:bg-gray-100 rounded-lg text-xs text-gray-500 transition-colors border border-gray-100"
+            title="Import JSON"
+          >
+            <FileUp size={14} />
+            <span>Import</span>
+          </button>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={importData} 
+            accept=".json" 
+            className="hidden" 
+          />
+        </div>
       </div>
     </motion.aside>
   );

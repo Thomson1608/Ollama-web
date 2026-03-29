@@ -259,6 +259,45 @@ export default function App() {
     return gb.toFixed(2) + ' GB';
   };
 
+  const exportData = () => {
+    const data = JSON.stringify(chats, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ollama-chats-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Chats exported successfully');
+  };
+
+  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedChats = JSON.parse(event.target?.result as string);
+        if (Array.isArray(importedChats)) {
+          // Merge and avoid duplicates by ID if possible, but for simplicity just append
+          setChats(prev => {
+            const existingIds = new Set(prev.map(c => c.id));
+            const uniqueImported = importedChats.filter(c => !existingIds.has(c.id));
+            return [...uniqueImported, ...prev];
+          });
+          toast.success('Chats imported successfully');
+        } else {
+          toast.error('Invalid file format');
+        }
+      } catch (err) {
+        toast.error('Error parsing file');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!input.trim() || isLoading || !selectedModel) return;
@@ -381,6 +420,8 @@ export default function App() {
         createNewChat={createNewChat}
         deleteChat={deleteChat}
         setShowSettings={setShowSettings}
+        exportData={exportData}
+        importData={importData}
       />
 
       <main className="flex-1 flex flex-col relative min-w-0">
