@@ -4,19 +4,23 @@ import { AlertCircle, CheckCircle, Send, Loader2 } from 'lucide-react';
 export function StatsView() {
   const [stats, setStats] = useState({ sent: 0, success: 0, fail: 0 });
   const [logs, setLogs] = useState<string[]>([]);
+  const [chatDebugLogs, setChatDebugLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [statsRes, logsRes] = await Promise.all([
+        const [statsRes, logsRes, chatDebugLogsRes] = await Promise.all([
           fetch('/api/stats'),
-          fetch('/api/logs/errors')
+          fetch('/api/logs/errors'),
+          fetch('/api/logs/chat-debug')
         ]);
         const statsData = await statsRes.json();
         const logsData = await logsRes.json();
+        const chatDebugLogsData = await chatDebugLogsRes.json();
         setStats(statsData);
         setLogs(logsData.logs);
+        setChatDebugLogs(chatDebugLogsData.logs);
       } catch (error) {
         console.error('Failed to fetch stats/logs', error);
       } finally {
@@ -56,11 +60,20 @@ export function StatsView() {
       </div>
 
       <h3 className="text-xl font-bold">Recent Error Logs</h3>
-      <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto">
+      <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-64 overflow-y-auto">
         {logs.length > 0 ? (
           logs.map((log, i) => <div key={i} className="border-b border-gray-800 py-1">{log}</div>)
         ) : (
           <p>No recent errors.</p>
+        )}
+      </div>
+
+      <h3 className="text-xl font-bold">Chat Debug Logs (Request/Response)</h3>
+      <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto">
+        {chatDebugLogs.length > 0 ? (
+          chatDebugLogs.map((log, i) => <div key={i} className="border-b border-gray-800 py-1 whitespace-pre-wrap">{log}</div>)
+        ) : (
+          <p>No recent chat debug logs.</p>
         )}
       </div>
     </div>

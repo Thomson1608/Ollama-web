@@ -80,7 +80,7 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
           <p className="text-sm text-gray-500">
             {modelFilter === 'local' 
               ? 'Manage your locally downloaded Ollama models' 
-              : 'Access powerful AI models via Anthropic API'}
+              : 'Access Ollama cloud models'}
           </p>
         </div>
         {modelFilter === 'local' && (
@@ -159,7 +159,7 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
               );
             })}
           </>
-        ) : modelFilter === 'cloud-local' ? (
+        ) : (
           <>
             {cloudLocalModels.length === 0 && connectionStatus === 'connected' && (
               <div className="col-span-full py-20 text-center text-gray-400">
@@ -216,45 +216,6 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
                 </div>
               );
             })}
-          </>
-        ) : (
-          <>
-            {claudeModels.map(model => (
-              <div key={model.name} className="bg-white p-5 rounded-3xl border border-gray-200 shadow-sm hover:shadow-md transition-all group relative">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-purple-100 text-purple-600">
-                    <Globe size={20} />
-                  </div>
-                  <div className="flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-1 rounded-full text-[10px] font-bold">
-                    CLOUD
-                  </div>
-                </div>
-                <h3 className="font-bold text-gray-800 mb-1 truncate">{model.name}</h3>
-                <p className="text-xs text-gray-500 mb-4 line-clamp-2">{model.description}</p>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <span className="px-2 py-0.5 bg-purple-50 text-purple-600 rounded text-[10px] font-medium uppercase">
-                    Anthropic API
-                  </span>
-                  <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
-                    {model.name.includes('sonnet') ? 'High Intelligence' : model.name.includes('opus') ? 'Most Powerful' : 'Fast & Efficient'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-gray-400 pt-4 border-t border-gray-50">
-                  <span>Pay-per-token</span>
-                  <span>v3.5</span>
-                </div>
-                <button 
-                  onClick={() => {
-                    setSelectedModel(model.name);
-                    setCurrentView('chat');
-                    if (!activeChatId) createNewChat();
-                  }}
-                  className="w-full mt-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-purple-200"
-                >
-                  Select for Chat
-                </button>
-              </div>
-            ))}
           </>
         )}
       </div>

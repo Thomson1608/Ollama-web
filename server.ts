@@ -253,11 +253,23 @@ async function startServer() {
   app.get('/api/logs/errors', async (req, res) => {
     try {
       const data = await fs.readFile(DEBUG_LOG_FILE, 'utf-8');
-      const lines = data.split('\n');
-      const errorLogs = lines.filter(line => line.includes('[ERROR]')).slice(-50); // Get last 50 errors
+      const entries = data.split(/(?=\[(?:DEBUG|ERROR|RELEASE)\])/);
+      const errorLogs = entries.filter(entry => entry.includes('[ERROR]')).slice(-50); // Get last 50 errors
       res.json({ logs: errorLogs });
     } catch (error) {
       res.status(500).json({ error: 'Failed to read error logs' });
+    }
+  });
+
+  // API: Get chat debug logs
+  app.get('/api/logs/chat-debug', async (req, res) => {
+    try {
+      const data = await fs.readFile(DEBUG_LOG_FILE, 'utf-8');
+      const entries = data.split(/(?=\[(?:DEBUG|ERROR|RELEASE)\])/);
+      const debugLogs = entries.filter(entry => entry.includes('[CHAT_DEBUG]')).slice(-50); // Get last 50 chat debug logs
+      res.json({ logs: debugLogs });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to read chat debug logs' });
     }
   });
 
@@ -385,19 +397,23 @@ async function startServer() {
     
     // Original Ollama logic
     try {
+      const requestBody = {
+        model,
+        messages,
+        stream: true,
+      };
+      logger.debug(`[CHAT_DEBUG] Request to model ${model}:`, requestBody);
+
       const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages,
-          stream: true,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         const error = await response.text();
         logger.error(`Ollama Proxy Error: Chat request failed for ${chatId}`, error);
+        logger.debug(`[CHAT_DEBUG] Error response from model ${model}:`, error);
         return res.status(response.status).send(error);
       }
 
@@ -447,7 +463,7 @@ async function startServer() {
       // Emit end event via Socket.io
       io.emit('chat:end', { chatId, finalContent: assistantContent });
       logger.release(`Ollama Proxy: Chat session complete for ${chatId}`);
-      logger.debug(`Ollama Proxy: Final assistant content for ${chatId}`, { length: assistantContent.length });
+      logger.debug(`[CHAT_DEBUG] Response from model ${model}:`, assistantContent);
       
       res.end();
       await updateStats('success');
