@@ -80,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={isBusy}
-                className={`bg-transparent text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`bg-transparent text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer max-w-[120px] md:max-w-none truncate ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {models.length === 0 ? (
                   <option value="">No models found</option>
@@ -136,12 +136,12 @@ export const Header: React.FC<HeaderProps> = ({
       {connectionStatus === 'disconnected' && (
         <div className="absolute top-full left-0 right-0 bg-red-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-center gap-2 z-20">
           <AlertCircle size={14} />
-          <span>Ollama is unreachable via the backend server. Please ensure Ollama is running on the server.</span>
+          <span className="truncate max-w-[200px] md:max-w-none">Ollama is unreachable. Check server status.</span>
           <button 
             onClick={() => setShowSettings(true)}
-            className="underline font-bold hover:text-red-100 transition-colors ml-2"
+            className="underline font-bold hover:text-red-100 transition-colors ml-2 shrink-0"
           >
-            Open Settings
+            Settings
           </button>
         </div>
       )}

@@ -99,18 +99,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   <div className={cn("markdown-body", msg.role === 'user' ? "text-white" : "text-gray-800")}>
                     <Markdown
                       components={{
-                        code({ node, inline, className, children, ...props }) {
+                        code({ node, className, children, ...props }: any) {
                           const match = /language-(\w+)/.exec(className || '');
                           const codeString = String(children).replace(/\n$/, '');
+                          const isBlock = !!match;
                           
-                          // Try to extract filename from language-filename pattern
-                          // e.g. language-javascript:App.tsx
-                          const langPart = match ? match[1] : '';
-                          const fullClassName = className || '';
-                          const filenameMatch = fullClassName.match(/language-[\w.]+:(.+)/);
-                          const filename = filenameMatch ? filenameMatch[1] : null;
+                          if (isBlock) {
+                            // Try to extract filename from language-filename pattern
+                            // e.g. language-javascript:App.tsx
+                            const langPart = match ? match[1] : '';
+                            const fullClassName = className || '';
+                            const filenameMatch = fullClassName.match(/language-[\w.]+:(.+)/);
+                            const filename = filenameMatch ? filenameMatch[1] : null;
 
-                          if (!inline && match) {
                             return (
                               <div className="relative group/code my-4">
                                 <div className="absolute right-2 top-2 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">

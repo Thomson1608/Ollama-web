@@ -52,7 +52,8 @@ When you write code, briefly explain your plan in the chat, then immediately use
   const [models, setModels] = useState<OllamaModel[]>([]);
   const [runningModels, setRunningModels] = useState<RunningModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ollama_selected_model') || '');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
   const [newModelName, setNewModelName] = useState('');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
@@ -88,6 +89,22 @@ When you write code, briefly explain your plan in the chat, then immediately use
   const lastUserMessageRef = useRef<string>('');
 
   const activeChat = chats.find(c => c.id === activeChatId);
+
+  // Handle window resize for mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Sync isAiTypingGlobally across tabs using localStorage
   useEffect(() => {
@@ -724,6 +741,8 @@ When you write code, briefly explain your plan in the chat, then immediately use
       
       <Sidebar 
         isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+        isMobile={isMobile}
         chats={chats}
         activeChatId={activeChatId}
         currentView={currentView}

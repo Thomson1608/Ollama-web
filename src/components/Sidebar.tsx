@@ -18,6 +18,8 @@ import { Chat, ConnectionStatus, ViewType } from '../types';
 
 interface SidebarProps {
   isSidebarOpen: boolean;
+  setIsSidebarOpen: (open: boolean) => void;
+  isMobile: boolean;
   chats: Chat[];
   activeChatId: string | null;
   currentView: ViewType;
@@ -34,6 +36,8 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
   isSidebarOpen,
+  setIsSidebarOpen,
+  isMobile,
   chats,
   activeChatId,
   currentView,
@@ -50,11 +54,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   return (
-    <motion.aside 
-      initial={false}
-      animate={{ width: isSidebarOpen ? 280 : 0, opacity: isSidebarOpen ? 1 : 0 }}
-      className="bg-white border-r border-gray-200 flex flex-col overflow-hidden"
-    >
+    <>
+      {/* Mobile Backdrop */}
+      {isMobile && isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      <motion.aside 
+        initial={false}
+        animate={{ 
+          width: isSidebarOpen ? 280 : 0, 
+          opacity: isSidebarOpen ? 1 : 0,
+          x: isSidebarOpen ? 0 : -280
+        }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className={cn(
+          "bg-white border-r border-gray-200 flex flex-col overflow-hidden h-full shrink-0",
+          isMobile && "fixed inset-y-0 left-0 z-50 shadow-2xl"
+        )}
+      >
       <div className="p-4 flex items-center justify-between border-b border-gray-100">
         <div className="flex items-center gap-2 font-semibold text-gray-800">
           <Terminal size={20} className="text-blue-600" />
@@ -81,6 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => {
                 setActiveChatId(chat.id);
                 setCurrentView('chat');
+                if (isMobile) setIsSidebarOpen(false);
               }}
               className={cn(
                 "w-full flex items-center gap-3 p-3 rounded-xl text-left text-sm transition-all group",
@@ -129,7 +151,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
         <div className="grid grid-cols-4 gap-2">
           <button 
-            onClick={() => setCurrentView('chat')}
+            onClick={() => {
+              setCurrentView('chat');
+              if (isMobile) setIsSidebarOpen(false);
+            }}
             className={cn(
               "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
               currentView === 'chat' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
@@ -139,7 +164,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <MessageSquare size={16} />
           </button>
           <button 
-            onClick={() => setCurrentView('models')}
+            onClick={() => {
+              setCurrentView('models');
+              if (isMobile) setIsSidebarOpen(false);
+            }}
             className={cn(
               "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
               currentView === 'models' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
@@ -149,7 +177,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Cpu size={16} />
           </button>
           <button 
-            onClick={() => setCurrentView('pull')}
+            onClick={() => {
+              setCurrentView('pull');
+              if (isMobile) setIsSidebarOpen(false);
+            }}
             className={cn(
               "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
               currentView === 'pull' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
@@ -159,7 +190,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Download size={16} />
           </button>
           <button 
-            onClick={() => setCurrentView('workspace')}
+            onClick={() => {
+              setCurrentView('workspace');
+              if (isMobile) setIsSidebarOpen(false);
+            }}
             className={cn(
               "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
               currentView === 'workspace' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
@@ -170,7 +204,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
         <button 
-          onClick={() => setCurrentView('settings')}
+          onClick={() => {
+            setCurrentView('settings');
+            if (isMobile) setIsSidebarOpen(false);
+          }}
           className={cn(
             "w-full flex items-center gap-2 p-2 rounded-lg text-sm transition-colors",
             currentView === 'settings' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
@@ -213,5 +250,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       </div>
     </motion.aside>
+    </>
   );
 };
