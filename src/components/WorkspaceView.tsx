@@ -117,6 +117,24 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
               <Plus size={14} />
             </button>
             <button 
+              onClick={() => {
+                const name = prompt('Enter folder name:');
+                if (name) {
+                  // To create a folder, we can just write a dummy file or just create the dir via API
+                  // For now, let's just use a dummy file .gitkeep or similar
+                  fetch('/api/workspace/write', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: `${name}/.gitkeep`, content: '' })
+                  }).then(() => fetchFiles());
+                }
+              }}
+              className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-400"
+              title="New Folder"
+            >
+              <Folder size={14} />
+            </button>
+            <button 
               onClick={fetchFiles}
               className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-400"
               title="Refresh"
@@ -217,12 +235,39 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-4">
-            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-300">
+            <div 
+              onClick={createNewFile}
+              className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-300 hover:bg-blue-50 hover:text-blue-400 cursor-pointer transition-all shadow-sm"
+            >
               <Plus size={32} />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium">Select a file to view its content</p>
-              <p className="text-xs">Agent-generated files will appear here</p>
+              <p className="text-sm font-medium">Select a file or create a new one</p>
+              <div className="mt-2 flex gap-2 justify-center">
+                <button 
+                  onClick={createNewFile}
+                  className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium px-4 py-2 rounded-lg shadow-sm flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                  New File
+                </button>
+                <button 
+                  onClick={() => {
+                    const name = prompt('Enter folder name:');
+                    if (name) {
+                      fetch('/api/workspace/write', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: `${name}/.gitkeep`, content: '' })
+                      }).then(() => fetchFiles());
+                    }
+                  }}
+                  className="text-xs bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg shadow-sm flex items-center gap-1"
+                >
+                  <Folder size={14} />
+                  New Folder
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -19,6 +19,13 @@ export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [systemPrompt, setSystemPrompt] = useState(`You are a world-class software engineer.
 You have access to a workspace where you can read, write, and list files.
+
+CRITICAL DIRECTIVE:
+1. NEVER just output code blocks in the chat.
+2. ALWAYS use the write_file tool to create or update files in the workspace.
+3. The user wants to see the code directly in their workspace, not in the chat window.
+4. If you are creating multiple files, use multiple <tool_call> tags in sequence.
+
 Use the following tools to assist the user with coding tasks:
 
 1. list_files: List all files in the workspace.
@@ -33,7 +40,7 @@ Use the following tools to assist the user with coding tasks:
 4. delete_file: Delete a file from the workspace.
    Usage: <tool_call>{"tool": "delete_file", "args": {"name": "filename.txt"}}</tool_call>
 
-When you write code, always explain what you are doing. If you create or modify files, they will appear in the workspace on the right side of the screen.`);
+When you write code, briefly explain your plan in the chat, then immediately use the <tool_call> tag(s). The files will appear in the workspace on the right side of the screen.`);
   const [memory, setMemory] = useState<Memory>({ facts: [] });
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
