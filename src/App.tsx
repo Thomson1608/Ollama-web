@@ -17,6 +17,9 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
+  Search,
+  Download,
+  ExternalLink,
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -68,7 +71,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'chat' | 'models'>('chat');
+  const [currentView, setCurrentView] = useState<'chat' | 'models' | 'pull'>('chat');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [pullingModel, setPullingModel] = useState<{ name: string; progress: number; status: string } | null>(null);
@@ -80,6 +83,18 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('checking');
   const [newModelName, setNewModelName] = useState('');
+  const [modelSearchQuery, setModelSearchQuery] = useState('');
+
+  const popularModels = [
+    { name: 'llama3.2', description: 'Meta\'s latest lightweight model' },
+    { name: 'llama3.1', description: 'Meta\'s most capable open model' },
+    { name: 'mistral', description: 'High performance 7B model' },
+    { name: 'phi3', description: 'Microsoft\'s efficient small model' },
+    { name: 'gemma2', description: 'Google\'s lightweight open model' },
+    { name: 'qwen2.5', description: 'Alibaba\'s powerful language model' },
+    { name: 'deepseek-v2', description: 'Strong reasoning and coding model' },
+    { name: 'codellama', description: 'Specialized for code generation' },
+  ];
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pullAbortController = useRef<AbortController | null>(null);
@@ -464,6 +479,16 @@ export default function App() {
               <Cpu size={16} />
               <span>Models</span>
             </button>
+            <button 
+              onClick={() => setCurrentView('pull')}
+              className={cn(
+                "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
+                currentView === 'pull' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+              )}
+            >
+              <Download size={16} />
+              <span>Pull</span>
+            </button>
           </div>
           <button 
             onClick={() => setShowSettings(true)}
@@ -513,8 +538,10 @@ export default function App() {
                   )}
                 </select>
               </div>
+            ) : currentView === 'models' ? (
+              <span className="font-bold text-gray-800">Installed Models</span>
             ) : (
-              <span className="font-bold text-gray-800">Model Management</span>
+              <span className="font-bold text-gray-800">Pull New Models</span>
             )}
           </div>
           
@@ -647,124 +674,181 @@ export default function App() {
                 </form>
               </div>
             </div>
-          ) : (
+          ) : currentView === 'models' ? (
             /* Model Management Area */
             <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
                 <div className="space-y-1">
-                  <h2 className="text-xl font-bold text-gray-800">Pull New Model</h2>
-                  <p className="text-sm text-gray-500">Download models from the Ollama library (e.g., llama3, mistral, phi3)</p>
+                  <h2 className="text-xl font-bold text-gray-800">Installed Models</h2>
+                  <p className="text-sm text-gray-500">Manage your locally downloaded models</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                   <input 
                     type="text" 
-                    value={newModelName}
-                    onChange={(e) => setNewModelName(e.target.value)}
-                    placeholder="Enter model name..."
-                    className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    value={modelSearchQuery}
+                    onChange={(e) => setModelSearchQuery(e.target.value)}
+                    placeholder="Search installed models..."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
-                  <button 
-                    onClick={pullModel}
-                    disabled={!newModelName.trim() || !!pullingModel}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2"
-                  >
-                    <Plus size={16} />
-                    Pull
-                  </button>
                 </div>
               </div>
 
-              {pullingModel && (
-                <div className="bg-white p-6 rounded-3xl border border-blue-200 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <RefreshCw size={20} className="text-blue-500 animate-spin" />
-                      <div>
-                        <p className="font-bold text-gray-800">Pulling {pullingModel.name}</p>
-                        <p className="text-xs text-gray-500">{pullingModel.status}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <button 
-                        onClick={cancelPull}
-                        className="p-1.5 hover:bg-red-50 text-red-500 rounded-lg transition-colors flex items-center gap-1 text-xs font-bold"
-                        title="Cancel Pull"
-                      >
-                        <X size={14} />
-                        CANCEL
-                      </button>
-                      <span className="text-sm font-mono font-bold text-blue-600">{pullingModel.progress.toFixed(1)}%</span>
-                    </div>
-                  </div>
-                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${pullingModel.progress}%` }}
-                      className="h-full bg-blue-500"
-                    />
-                  </div>
-                </div>
-              )}
-
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {models.length === 0 && connectionStatus === 'connected' && (
+                {models.filter(m => m.name.toLowerCase().includes(modelSearchQuery.toLowerCase())).length === 0 && connectionStatus === 'connected' && (
                   <div className="col-span-full py-20 text-center text-gray-400">
-                    No models installed yet. Use the "Pull" feature above to download one.
+                    {modelSearchQuery ? `No models matching "${modelSearchQuery}"` : "No models installed yet."}
                   </div>
                 )}
-                {models.map(model => {
-                  const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
-                  return (
-                    <div key={model.digest} className={cn(
-                      "bg-white p-5 rounded-3xl border transition-all group relative",
-                      isRunning ? "border-green-200 shadow-md shadow-green-50" : "border-gray-200 shadow-sm hover:shadow-md"
-                    )}>
-                      {isRunning && (
-                        <div className="absolute top-4 right-12 flex items-center gap-1.5 bg-green-100 text-green-700 px-2 py-1 rounded-full text-[10px] font-bold animate-pulse">
-                          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                          RUNNING
+                {models
+                  .filter(m => m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()))
+                  .map(model => {
+                    const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
+                    return (
+                      <div key={model.digest} className={cn(
+                        "bg-white p-5 rounded-3xl border transition-all group relative",
+                        isRunning ? "border-green-200 shadow-md shadow-green-50" : "border-gray-200 shadow-sm hover:shadow-md"
+                      )}>
+                        {isRunning && (
+                          <div className="absolute top-4 right-12 flex items-center gap-1.5 bg-green-100 text-green-700 px-2 py-1 rounded-full text-[10px] font-bold animate-pulse">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            RUNNING
+                          </div>
+                        )}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center",
+                            isRunning ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-600"
+                          )}>
+                            <Cpu size={20} />
+                          </div>
+                          <button 
+                            onClick={() => deleteModel(model.name)}
+                            className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </div>
-                      )}
-                      <div className="flex items-start justify-between mb-4">
-                        <div className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center",
-                          isRunning ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-600"
-                        )}>
-                          <Cpu size={20} />
+                        <h3 className="font-bold text-gray-800 mb-1 truncate pr-16" title={model.name}>{model.name}</h3>
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
+                            {model.details.parameter_size || 'Unknown'}
+                          </span>
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
+                            {model.details.quantization_level || 'Unknown'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-400 pt-4 border-t border-gray-50">
+                          <span>{formatSize(model.size)}</span>
+                          <span>{new Date(model.modified_at).toLocaleDateString()}</span>
                         </div>
                         <button 
-                          onClick={() => deleteModel(model.name)}
-                          className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
+                          onClick={() => {
+                            setSelectedModel(model.name);
+                            setCurrentView('chat');
+                            if (!activeChatId) createNewChat();
+                          }}
+                          className="w-full mt-4 py-2 bg-gray-50 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-blue-100"
                         >
-                          <Trash2 size={16} />
+                          Select for Chat
                         </button>
                       </div>
-                      <h3 className="font-bold text-gray-800 mb-1 truncate pr-16" title={model.name}>{model.name}</h3>
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
-                          {model.details.parameter_size || 'Unknown'}
-                        </span>
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
-                          {model.details.quantization_level || 'Unknown'}
-                        </span>
+                    );
+                  })}
+              </div>
+            </div>
+          ) : (
+            /* Pull New Model Area */
+            <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
+              <div className="bg-white p-8 rounded-3xl border border-gray-200 shadow-sm space-y-6">
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold text-gray-800">Pull New Model</h2>
+                  <p className="text-gray-500">Enter a model name from the Ollama library to download it to your machine.</p>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Download className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                    <input 
+                      type="text" 
+                      value={newModelName}
+                      onChange={(e) => setNewModelName(e.target.value)}
+                      placeholder="e.g. llama3.2, mistral, codellama..."
+                      className="w-full bg-gray-50 border border-gray-200 rounded-2xl pl-12 pr-4 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                  <button 
+                    onClick={pullModel}
+                    disabled={!newModelName.trim() || !!pullingModel}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white px-8 py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200 disabled:shadow-none"
+                  >
+                    {pullingModel ? <RefreshCw size={20} className="animate-spin" /> : <Plus size={20} />}
+                    {pullingModel ? 'Pulling...' : 'Pull Model'}
+                  </button>
+                </div>
+
+                {pullingModel && (
+                  <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+                          <RefreshCw size={20} className="animate-spin" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-blue-900">Downloading {pullingModel.name}</p>
+                          <p className="text-xs text-blue-700">{pullingModel.status}</p>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-xs text-gray-400 pt-4 border-t border-gray-50">
-                        <span>{formatSize(model.size)}</span>
-                        <span>{new Date(model.modified_at).toLocaleDateString()}</span>
+                      <div className="flex items-center gap-4">
+                        <button 
+                          onClick={cancelPull}
+                          className="px-3 py-1.5 bg-white hover:bg-red-50 text-red-600 border border-red-100 rounded-lg transition-colors text-xs font-bold flex items-center gap-1.5"
+                        >
+                          <X size={14} />
+                          CANCEL
+                        </button>
+                        <span className="text-xl font-mono font-bold text-blue-600">{pullingModel.progress.toFixed(1)}%</span>
                       </div>
-                      <button 
-                        onClick={() => {
-                          setSelectedModel(model.name);
-                          setCurrentView('chat');
-                          if (!activeChatId) createNewChat();
-                        }}
-                        className="w-full mt-4 py-2 bg-gray-50 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-blue-100"
-                      >
-                        Select for Chat
-                      </button>
                     </div>
-                  );
-                })}
+                    <div className="w-full h-3 bg-blue-100 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pullingModel.progress}%` }}
+                        className="h-full bg-blue-600"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex items-center justify-between px-2">
+                  <h3 className="text-lg font-bold text-gray-800">Popular Models</h3>
+                  <a 
+                    href="https://ollama.com/library" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    Browse Library <ExternalLink size={14} />
+                  </a>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {popularModels.map(model => (
+                    <button
+                      key={model.name}
+                      onClick={() => setNewModelName(model.name)}
+                      className="bg-white p-5 rounded-3xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all text-left group"
+                    >
+                      <div className="w-10 h-10 bg-gray-50 group-hover:bg-blue-50 rounded-xl flex items-center justify-center text-gray-400 group-hover:text-blue-500 transition-colors mb-4">
+                        <Cpu size={20} />
+                      </div>
+                      <h4 className="font-bold text-gray-800 mb-1">{model.name}</h4>
+                      <p className="text-xs text-gray-500 leading-relaxed">{model.description}</p>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           )}
