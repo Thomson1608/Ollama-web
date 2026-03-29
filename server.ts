@@ -425,6 +425,7 @@ async function startServer() {
       if (!reader) throw new Error('No reader available');
 
       let assistantContent = '';
+      let lastProcessedToolCallIndex = 0;
       
       // Emit start event via Socket.io
       io.emit('chat:start', {
@@ -451,6 +452,31 @@ async function startServer() {
               
               // Emit chunk via Socket.io
               io.emit('chat:chunk', { chatId, chunk: contentChunk });
+              
+              // Check for new complete tool calls
+              const toolCallEndTag = '</tool_call>';
+              let toolCallEndIndex = assistantContent.indexOf(toolCallEndTag, lastProcessedToolCallIndex);
+              
+              while (toolCallEndIndex !== -1) {
+                const toolCallEnd = toolCallEndIndex + toolCallEndTag.length;
+                const newContent = assistantContent.substring(lastProcessedToolCallIndex, toolCallEnd);
+                
+                // Extract tool calls from newContent
+                const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+                let match;
+                while ((match = toolCallRegex.exec(newContent)) !== null) {
+                  try {
+                    const call = JSON.parse(match[1]);
+                    // Execute tool call asynchronously
+                    executeToolCall(chatId, call);
+                  } catch (e) {
+                    logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
+                  }
+                }
+                
+                lastProcessedToolCallIndex = toolCallEnd;
+                toolCallEndIndex = assistantContent.indexOf(toolCallEndTag, lastProcessedToolCallIndex);
+              }
             }
           } catch (e) {
             // Ignore parse errors for partial lines
@@ -468,8 +494,8 @@ async function startServer() {
       res.end();
       await updateStats('success');
 
-      // --- Post-chat logic: Tool calls and Memory extraction ---
-      processPostChatLogic(chatId, assistantContent, model, messages);
+      // --- Post-chat logic: Memory extraction ---
+      extractMemory(chatId, model, messages);
       
     } catch (error) {
       logger.error('Ollama Chat Error:', error);
@@ -544,77 +570,57 @@ async function startServer() {
 
   // --- End Ollama Proxy Endpoints ---
 
-  async function processPostChatLogic(chatId: string, content: string, model: string, messages: any[]) {
-    logger.debug(`Post-chat logic: Processing tools and memory for chat: ${chatId}`);
-    logger.debug(`Post-chat logic: Content length: ${content.length}`);
-    
-    // 1. Tool Calls
-    const toolCallRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
-    let match;
-    const toolCalls = [];
-
-    while ((match = toolCallRegex.exec(content)) !== null) {
-      try {
-        const call = JSON.parse(match[1]);
-        toolCalls.push(call);
-      } catch (e) {
-        logger.error(`Post-chat logic Error: Failed to parse tool call in ${chatId}`, e);
-      }
-    }
-
-    if (toolCalls.length > 0) {
-      logger.release(`Post-chat logic: Executing ${toolCalls.length} tool calls for ${chatId}`);
-      for (const call of toolCalls) {
-        try {
-          logger.debug(`Post-chat logic: Executing tool ${call.tool}`, call.args);
-          switch (call.tool) {
-            case 'list_files':
-              const allFiles = await getAllFiles(WORKSPACE_DIR);
-              io.emit('tool:result', { chatId, tool: 'list_files', result: allFiles.map(f => f.name) });
-              logger.debug(`Post-chat logic: Tool list_files success: ${allFiles.length} files`);
-              break;
-            case 'read_file':
-              if (call.args.name) {
-                const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
-                const filePath = path.join(WORKSPACE_DIR, safeName);
-                const fileContent = await fs.readFile(filePath, 'utf-8');
-                io.emit('tool:result', { chatId, tool: 'read_file', result: fileContent });
-                logger.debug(`Post-chat logic: Tool read_file success: ${safeName}`);
-              }
-              break;
-            case 'write_file':
-              if (call.args.name && call.args.content !== undefined) {
-                const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
-                const filePath = path.join(WORKSPACE_DIR, safeName);
-                const dirPath = path.dirname(filePath);
-                
-                // Ensure directory exists
-                await fs.mkdir(dirPath, { recursive: true });
-                
-                await fs.writeFile(filePath, call.args.content, 'utf-8');
-                io.emit('workspace:updated');
-                io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${safeName}` });
-                logger.debug(`Post-chat logic: Tool write_file success: ${safeName}`);
-              }
-              break;
-            case 'delete_file':
-              if (call.args.name) {
-                const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
-                const filePath = path.join(WORKSPACE_DIR, safeName);
-                await fs.unlink(filePath);
-                io.emit('workspace:updated');
-                io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${safeName}` });
-                logger.debug(`Post-chat logic: Tool delete_file success: ${safeName}`);
-              }
-              break;
+  async function executeToolCall(chatId: string, call: any) {
+    try {
+      logger.debug(`Executing tool ${call.tool}`, call.args);
+      switch (call.tool) {
+        case 'list_files':
+          const allFiles = await getAllFiles(WORKSPACE_DIR);
+          io.emit('tool:result', { chatId, tool: 'list_files', result: allFiles.map(f => f.name) });
+          logger.debug(`Tool list_files success: ${allFiles.length} files`);
+          break;
+        case 'read_file':
+          if (call.args.name) {
+            const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
+            const filePath = path.join(WORKSPACE_DIR, safeName);
+            const fileContent = await fs.readFile(filePath, 'utf-8');
+            io.emit('tool:result', { chatId, tool: 'read_file', result: fileContent });
+            logger.debug(`Tool read_file success: ${safeName}`);
           }
-        } catch (error) {
-          logger.error(`Post-chat logic Error: Tool execution failed (${call.tool}) for ${chatId}`, error);
-        }
+          break;
+        case 'write_file':
+          if (call.args.name && call.args.content !== undefined) {
+            const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
+            const filePath = path.join(WORKSPACE_DIR, safeName);
+            const dirPath = path.dirname(filePath);
+            
+            // Ensure directory exists
+            await fs.mkdir(dirPath, { recursive: true });
+            
+            await fs.writeFile(filePath, call.args.content, 'utf-8');
+            io.emit('workspace:updated');
+            io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${safeName}` });
+            logger.debug(`Tool write_file success: ${safeName}`);
+          }
+          break;
+        case 'delete_file':
+          if (call.args.name) {
+            const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
+            const filePath = path.join(WORKSPACE_DIR, safeName);
+            await fs.unlink(filePath);
+            io.emit('workspace:updated');
+            io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${safeName}` });
+            logger.debug(`Tool delete_file success: ${safeName}`);
+          }
+          break;
       }
+    } catch (error) {
+      logger.error(`Tool execution failed (${call.tool}) for ${chatId}`, error);
     }
+  }
 
-    // 2. Memory Extraction
+  async function extractMemory(chatId: string, model: string, messages: any[]) {
+    // Memory Extraction
     if (chatId !== 'memory-extraction') {
       try {
         logger.debug(`Post-chat logic: Starting memory extraction for ${chatId}`);
