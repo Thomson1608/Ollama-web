@@ -466,6 +466,18 @@ async function startServer() {
         try {
           logger.debug(`Post-chat logic: Executing tool ${call.tool}`, call.args);
           switch (call.tool) {
+            case 'list_files':
+              const files = await fs.readdir(WORKSPACE_DIR);
+              io.emit('tool:result', { chatId, tool: 'list_files', result: files });
+              logger.debug(`Post-chat logic: Tool list_files success: ${files.length} files`);
+              break;
+            case 'read_file':
+              if (call.args.name) {
+                const fileContent = await fs.readFile(path.join(WORKSPACE_DIR, call.args.name), 'utf-8');
+                io.emit('tool:result', { chatId, tool: 'read_file', result: fileContent });
+                logger.debug(`Post-chat logic: Tool read_file success: ${call.args.name}`);
+              }
+              break;
             case 'write_file':
               if (call.args.name && call.args.content !== undefined) {
                 await fs.writeFile(path.join(WORKSPACE_DIR, call.args.name), call.args.content, 'utf-8');

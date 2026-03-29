@@ -14,6 +14,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   const fetchFiles = async () => {
     setIsLoading(true);
     try {
@@ -35,6 +38,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
 
   const readFile = async (name: string) => {
     setSelectedFile(name);
+    setIsEditing(false);
     try {
       const res = await fetch(`/api/workspace/read?name=${encodeURIComponent(name)}`);
       if (res.ok) {
@@ -43,6 +47,36 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
       }
     } catch (error) {
       toast.error('Failed to read file');
+    }
+  };
+
+  const saveFile = async () => {
+    if (!selectedFile) return;
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/workspace/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: selectedFile, content: fileContent })
+      });
+      if (res.ok) {
+        toast.success('File saved');
+        setIsEditing(false);
+        fetchFiles();
+      }
+    } catch (error) {
+      toast.error('Failed to save file');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const createNewFile = () => {
+    const name = prompt('Enter file name:');
+    if (name) {
+      setSelectedFile(name);
+      setFileContent('');
+      setIsEditing(true);
     }
   };
 
@@ -74,13 +108,22 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
             <Folder size={16} className="text-blue-500" />
             Workspace
           </h2>
-          <button 
-            onClick={fetchFiles}
-            className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-400"
-            title="Refresh"
-          >
-            <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button 
+              onClick={createNewFile}
+              className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-400"
+              title="New File"
+            >
+              <Plus size={14} />
+            </button>
+            <button 
+              onClick={fetchFiles}
+              className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-400"
+              title="Refresh"
+            >
+              <RefreshCw size={14} className={isLoading ? "animate-spin" : ""} />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {files.length === 0 ? (
@@ -122,13 +165,41 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger }) 
                 <FileText size={16} className="text-blue-500" />
                 <span className="text-sm font-medium text-gray-700">{selectedFile}</span>
               </div>
+              <div className="flex items-center gap-2">
+                {isEditing ? (
+                  <>
+                    <button 
+                      onClick={() => setIsEditing(false)}
+                      className="text-xs text-gray-500 hover:text-gray-700 font-medium px-3 py-1 rounded-lg border border-gray-200 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={saveFile}
+                      disabled={isSaving}
+                      className="text-xs bg-blue-600 text-white hover:bg-blue-700 font-medium px-3 py-1 rounded-lg shadow-sm disabled:opacity-50"
+                    >
+                      {isSaving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    onClick={() => setIsEditing(true)}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium px-3 py-1 rounded-lg border border-blue-100 hover:bg-blue-50"
+                  >
+                    Edit File
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex-1 p-6 overflow-hidden">
               <div className="h-full bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                 <textarea 
                   value={fileContent}
-                  readOnly
-                  className="flex-1 p-6 font-mono text-sm text-gray-800 focus:outline-none resize-none bg-transparent"
+                  onChange={(e) => setFileContent(e.target.value)}
+                  readOnly={!isEditing}
+                  className={`flex-1 p-6 font-mono text-sm text-gray-800 focus:outline-none resize-none bg-transparent ${isEditing ? 'cursor-text' : 'cursor-default'}`}
+                  placeholder="Start typing..."
                 />
               </div>
             </div>

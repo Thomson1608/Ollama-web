@@ -17,7 +17,23 @@ import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, M
 
 export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
-  const [systemPrompt, setSystemPrompt] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState(`You are a world-class software engineer.
+You have access to a workspace where you can read, write, and list files.
+Use the following tools to assist the user with coding tasks:
+
+1. list_files: List all files in the workspace.
+   Usage: <tool_call>{"tool": "list_files", "args": {}}</tool_call>
+
+2. read_file: Read the content of a specific file.
+   Usage: <tool_call>{"tool": "read_file", "args": {"name": "filename.txt"}}</tool_call>
+
+3. write_file: Write content to a file (creates or overwrites).
+   Usage: <tool_call>{"tool": "write_file", "args": {"name": "filename.txt", "content": "file content here"}}</tool_call>
+
+4. delete_file: Delete a file from the workspace.
+   Usage: <tool_call>{"tool": "delete_file", "args": {"name": "filename.txt"}}</tool_call>
+
+When you write code, always explain what you are doing. If you create or modify files, they will appear in the workspace on the right side of the screen.`);
   const [memory, setMemory] = useState<Memory>({ facts: [] });
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -632,24 +648,6 @@ export default function App() {
     chatAbortController.current = new AbortController();
 
     try {
-      const toolInstructions = `
-You have access to a workspace file system. You can perform the following actions by including a JSON block in your response using the format:
-<tool_call>
-{
-  "tool": "write_file",
-  "args": { "name": "filename.txt", "content": "file content" }
-}
-</tool_call>
-
-Available tools:
-- write_file: Create or overwrite a file. Args: { "name": string, "content": string }
-- read_file: Read a file's content. Args: { "name": string }
-- list_files: List all files in the workspace. Args: {}
-- delete_file: Delete a file. Args: { "name": string }
-
-When you want to create code or save information, use the write_file tool.
-`;
-
       const response = await fetch('/api/ollama/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -659,7 +657,7 @@ When you want to create code or save information, use the write_file tool.
           messages: [
             { 
               role: 'system', 
-              content: `${systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}\n\n${toolInstructions}` 
+              content: `${systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}` 
             },
             ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: messageContent }
@@ -748,20 +746,27 @@ When you want to create code or save information, use the write_file tool.
           isBusy={isLoading || isAiTypingGlobally}
         />
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-hidden">
           {currentView === 'chat' && (
-            <ChatView 
-              activeChatId={activeChatId}
-              activeChat={activeChat}
-              isLoading={isLoading || isAiTypingGlobally}
-              isAiTypingGlobally={isAiTypingGlobally && !isLoading}
-              input={input}
-              setInput={setInput}
-              handleSendMessage={handleSendMessage}
-              createNewChat={createNewChat}
-              connectionStatus={connectionStatus}
-              messagesEndRef={messagesEndRef}
-            />
+            <div className="flex h-full overflow-hidden">
+              <div className="flex-1 border-r border-gray-200">
+                <ChatView 
+                  activeChatId={activeChatId}
+                  activeChat={activeChat}
+                  isLoading={isLoading || isAiTypingGlobally}
+                  isAiTypingGlobally={isAiTypingGlobally && !isLoading}
+                  input={input}
+                  setInput={setInput}
+                  handleSendMessage={handleSendMessage}
+                  createNewChat={createNewChat}
+                  connectionStatus={connectionStatus}
+                  messagesEndRef={messagesEndRef}
+                />
+              </div>
+              <div className="w-[40%] hidden lg:block">
+                <WorkspaceView refreshTrigger={workspaceRefreshTrigger} />
+              </div>
+            </div>
           )}
           
           {currentView === 'models' && (
