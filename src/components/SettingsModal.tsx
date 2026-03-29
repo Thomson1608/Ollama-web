@@ -6,10 +6,12 @@ import {
   Terminal, 
   CheckCircle2, 
   AlertCircle,
-  UserCircle
+  UserCircle,
+  Brain,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ConnectionStatus } from '../types';
+import { ConnectionStatus, Memory } from '../types';
 
 interface SettingsModalProps {
   showSettings: boolean;
@@ -18,6 +20,8 @@ interface SettingsModalProps {
   setOllamaUrl: (url: string) => void;
   systemPrompt: string;
   setSystemPrompt: (prompt: string) => void;
+  memory: Memory;
+  clearMemory: () => void;
   saveSettings: () => void;
   connectionStatus: ConnectionStatus;
 }
@@ -29,6 +33,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   setOllamaUrl,
   systemPrompt,
   setSystemPrompt,
+  memory,
+  clearMemory,
   saveSettings,
   connectionStatus
 }) => {
@@ -105,6 +111,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
                 <p className="text-[10px] text-gray-400 leading-relaxed">
                   This information will be sent to the AI model with every message to help it understand your context and preferences.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <Brain size={16} className="text-blue-500" />
+                    Long-term Memory (Extracted Facts)
+                  </label>
+                  {memory.facts.length > 0 && (
+                    <button 
+                      onClick={clearMemory}
+                      className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
+                    >
+                      <Trash2 size={10} />
+                      CLEAR MEMORY
+                    </button>
+                  )}
+                </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 max-h-40 overflow-y-auto">
+                  {memory.facts.length > 0 ? (
+                    <ul className="space-y-2">
+                      {memory.facts.map((fact, i) => (
+                        <li key={i} className="text-xs text-gray-600 flex gap-2">
+                          <span className="text-blue-400">•</span>
+                          {fact}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">No facts extracted yet. Chat with the AI to build memory.</p>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-400 leading-relaxed">
+                  The AI automatically extracts facts about you from conversations to provide more personalized responses in the future.
                 </p>
               </div>
 

@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 const DATA_DIR = '/tmp/ollama-data';
 const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
+const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 
 async function ensureDataDir() {
   try {
@@ -28,6 +29,12 @@ async function ensureDataDir() {
     await fs.access(CONFIG_FILE);
   } catch {
     await fs.writeFile(CONFIG_FILE, JSON.stringify({ systemPrompt: '' }, null, 2));
+  }
+
+  try {
+    await fs.access(MEMORY_FILE);
+  } catch {
+    await fs.writeFile(MEMORY_FILE, JSON.stringify({ facts: [] }, null, 2));
   }
 }
 
@@ -78,6 +85,27 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save config' });
+    }
+  });
+
+  // API: Get memory
+  app.get('/api/memory', async (req, res) => {
+    try {
+      const data = await fs.readFile(MEMORY_FILE, 'utf-8');
+      res.json(JSON.parse(data));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to read memory' });
+    }
+  });
+
+  // API: Save memory
+  app.post('/api/memory', async (req, res) => {
+    try {
+      const memory = req.body;
+      await fs.writeFile(MEMORY_FILE, JSON.stringify(memory, null, 2));
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save memory' });
     }
   });
 

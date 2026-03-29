@@ -11,11 +11,12 @@ import { ChatView } from './components/ChatView';
 import { ModelsView } from './components/ModelsView';
 import { PullView } from './components/PullView';
 import { SettingsModal } from './components/SettingsModal';
-import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus } from './types';
+import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory } from './types';
 
 export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [memory, setMemory] = useState<Memory>({ facts: [] });
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>('chat');
@@ -76,6 +77,13 @@ export default function App() {
         if (configRes.ok) {
           const data = await configRes.json();
           if (data.systemPrompt) setSystemPrompt(data.systemPrompt);
+        }
+
+        // Fetch memory
+        const memoryRes = await fetch('/api/memory');
+        if (memoryRes.ok) {
+          const data = await memoryRes.json();
+          setMemory(data);
         }
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
@@ -409,7 +417,10 @@ export default function App() {
         body: JSON.stringify({
           model: selectedModel,
           messages: [
-            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+            ...(systemPrompt || memory.facts.length > 0 ? [{ 
+              role: 'system', 
+              content: `${systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}` 
+            }] : []),
             ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: input }
           ],
@@ -464,11 +475,94 @@ export default function App() {
           }
         }
       }
+      
+      // Extract memory after assistant finishes
+      extractMemory(currentChatId);
+      
     } catch (error) {
       toast.error('Error: Could not connect to Ollama. Make sure it is running and OLLAMA_ORIGINS is set.');
       console.error(error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const extractMemory = async (chatId: string) => {
+    // We need to get the latest state of chats
+    setChats(prevChats => {
+      const chat = prevChats.find(c => c.id === chatId);
+      if (!chat || chat.messages.length < 2) return prevChats;
+
+      // Run extraction in background
+      (async () => {
+        const recentMessages = chat.messages.slice(-4);
+        const context = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
+
+        try {
+          const response = await fetch(`${ollamaUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: selectedModel,
+              messages: [
+                { 
+                  role: 'system', 
+                  content: `You are a memory extraction module. Your task is to extract personal facts, preferences, or important information about the user from the conversation. 
+                  Current Memory: ${memory.facts.join(', ')}
+                  
+                  Output ONLY a JSON array of strings representing NEW facts found in this snippet. 
+                  If no new facts are found, output []. 
+                  Do NOT repeat facts already in memory.
+                  Example output: ["User likes spicy food", "User is a software engineer"]` 
+                },
+                { role: 'user', content: `Extract facts from this conversation:\n${context}` }
+              ],
+              stream: false,
+            }),
+          });
+
+          if (response.ok) {
+            const json = await response.json();
+            const content = json.message?.content || '[]';
+            try {
+              const match = content.match(/\[.*\]/s);
+              if (match) {
+                const newFacts = JSON.parse(match[0]);
+                if (Array.isArray(newFacts) && newFacts.length > 0) {
+                  setMemory(prevMemory => {
+                    const updatedMemory = { facts: [...new Set([...prevMemory.facts, ...newFacts])] };
+                    fetch('/api/memory', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(updatedMemory),
+                    });
+                    return updatedMemory;
+                  });
+                }
+              }
+            } catch (e) {
+              console.error('Failed to parse memory extraction result', e);
+            }
+          }
+        } catch (error) {
+          console.error('Memory extraction failed', error);
+        }
+      })();
+
+      return prevChats;
+    });
+  };
+
+  const clearMemory = () => {
+    if (confirm('Are you sure you want to clear all extracted facts? This will reset the AI\'s long-term memory of you.')) {
+      const emptyMemory = { facts: [] };
+      setMemory(emptyMemory);
+      fetch('/api/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emptyMemory),
+      });
+      toast.success('Memory cleared');
     }
   };
 
@@ -568,6 +662,8 @@ export default function App() {
         setOllamaUrl={setOllamaUrl}
         systemPrompt={systemPrompt}
         setSystemPrompt={setSystemPrompt}
+        memory={memory}
+        clearMemory={clearMemory}
         saveSettings={saveSettings}
         connectionStatus={connectionStatus}
       />

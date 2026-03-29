@@ -43,3 +43,7 @@ export interface RunningModel {
 
 export type ViewType = 'chat' | 'models' | 'pull';
 export type ConnectionStatus = 'connected' | 'disconnected' | 'checking';
+
+export interface Memory {
+  facts: string[];
+}
