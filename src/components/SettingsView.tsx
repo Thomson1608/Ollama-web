@@ -20,6 +20,7 @@ interface SettingsViewProps {
   clearMemory: () => void;
   saveSettings: () => void;
   connectionStatus: ConnectionStatus;
+  claudeUsage: { used: number; total: number };
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -28,7 +29,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   memory,
   clearMemory,
   saveSettings,
-  connectionStatus
+  connectionStatus,
+  claudeUsage
 }) => {
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const hasChanges = localPrompt !== systemPrompt;
@@ -183,6 +185,61 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     ) : (
                       <p className="text-xs text-gray-400 italic">No facts extracted yet.</p>
                     )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Cloud Services Section */}
+              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <Globe size={16} className="text-purple-500" />
+                    Cloud AI Services
+                  </label>
+                  <div className="flex items-center gap-1.5 bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full text-[10px] font-bold border border-purple-100">
+                    ACTIVE
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="p-4 bg-purple-50/50 rounded-2xl border border-purple-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2 text-purple-900 font-bold text-sm">
+                        <div className="w-6 h-6 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600">
+                          <Brain size={14} />
+                        </div>
+                        Anthropic Claude
+                      </div>
+                      <span className="text-[10px] font-bold text-purple-600">API CONNECTED</span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-bold text-purple-700 uppercase tracking-wider">
+                        <span>Token Usage</span>
+                        <span>{Math.round((claudeUsage.used / claudeUsage.total) * 100)}%</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-purple-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-purple-500 transition-all duration-500"
+                          style={{ width: `${(claudeUsage.used / claudeUsage.total) * 100}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-purple-500">
+                        <span>{claudeUsage.used.toLocaleString()} used</span>
+                        <span>{claudeUsage.total.toLocaleString()} total</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div className="flex items-center gap-2 text-gray-700 font-bold text-sm mb-2">
+                      <Settings size={14} />
+                      Cloud vs Local
+                    </div>
+                    <p className="text-[11px] text-gray-500 leading-relaxed">
+                      Local models run on your hardware via Ollama. Cloud models (Claude) run on Anthropic's servers and require an API key. 
+                      Cloud models generally offer higher intelligence but consume API tokens.
+                    </p>
                   </div>
                 </div>
               </div>

@@ -827,6 +827,9 @@ When you write code, briefly explain your plan in the chat, then immediately use
                 activeChatId={activeChatId}
                 createNewChat={createNewChat}
                 formatSize={formatSize}
+                modelFilter={modelFilter}
+                setModelFilter={setModelFilter}
+                popularModels={popularModels}
               />
             </div>
           )}
@@ -862,6 +865,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
               clearMemory={clearMemory}
               saveSettings={saveSettings}
               connectionStatus={connectionStatus}
+              claudeUsage={claudeUsage}
             />
           )}
         </div>
