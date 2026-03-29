@@ -116,6 +116,10 @@ export default function App() {
     socket.on('chat:start', ({ chatId, userMessage, assistantMessage, model }) => {
       console.log('Socket.io: chat:start event received for chat:', chatId);
       
+      // Sync typing status globally
+      setIsAiTypingGlobally(true);
+      localStorage.setItem('ollama_is_loading', 'true');
+
       setChats(prev => {
         const chat = prev.find(c => c.id === chatId);
         if (chat) {
@@ -588,6 +592,8 @@ export default function App() {
     }
     
     setIsLoading(true);
+    localStorage.setItem('ollama_is_loading', 'true');
+    setIsAiTypingGlobally(true);
 
     // Create new abort controller for this chat
     chatAbortController.current = new AbortController();
@@ -706,6 +712,7 @@ When you want to create code or save information, use the write_file tool.
           connectionStatus={connectionStatus}
           checkConnection={checkConnection}
           setShowSettings={() => setCurrentView('settings')}
+          isBusy={isLoading || isAiTypingGlobally}
         />
 
         <div className="flex-1 overflow-y-auto">

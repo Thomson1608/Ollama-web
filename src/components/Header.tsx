@@ -18,6 +18,7 @@ interface HeaderProps {
   connectionStatus: ConnectionStatus;
   checkConnection: () => void;
   setShowSettings: (show: boolean) => void;
+  isBusy: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,7 +31,8 @@ export const Header: React.FC<HeaderProps> = ({
   runningModels,
   connectionStatus,
   checkConnection,
-  setShowSettings
+  setShowSettings,
+  isBusy
 }) => {
   return (
     <header className="h-16 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-10">
@@ -48,7 +50,8 @@ export const Header: React.FC<HeaderProps> = ({
             <select 
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className="bg-transparent text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer"
+              disabled={isBusy}
+              className={`bg-transparent text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {models.length === 0 ? (
                 <option value="">No models found</option>
