@@ -24,6 +24,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState<ViewType>('chat');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isAiTypingGlobally, setIsAiTypingGlobally] = useState(false);
   const [pullingModel, setPullingModel] = useState<{ name: string; progress: number; status: string } | null>(null);
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
   const [models, setModels] = useState<OllamaModel[]>([]);
@@ -65,20 +66,51 @@ export default function App() {
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
+  // Sync isLoading across tabs using localStorage (very reliable)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'ollama_is_loading') {
+        const loading = e.newValue === 'true';
+        setIsAiTypingGlobally(loading);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    // Initial check
+    setIsAiTypingGlobally(localStorage.getItem('ollama_is_loading') === 'true');
+
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  // Update localStorage when local isLoading changes
+  useEffect(() => {
+    localStorage.setItem('ollama_is_loading', isLoading.toString());
+    // Also update local global state for consistency
+    setIsAiTypingGlobally(isLoading);
+
+    // Reset on tab close to avoid stuck state
+    const handleBeforeUnload = () => {
+      if (isLoading) {
+        localStorage.setItem('ollama_is_loading', 'false');
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isLoading]);
+
   // Socket.io initialization
   useEffect(() => {
     console.log('Socket.io: Initializing client...');
+    // Use explicit path if needed, but usually default works
     const socket = io({
-      transports: ['websocket', 'polling'], // Try both
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5
     });
     socketRef.current = socket;
 
     socket.on('connect', () => {
       console.log('Socket.io: Connected to server with ID:', socket.id);
-    });
-
-    socket.on('connect_error', (error) => {
-      console.error('Socket.io: Connection error:', error);
     });
 
     socket.on('chat:start', ({ chatId, userMessage, assistantMessage, model }) => {
@@ -102,7 +134,9 @@ export default function App() {
           return [newChat, ...prev];
         }
       });
-      setIsLoading(true);
+      // We don't set local isLoading here because we use isAiTypingGlobally via storage/sockets
+      // But we should ensure the UI knows AI is busy
+      setIsAiTypingGlobally(true);
     });
 
     socket.on('chat:chunk', ({ chatId, chunk }) => {
@@ -122,7 +156,7 @@ export default function App() {
 
     socket.on('chat:end', ({ chatId, finalContent }) => {
       console.log('Socket.io: chat:end event received for chat:', chatId);
-      setIsLoading(false);
+      setIsAiTypingGlobally(false);
       // Sync final content just in case
       if (finalContent) {
         setChats(prev => prev.map(c => 
@@ -500,7 +534,7 @@ export default function App() {
     e?.preventDefault();
     
     const messageContent = isRetry ? lastUserMessageRef.current : input.trim();
-    if (!messageContent || (isLoading && !isRetry) || !selectedModel) return;
+    if (!messageContent || ((isLoading || isAiTypingGlobally) && !isRetry) || !selectedModel) return;
 
     if (!isRetry) {
       lastUserMessageRef.current = messageContent;
@@ -850,7 +884,8 @@ When you want to create code or save information, use the write_file tool.
             <ChatView 
               activeChatId={activeChatId}
               activeChat={activeChat}
-              isLoading={isLoading}
+              isLoading={isLoading || isAiTypingGlobally}
+              isAiTypingGlobally={isAiTypingGlobally && !isLoading}
               input={input}
               setInput={setInput}
               handleSendMessage={handleSendMessage}

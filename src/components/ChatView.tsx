@@ -14,6 +14,7 @@ interface ChatViewProps {
   activeChatId: string | null;
   activeChat: Chat | undefined;
   isLoading: boolean;
+  isAiTypingGlobally?: boolean;
   input: string;
   setInput: (input: string) => void;
   handleSendMessage: (e?: React.FormEvent) => void;
@@ -26,6 +27,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   activeChatId,
   activeChat,
   isLoading,
+  isAiTypingGlobally,
   input,
   setInput,
   handleSendMessage,
@@ -105,10 +107,17 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   <Cpu size={16} />
                 </div>
                 <div className="bg-white border border-gray-200 p-4 rounded-2xl rounded-tl-none shadow-sm">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.2s]" />
-                    <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.4s]" />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-1">
+                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" />
+                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.2s]" />
+                      <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.4s]" />
+                    </div>
+                    {isAiTypingGlobally && (
+                      <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+                        AI is responding in another tab...
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -133,14 +142,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 handleSendMessage();
               }
             }}
-            placeholder={activeChatId ? "Ask anything..." : "Start a new chat first"}
-            disabled={!activeChatId || isLoading}
+            placeholder={
+              isAiTypingGlobally 
+                ? "AI is busy in another tab..." 
+                : activeChatId 
+                  ? "Ask anything..." 
+                  : "Start a new chat first"
+            }
+            disabled={!activeChatId || isLoading || isAiTypingGlobally}
             rows={1}
             className="w-full bg-white border border-gray-200 rounded-2xl p-4 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
-            disabled={!input.trim() || isLoading || !activeChatId}
+            disabled={!input.trim() || isLoading || isAiTypingGlobally || !activeChatId}
             className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl transition-all shadow-lg shadow-blue-200 disabled:shadow-none"
           >
             <Send size={18} />
