@@ -72,8 +72,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
   connectionStatus,
   messagesEndRef
 }) => {
-  const isClaude = activeChat?.model?.startsWith('claude-');
-
   const renderMessage = (content: string) => {
     const parts = content.split(/(<tool_call>.*?<\/tool_call>)/g);
     return parts.map((part, i) => {
@@ -164,7 +162,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <div className="space-y-2">
               <h2 className="text-2xl font-bold text-gray-800">AI Chat Interface</h2>
               <p className="text-gray-500">
-                Select a model from the Models tab to start. You can choose between local Ollama models or cloud-based Claude models.
+                Select a model from the Models tab to start.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-3 w-full">
@@ -205,11 +203,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
                   msg.role === 'user' 
                     ? "bg-gray-800 text-white" 
-                    : isClaude 
-                      ? "bg-purple-100 text-purple-600" 
-                      : "bg-blue-100 text-blue-600"
+                    : "bg-blue-100 text-blue-600"
                 )}>
-                  {msg.role === 'user' ? 'U' : isClaude ? <Globe size={16} /> : <Cpu size={16} />}
+                  {msg.role === 'user' ? 'U' : <Cpu size={16} />}
                 </div>
                 <div className={cn(
                   "max-w-[85%] p-4 rounded-2xl",
@@ -225,16 +221,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
             ))}
             {(isLoading || isAiTypingGlobally) && (
               <div className="flex gap-4">
-                <div className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 animate-pulse",
-                  isClaude ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"
-                )}>
-                  {isClaude ? <Globe size={16} /> : <Cpu size={16} />}
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 animate-pulse bg-blue-100 text-blue-600">
+                  <Cpu size={16} />
                 </div>
-                <div className={cn(
-                  "bg-white border p-4 rounded-2xl rounded-tl-none shadow-sm",
-                  isClaude ? "border-purple-200" : "border-gray-200"
-                )}>
+                <div className="bg-white border p-4 rounded-2xl rounded-tl-none shadow-sm border-gray-200">
                   <div className="flex flex-col gap-2">
                     <div className="flex gap-1">
                       <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" />

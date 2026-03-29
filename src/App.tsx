@@ -535,7 +535,17 @@ When you write code, briefly explain your plan in the chat, then immediately use
         signal: pullAbortController.current.signal,
       });
 
-      if (!response.ok) throw new Error('Failed to pull model');
+      if (!response.ok) {
+        const errorData = await response.text();
+        let errorMessage = 'Failed to pull model';
+        try {
+          const parsed = JSON.parse(errorData);
+          if (parsed.error) errorMessage = parsed.error;
+        } catch (e) {
+          errorMessage = errorData || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
       
       // Wait for completion (the endpoint stays open until done)
       await response.text();
@@ -544,7 +554,14 @@ When you write code, briefly explain your plan in the chat, then immediately use
       if (error.name === 'AbortError') {
         toast.info(`Pulling ${modelName} cancelled`);
       } else {
-        toast.error(`Failed to pull model ${modelName}`);
+        const message = error.message || `Failed to pull model ${modelName}`;
+        if (message.includes('usage limit')) {
+          toast.error('Ollama Cloud Limit Reached: You have reached your weekly usage limit for cloud models. Please upgrade your Ollama account or try again later.', {
+            duration: 6000
+          });
+        } else {
+          toast.error(`Error: ${message}`);
+        }
         console.error(error);
       }
     } finally {
@@ -681,18 +698,36 @@ When you write code, briefly explain your plan in the chat, then immediately use
         signal: chatAbortController.current.signal
       });
 
-      if (!response.ok) throw new Error('Failed to connect to Ollama via backend');
+      if (!response.ok) {
+        const errorData = await response.text();
+        let errorMessage = 'Failed to connect to AI service';
+        try {
+          const parsed = JSON.parse(errorData);
+          if (parsed.error) errorMessage = parsed.error;
+        } catch (e) {
+          errorMessage = errorData || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
 
       // We just wait for the request to complete. 
       // Socket.io handles all the UI updates (messages, typing status).
       await response.text();
       
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
         console.log('Chat request was aborted.');
         return;
       }
-      toast.error('Error: Failed to connect to AI service. Please check your connection and API keys.');
+      
+      const message = error.message || 'Failed to connect to AI service. Please check your connection.';
+      if (message.includes('usage limit')) {
+        toast.error('Ollama Cloud Limit Reached: You have reached your weekly usage limit for cloud models. Please switch to a local model or upgrade your Ollama account.', {
+          duration: 6000
+        });
+      } else {
+        toast.error(`Error: ${message}`);
+      }
       console.error(error);
     } finally {
       setIsLoading(false);

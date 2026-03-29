@@ -43,7 +43,6 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
 }) => {
   const localModels = models.filter(m => !m.name.includes(':cloud') && m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()));
   const cloudLocalModels = models.filter(m => m.name.includes(':cloud') && m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()));
-  const claudeModels = popularModels.filter(m => m.type === 'claude');
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">

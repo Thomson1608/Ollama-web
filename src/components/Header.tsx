@@ -62,11 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const claudeModels = [
-    'claude-3-5-sonnet-20240620',
-    'claude-3-opus-20240229',
-    'claude-3-haiku-20240307'
-  ];
+
 
   return (
     <header className="h-16 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-4 sticky top-0 z-10">
@@ -88,15 +84,10 @@ export const Header: React.FC<HeaderProps> = ({
                 disabled={isBusy}
                 className={`bg-transparent text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer max-w-[120px] md:max-w-none truncate ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                {models.length === 0 && claudeModels.length === 0 ? (
+                {models.length === 0 ? (
                   <option value="">No models found</option>
                 ) : (
                   <>
-                    <optgroup label="Claude Models (API)">
-                      {claudeModels.map(m => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </optgroup>
                     <optgroup label="Local Models (Ollama)">
                       {models.map(m => {
                         const isRunning = runningModels.some(rm => rm.name === m.name || rm.model === m.name);
