@@ -61,8 +61,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
-  const [modelFilter, setModelFilter] = useState<'local' | 'claude' | 'cloud-local'>('local');
-  const [claudeUsage, setClaudeUsage] = useState({ used: 0, total: 1000000 }); // Mock usage
+  const [modelFilter, setModelFilter] = useState<'local' | 'cloud-local'>('local');
 
   const allOllamaModels = [
     'llama3.2', 'llama3.1', 'llama3', 'llama2', 'mistral', 'mistral-nemo', 'mixtral',
@@ -241,7 +240,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
 
     socket.on('usage:updated', (newUsage: any) => {
       console.log('Socket.io: usage:updated event received');
-      setClaudeUsage(newUsage.claude);
+
     });
 
     socket.on('tool:result', ({ chatId, tool, result }) => {
@@ -366,7 +365,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
         const usageRes = await fetch('/api/usage');
         if (usageRes.ok) {
           const data = await usageRes.json();
-          setClaudeUsage(data.claude);
+
         }
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
@@ -617,45 +616,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
     return gb.toFixed(2) + ' GB';
   };
 
-  const exportData = () => {
-    const data = JSON.stringify(chats, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ollama-chats-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Chats exported successfully');
-  };
-
-  const importData = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const importedChats = JSON.parse(event.target?.result as string);
-        if (Array.isArray(importedChats)) {
-          // Merge and avoid duplicates by ID if possible, but for simplicity just append
-          setChats(prev => {
-            const existingIds = new Set(prev.map(c => c.id));
-            const uniqueImported = importedChats.filter(c => !existingIds.has(c.id));
-            return [...uniqueImported, ...prev];
-          });
-          toast.success('Chats imported successfully');
-        } else {
-          toast.error('Invalid file format');
-        }
-      } catch (err) {
-        toast.error('Error parsing file');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
   const handleSendMessage = async (e?: React.FormEvent, isRetry = false) => {
     e?.preventDefault();
     
@@ -785,8 +745,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
         createNewChat={createNewChat}
         deleteChat={deleteChat}
         clearAllChats={clearAllChats}
-        exportData={exportData}
-        importData={importData}
         isSyncing={isSyncing}
       />
 
@@ -803,7 +761,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
           checkConnection={checkConnection}
           setShowSettings={() => setCurrentView('settings')}
           isBusy={isLoading || isAiTypingGlobally}
-          claudeUsage={claudeUsage}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -864,7 +821,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
                 popularModels={popularModels}
                 modelFilter={modelFilter}
                 setModelFilter={setModelFilter}
-                claudeUsage={claudeUsage}
               />
             </div>
           )}
@@ -881,7 +837,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
               clearMemory={clearMemory}
               saveSettings={saveSettings}
               connectionStatus={connectionStatus}
-              claudeUsage={claudeUsage}
             />
           )}
 

@@ -19,7 +19,6 @@ interface HeaderProps {
   checkConnection: () => void;
   setShowSettings: (show: boolean) => void;
   isBusy: boolean;
-  claudeUsage: { used: number; total: number };
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,8 +32,7 @@ export const Header: React.FC<HeaderProps> = ({
   connectionStatus,
   checkConnection,
   setShowSettings,
-  isBusy,
-  claudeUsage
+  isBusy
 }) => {
   const [now, setNow] = React.useState(new Date());
 
@@ -44,7 +42,6 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const runningModel = runningModels.find(rm => rm.name === selectedModel || rm.model === selectedModel);
-  const isClaude = selectedModel.startsWith('claude-');
 
   const formatExpiresAt = (expiresAt: string) => {
     if (!expiresAt) return '';
@@ -115,29 +112,12 @@ export const Header: React.FC<HeaderProps> = ({
               </select>
             </div>
 
-            {runningModel && !isClaude && (
+            {runningModel && (
               <div className="flex flex-col border-l border-gray-100 pl-4 shrink-0">
                 <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Until Expiry</span>
                 <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
                   {formatExpiresAt(runningModel.expires_at)}
                 </span>
-              </div>
-            )}
-
-            {isClaude && (
-              <div className="flex flex-col border-l border-gray-100 pl-4 shrink-0 hidden sm:flex">
-                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Claude Usage</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
-                    {Math.round((claudeUsage.used / claudeUsage.total) * 100)}%
-                  </span>
-                  <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-purple-500 transition-all duration-500" 
-                      style={{ width: `${(claudeUsage.used / claudeUsage.total) * 100}%` }}
-                    />
-                  </div>
-                </div>
               </div>
             )}
           </div>

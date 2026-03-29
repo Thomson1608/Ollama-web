@@ -8,8 +8,6 @@ import {
   RefreshCw,
   Settings,
   Download,
-  FileDown,
-  FileUp,
   Folder,
   BarChart
 } from 'lucide-react';
@@ -30,8 +28,6 @@ interface SidebarProps {
   createNewChat: () => void;
   deleteChat: (id: string, e: React.MouseEvent) => void;
   clearAllChats: () => void;
-  exportData: () => void;
-  importData: (e: React.ChangeEvent<HTMLInputElement>) => void;
   isSyncing?: boolean;
 }
 
@@ -48,12 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   createNewChat,
   deleteChat,
   clearAllChats,
-  exportData,
-  importData,
   isSyncing
 }) => {
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
   return (
     <>
       {/* Mobile Backdrop */}
@@ -230,31 +222,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Settings size={16} />
           <span>Settings</span>
         </button>
-        <div className="grid grid-cols-2 gap-2">
-          <button 
-            onClick={exportData}
-            className="flex items-center justify-center gap-2 p-2 hover:bg-gray-100 rounded-lg text-xs text-gray-500 transition-colors border border-gray-100"
-            title="Export JSON"
-          >
-            <FileDown size={14} />
-            <span>Export</span>
-          </button>
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center gap-2 p-2 hover:bg-gray-100 rounded-lg text-xs text-gray-500 transition-colors border border-gray-100"
-            title="Import JSON"
-          >
-            <FileUp size={14} />
-            <span>Import</span>
-          </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={importData} 
-            accept=".json" 
-            className="hidden" 
-          />
-        </div>
         <button 
           onClick={clearAllChats}
           className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors border border-red-100"

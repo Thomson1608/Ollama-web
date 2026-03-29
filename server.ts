@@ -6,7 +6,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Anthropic from '@anthropic-ai/sdk';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,25 +25,7 @@ const RELEASE_LOG_FILE = path.join(DATA_DIR, 'release.log');
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
 
-let anthropic: Anthropic | null = null;
 
-async function getAnthropicClient() {
-  if (anthropic) return anthropic;
-  
-  let apiKey = process.env.ANTHROPIC_API_KEY;
-  try {
-    const secretsData = await fs.readFile(SECRETS_FILE, 'utf-8');
-    const secrets = JSON.parse(secretsData);
-    if (secrets.ANTHROPIC_API_KEY) {
-      apiKey = secrets.ANTHROPIC_API_KEY;
-    }
-  } catch (e) {}
-
-  if (!apiKey) return null;
-
-  anthropic = new Anthropic({ apiKey });
-  return anthropic;
-}
 
 const logger = {
   debug: (message: string, data?: any) => {
@@ -296,7 +278,6 @@ async function startServer() {
     try {
       const { ANTHROPIC_API_KEY } = req.body;
       await fs.writeFile(SECRETS_FILE, JSON.stringify({ ANTHROPIC_API_KEY }, null, 2));
-      anthropic = null; // Reset client to force re-initialization
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save secrets' });
@@ -421,76 +402,8 @@ async function startServer() {
     
     await updateStats('sent');
 
-    const isClaude = model.startsWith('claude-');
-
-    logger.release(`Proxy: Starting chat session for ${chatId} using ${model} (Type: ${isClaude ? 'Claude' : 'Ollama'})`);
+    logger.release(`Proxy: Starting chat session for ${chatId} using ${model}`);
     
-    if (isClaude) {
-      const client = await getAnthropicClient();
-      if (!client) {
-        logger.error('Claude Chat Error: Anthropic API Key is not configured.');
-        return res.status(400).json({ error: 'Anthropic API Key is not configured. Please add it in Settings.' });
-      }
-
-      try {
-        const stream = await client.messages.create({
-          model: model,
-          max_tokens: 4096,
-          messages: messages.filter((m: any) => m.role !== 'system').map((m: any) => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.content })),
-          system: messages.find((m: any) => m.role === 'system')?.content || '',
-          stream: true,
-        });
-
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-
-        let assistantContent = '';
-        
-        io.emit('chat:start', {
-          chatId,
-          model,
-          userMessage: messages[messages.length - 1],
-          assistantMessage: { role: 'assistant', content: '', timestamp: Date.now() }
-        });
-
-        for await (const chunk of stream) {
-          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-            const text = chunk.delta.text;
-            assistantContent += text;
-            io.emit('chat:chunk', { chatId, chunk: text });
-            res.write(`data: ${JSON.stringify({ message: { content: text } })}\n\n`);
-          } else if (chunk.type === 'message_delta' && chunk.usage) {
-            // Update usage
-            try {
-              const usageData = JSON.parse(await fs.readFile(USAGE_FILE, 'utf-8'));
-              usageData.claude.used += (chunk.usage.output_tokens || 0);
-              await fs.writeFile(USAGE_FILE, JSON.stringify(usageData, null, 2));
-              io.emit('usage:updated', usageData);
-            } catch (e) {}
-          } else if (chunk.type === 'message_start' && chunk.message.usage) {
-            // Initial usage
-            try {
-              const usageData = JSON.parse(await fs.readFile(USAGE_FILE, 'utf-8'));
-              usageData.claude.used += (chunk.message.usage.input_tokens || 0);
-              await fs.writeFile(USAGE_FILE, JSON.stringify(usageData, null, 2));
-              io.emit('usage:updated', usageData);
-            } catch (e) {}
-          }
-        }
-
-        io.emit('chat:end', { chatId, finalContent: assistantContent });
-        res.end();
-        await updateStats('success');
-        processPostChatLogic(chatId, assistantContent, model, messages);
-        return;
-      } catch (error) {
-        logger.error('Claude Chat Error:', error);
-        await updateStats('fail');
-        return res.status(500).json({ error: 'Failed to communicate with Claude' });
-      }
-    }
-
     // Original Ollama logic
     try {
       const response = await fetch(`${OLLAMA_URL}/api/chat`, {

@@ -20,8 +20,8 @@ interface ModelsViewProps {
   activeChatId: string | null;
   createNewChat: () => void;
   formatSize: (size: number) => string;
-  modelFilter: 'local' | 'claude' | 'cloud-local';
-  setModelFilter: (filter: 'local' | 'claude' | 'cloud-local') => void;
+  modelFilter: 'local' | 'cloud-local';
+  setModelFilter: (filter: 'local' | 'cloud-local') => void;
   popularModels: any[];
 }
 
@@ -70,17 +70,6 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
           )}
         >
           Cloud-Local Models
-        </button>
-        <button
-          onClick={() => setModelFilter('claude')}
-          className={cn(
-            "px-6 py-2 rounded-xl text-sm font-bold transition-all",
-            modelFilter === 'claude' 
-              ? "bg-white text-blue-600 shadow-sm" 
-              : "text-gray-500 hover:text-gray-700"
-          )}
-        >
-          Cloud Models (Claude)
         </button>
       </div>
 
