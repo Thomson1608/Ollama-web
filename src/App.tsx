@@ -65,10 +65,22 @@ export default function App() {
 
   // Socket.io initialization
   useEffect(() => {
-    const socket = io();
+    console.log('Socket.io: Initializing client...');
+    const socket = io({
+      transports: ['websocket', 'polling'], // Try both
+    });
     socketRef.current = socket;
 
+    socket.on('connect', () => {
+      console.log('Socket.io: Connected to server with ID:', socket.id);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('Socket.io: Connection error:', error);
+    });
+
     socket.on('chat:start', ({ chatId, userMessage, assistantMessage, model }) => {
+      console.log('Socket.io: chat:start event received for chat:', chatId);
       setChats(prev => {
         const chatExists = prev.some(c => c.id === chatId);
         if (chatExists) {
@@ -107,6 +119,7 @@ export default function App() {
     });
 
     socket.on('chat:end', ({ chatId, finalContent }) => {
+      console.log('Socket.io: chat:end event received for chat:', chatId);
       setIsLoading(false);
       // Sync final content just in case
       if (finalContent) {
@@ -126,6 +139,7 @@ export default function App() {
     });
 
     return () => {
+      console.log('Socket.io: Disconnecting client...');
       socket.disconnect();
     };
   }, []);

@@ -63,9 +63,10 @@ async function startServer() {
 
   // Socket.io logic
   io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
+    console.log('Socket.io: Client connected:', socket.id);
 
     socket.on('chat:start', (data) => {
+      console.log('Socket.io: chat:start received', data.chatId);
       socket.broadcast.emit('chat:start', data);
     });
 
@@ -74,11 +75,12 @@ async function startServer() {
     });
 
     socket.on('chat:end', (data) => {
+      console.log('Socket.io: chat:end received', data.chatId);
       socket.broadcast.emit('chat:end', data);
     });
 
     socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
+      console.log('Socket.io: Client disconnected:', socket.id);
     });
   });
 
