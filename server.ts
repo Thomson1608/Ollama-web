@@ -15,6 +15,8 @@ const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
 
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+
 async function ensureDataDir() {
   try {
     await fs.access(DATA_DIR);
@@ -64,20 +66,6 @@ async function startServer() {
   // Socket.io logic
   io.on('connection', (socket) => {
     console.log('Socket.io: Client connected:', socket.id);
-
-    socket.on('chat:start', (data) => {
-      console.log('Socket.io: chat:start received', data.chatId);
-      socket.broadcast.emit('chat:start', data);
-    });
-
-    socket.on('chat:chunk', (data) => {
-      socket.broadcast.emit('chat:chunk', data);
-    });
-
-    socket.on('chat:end', (data) => {
-      console.log('Socket.io: chat:end received', data.chatId);
-      socket.broadcast.emit('chat:end', data);
-    });
 
     socket.on('disconnect', () => {
       console.log('Socket.io: Client disconnected:', socket.id);
@@ -199,6 +187,169 @@ async function startServer() {
       res.status(500).json({ error: 'Failed to delete file' });
     }
   });
+
+  // --- Ollama Proxy Endpoints ---
+
+  // List models
+  app.get('/api/ollama/tags', async (req, res) => {
+    try {
+      const response = await fetch(`${OLLAMA_URL}/api/tags`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('Ollama Tags Error:', error);
+      res.status(500).json({ error: 'Failed to fetch models from Ollama' });
+    }
+  });
+
+  // List running models
+  app.get('/api/ollama/ps', async (req, res) => {
+    try {
+      const response = await fetch(`${OLLAMA_URL}/api/ps`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('Ollama PS Error:', error);
+      res.status(500).json({ error: 'Failed to fetch running models from Ollama' });
+    }
+  });
+
+  // Chat with streaming
+  app.post('/api/ollama/chat', async (req, res) => {
+    const { chatId, messages, model, systemPrompt, memoryFacts, toolInstructions } = req.body;
+    
+    try {
+      const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        return res.status(response.status).send(error);
+      }
+
+      // Set headers for streaming
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Transfer-Encoding', 'chunked');
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader available');
+
+      let assistantContent = '';
+      
+      // Emit start event via Socket.io
+      io.emit('chat:start', {
+        chatId,
+        model,
+        userMessage: messages[messages.length - 1],
+        assistantMessage: { role: 'assistant', content: '', timestamp: Date.now() }
+      });
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunkStr = new TextDecoder().decode(value);
+        const lines = chunkStr.split('\n');
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const json = JSON.parse(line);
+            if (json.message?.content) {
+              const contentChunk = json.message.content;
+              assistantContent += contentChunk;
+              
+              // Emit chunk via Socket.io
+              io.emit('chat:chunk', { chatId, chunk: contentChunk });
+            }
+          } catch (e) {
+            // Ignore parse errors for partial lines
+          }
+        }
+        
+        res.write(value);
+      }
+
+      // Emit end event via Socket.io
+      io.emit('chat:end', { chatId, finalContent: assistantContent });
+      
+      res.end();
+    } catch (error) {
+      console.error('Ollama Chat Error:', error);
+      res.status(500).json({ error: 'Failed to communicate with Ollama' });
+    }
+  });
+
+  // Pull model with streaming
+  app.post('/api/ollama/pull', async (req, res) => {
+    const { name } = req.body;
+    try {
+      const response = await fetch(`${OLLAMA_URL}/api/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, stream: true }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        return res.status(response.status).send(error);
+      }
+
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Transfer-Encoding', 'chunked');
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader available');
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunkStr = new TextDecoder().decode(value);
+        const lines = chunkStr.split('\n');
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const json = JSON.parse(line);
+            // Emit pull progress via Socket.io
+            io.emit('ollama:pull:progress', { name, ...json });
+          } catch (e) {}
+        }
+
+        res.write(value);
+      }
+      res.end();
+    } catch (error) {
+      console.error('Ollama Pull Error:', error);
+      res.status(500).json({ error: 'Failed to pull model from Ollama' });
+    }
+  });
+
+  // Delete model
+  app.delete('/api/ollama/delete', async (req, res) => {
+    try {
+      const response = await fetch(`${OLLAMA_URL}/api/delete`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body),
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('Ollama Delete Error:', error);
+      res.status(500).json({ error: 'Failed to delete model from Ollama' });
+    }
+  });
+
+  // --- End Ollama Proxy Endpoints ---
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {

@@ -17,7 +17,6 @@ interface HeaderProps {
   runningModels: RunningModel[];
   connectionStatus: ConnectionStatus;
   checkConnection: () => void;
-  ollamaUrl: string;
   setShowSettings: (show: boolean) => void;
 }
 
@@ -31,7 +30,6 @@ export const Header: React.FC<HeaderProps> = ({
   runningModels,
   connectionStatus,
   checkConnection,
-  ollamaUrl,
   setShowSettings
 }) => {
   return (
@@ -96,7 +94,7 @@ export const Header: React.FC<HeaderProps> = ({
       {connectionStatus === 'disconnected' && (
         <div className="absolute top-full left-0 right-0 bg-red-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-center gap-2 z-20">
           <AlertCircle size={14} />
-          <span>Ollama is unreachable at {ollamaUrl}. Please check your settings and CORS configuration.</span>
+          <span>Ollama is unreachable via the backend server. Please ensure Ollama is running on the server.</span>
           <button 
             onClick={() => setShowSettings(true)}
             className="underline font-bold hover:text-red-100 transition-colors ml-2"

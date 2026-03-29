@@ -14,8 +14,6 @@ import { motion } from 'motion/react';
 import { ConnectionStatus, Memory } from '../types';
 
 interface SettingsViewProps {
-  ollamaUrl: string;
-  setOllamaUrl: (url: string) => void;
   systemPrompt: string;
   setSystemPrompt: (prompt: string) => void;
   memory: Memory;
@@ -25,8 +23,6 @@ interface SettingsViewProps {
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
-  ollamaUrl,
-  setOllamaUrl,
   systemPrompt,
   setSystemPrompt,
   memory,
@@ -61,13 +57,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Connection Settings */}
+          {/* Connection Status */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
                   <Globe size={16} className="text-blue-500" />
-                  Ollama Server URL
+                  Ollama Server Status
                 </label>
                 <div className="flex items-center gap-1.5">
                   {connectionStatus === 'connected' ? (
@@ -83,30 +79,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   )}
                 </div>
               </div>
-              <input 
-                type="text" 
-                value={ollamaUrl}
-                onChange={(e) => setOllamaUrl(e.target.value)}
-                placeholder="http://localhost:11434"
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm"
-              />
-              <p className="text-xs text-gray-400 italic">Default is http://localhost:11434</p>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                The application is configured to connect to Ollama via the backend server. 
+                {connectionStatus === 'connected' 
+                  ? " The connection is currently active and healthy." 
+                  : " The backend is unable to reach Ollama. Please ensure Ollama is running on the server."}
+              </p>
             </div>
 
-            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 space-y-3">
-              <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
+            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
+              <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
                 <Terminal size={16} />
-                CORS Configuration
+                Server-Side Logic
               </div>
-              <p className="text-[11px] text-amber-700 leading-relaxed">
-                Set <code className="bg-amber-100 px-1 rounded font-bold">OLLAMA_ORIGINS="*"</code> to allow connection.
+              <p className="text-[11px] text-blue-700 leading-relaxed">
+                All AI processing and model management are now handled by the backend server for improved security and reliability when deployed on a VPS.
               </p>
-              <div className="space-y-2">
-                <p className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">macOS / Linux</p>
-                <code className="block w-full bg-white/50 border border-amber-200 p-2 rounded text-[9px] font-mono text-amber-900 break-all">
-                  export OLLAMA_ORIGINS="*" && ollama serve
-                </code>
-              </div>
             </div>
           </div>
 

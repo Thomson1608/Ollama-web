@@ -26,7 +26,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTypingGlobally, setIsAiTypingGlobally] = useState(false);
   const [pullingModel, setPullingModel] = useState<{ name: string; progress: number; status: string } | null>(null);
-  const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
   const [models, setModels] = useState<OllamaModel[]>([]);
   const [runningModels, setRunningModels] = useState<RunningModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ollama_selected_model') || '');
@@ -116,11 +115,20 @@ export default function App() {
     socket.on('chat:start', ({ chatId, userMessage, assistantMessage, model }) => {
       console.log('Socket.io: chat:start event received for chat:', chatId);
       setChats(prev => {
-        const chatExists = prev.some(c => c.id === chatId);
-        if (chatExists) {
+        const chat = prev.find(c => c.id === chatId);
+        if (chat) {
+          // Check if userMessage is already the last message (to avoid duplication for the requester)
+          const lastMsg = chat.messages[chat.messages.length - 1];
+          const alreadyHasUserMsg = lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage.content;
+          
           return prev.map(c => 
             c.id === chatId 
-              ? { ...c, messages: [...c.messages, userMessage, assistantMessage] }
+              ? { 
+                  ...c, 
+                  messages: alreadyHasUserMsg 
+                    ? [...c.messages, assistantMessage] 
+                    : [...c.messages, userMessage, assistantMessage] 
+                }
               : c
           );
         } else {
@@ -171,6 +179,19 @@ export default function App() {
               }
             : c
         ));
+      }
+    });
+
+    socket.on('ollama:pull:progress', (data) => {
+      if (data.status) {
+        const progress = data.completed && data.total ? (data.completed / data.total) * 100 : 0;
+        setPullingModel({ name: data.name, status: data.status, progress });
+        
+        if (data.status === 'success') {
+          toast.success(`Model ${data.name} pulled successfully!`);
+          setPullingModel(null);
+          checkConnection();
+        }
       }
     });
 
@@ -290,9 +311,8 @@ export default function App() {
   }, [systemPrompt]);
 
   useEffect(() => {
-    localStorage.setItem('ollama_url', ollamaUrl);
     checkConnection();
-  }, [ollamaUrl]);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('ollama_selected_model', selectedModel);
@@ -306,7 +326,7 @@ export default function App() {
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [connectionStatus, ollamaUrl]);
+  }, [connectionStatus]);
 
   useEffect(() => {
     scrollToBottom();
@@ -319,7 +339,7 @@ export default function App() {
   const checkConnection = async () => {
     setConnectionStatus('checking');
     try {
-      const response = await fetch(`${ollamaUrl}/api/tags`);
+      const response = await fetch('/api/ollama/tags');
       if (response.ok) {
         const data = await response.json();
         const fetchedModels = data.models || [];
@@ -337,7 +357,7 @@ export default function App() {
     } catch (error) {
       console.error('Connection error:', error);
       setConnectionStatus('disconnected');
-      toast.error('Cannot connect to Ollama. Please check if Ollama is running and CORS is enabled.', {
+      toast.error('Cannot connect to Ollama via backend. Please check if Ollama is running on the server.', {
         id: 'connection-error',
         duration: 5000,
       });
@@ -346,7 +366,7 @@ export default function App() {
 
   const fetchRunningModels = async () => {
     try {
-      const response = await fetch(`${ollamaUrl}/api/ps`);
+      const response = await fetch('/api/ollama/ps');
       if (response.ok) {
         const data = await response.json();
         setRunningModels(data.models || []);
@@ -381,10 +401,10 @@ export default function App() {
     pullAbortController.current = new AbortController();
 
     try {
-      const response = await fetch(`${ollamaUrl}/api/pull`, {
+      const response = await fetch('/api/ollama/pull', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: modelName, stream: true }),
+        body: JSON.stringify({ name: modelName }),
         signal: pullAbortController.current.signal,
       });
 
@@ -407,14 +427,15 @@ export default function App() {
             if (json.status) {
               const progress = json.completed && json.total ? (json.completed / json.total) * 100 : 0;
               setPullingModel(prev => prev ? { ...prev, status: json.status, progress } : null);
+              
+              if (json.status === 'success') {
+                toast.success(`Model ${modelName} pulled successfully!`);
+                checkConnection();
+              }
             }
-          } catch (e) {
-            console.error('Error parsing pull chunk', e);
-          }
+          } catch (e) {}
         }
       }
-      toast.success(`Model ${modelName} pulled successfully!`);
-      checkConnection();
     } catch (error: any) {
       if (error.name === 'AbortError') {
         toast.info(`Pulling ${modelName} cancelled`);
@@ -438,7 +459,7 @@ export default function App() {
     if (!confirm(`Are you sure you want to delete ${name}?`)) return;
 
     try {
-      const response = await fetch(`${ollamaUrl}/api/delete`, {
+      const response = await fetch('/api/ollama/delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -593,10 +614,11 @@ Available tools:
 When you want to create code or save information, use the write_file tool.
 `;
 
-      const response = await fetch(`${ollamaUrl}/api/chat`, {
+      const response = await fetch('/api/ollama/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          chatId: currentChatId,
           model: selectedModel,
           messages: [
             { 
@@ -606,12 +628,11 @@ When you want to create code or save information, use the write_file tool.
             ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: messageContent }
           ],
-          stream: true,
         }),
         signal: chatAbortController.current.signal
       });
 
-      if (!response.ok) throw new Error('Failed to connect to Ollama');
+      if (!response.ok) throw new Error('Failed to connect to Ollama via backend');
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No reader available');
@@ -629,14 +650,6 @@ When you want to create code or save information, use the write_file tool.
           : c
       ));
 
-      // Emit start event to other tabs
-      socketRef.current?.emit('chat:start', {
-        chatId: currentChatId,
-        userMessage,
-        assistantMessage,
-        model: selectedModel
-      });
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -652,12 +665,6 @@ When you want to create code or save information, use the write_file tool.
               const contentChunk = json.message.content;
               assistantContent += contentChunk;
               
-              // Emit chunk to other tabs
-              socketRef.current?.emit('chat:chunk', {
-                chatId: currentChatId,
-                chunk: contentChunk
-              });
-
               setChats(prev => prev.map(c => 
                 c.id === currentChatId 
                   ? { 
@@ -669,18 +676,10 @@ When you want to create code or save information, use the write_file tool.
                   : c
               ));
             }
-          } catch (e) {
-            console.error('Error parsing chunk', e);
-          }
+          } catch (e) {}
         }
       }
       
-      // Emit end event to other tabs
-      socketRef.current?.emit('chat:end', {
-        chatId: currentChatId,
-        finalContent: assistantContent
-      });
-
       // Extract memory after assistant finishes
       extractMemory(currentChatId);
       
@@ -692,7 +691,7 @@ When you want to create code or save information, use the write_file tool.
         console.log('Chat request was aborted.');
         return;
       }
-      toast.error('Error: Could not connect to Ollama. Make sure it is running and OLLAMA_ORIGINS is set.');
+      toast.error('Error: Could not connect to Ollama via backend. Make sure it is running on the server.');
       console.error(error);
     } finally {
       setIsLoading(false);
@@ -711,10 +710,11 @@ When you want to create code or save information, use the write_file tool.
         const context = recentMessages.map(m => `${m.role}: ${m.content}`).join('\n');
 
         try {
-          const response = await fetch(`${ollamaUrl}/api/chat`, {
+          const response = await fetch('/api/ollama/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              chatId: 'memory-extraction',
               model: selectedModel,
               messages: [
                 { 
@@ -731,7 +731,6 @@ When you want to create code or save information, use the write_file tool.
                 },
                 { role: 'user', content: `Extract facts from this conversation:\n${context}` }
               ],
-              stream: false,
             }),
           });
 
@@ -875,7 +874,6 @@ When you want to create code or save information, use the write_file tool.
           runningModels={runningModels}
           connectionStatus={connectionStatus}
           checkConnection={checkConnection}
-          ollamaUrl={ollamaUrl}
           setShowSettings={() => setCurrentView('settings')}
         />
 
@@ -931,8 +929,6 @@ When you want to create code or save information, use the write_file tool.
 
           {currentView === 'settings' && (
             <SettingsView 
-              ollamaUrl={ollamaUrl}
-              setOllamaUrl={setOllamaUrl}
               systemPrompt={systemPrompt}
               setSystemPrompt={setSystemPrompt}
               memory={memory}
