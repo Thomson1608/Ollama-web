@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, ChildProcess } from 'child_process';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import { simpleGit, SimpleGit } from 'simple-git';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -70,6 +71,21 @@ async function ensureDataDir() {
     await fs.mkdir(WORKSPACE_DIR, { recursive: true });
   } catch {}
   
+  // Initialize Git in workspace
+  try {
+    const git: SimpleGit = simpleGit(WORKSPACE_DIR);
+    const isRepo = await git.checkIsRepo();
+    if (!isRepo) {
+      await git.init();
+      await git.addConfig('user.name', 'AI Studio');
+      await git.addConfig('user.email', 'ai@studio.local');
+      await git.add('.');
+      await git.commit('Initial commit');
+    }
+  } catch (error) {
+    logger.error('Failed to initialize git repository', error);
+  }
+
   try {
     await fs.access(CHATS_FILE);
   } catch {
@@ -146,6 +162,21 @@ async function startServer() {
   });
 
   const PORT = 3000;
+
+  const git: SimpleGit = simpleGit(WORKSPACE_DIR);
+
+  async function autoCommit(message: string) {
+    try {
+      await git.add('.');
+      const status = await git.status();
+      if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
+        await git.commit(message);
+        io.emit('workspace:history_updated');
+      }
+    } catch (error) {
+      logger.error('Auto commit failed', error);
+    }
+  }
 
   app.use(express.json({ limit: '50mb' }));
 
@@ -339,6 +370,9 @@ async function startServer() {
       await fs.writeFile(filePath, content, 'utf-8');
       io.emit('workspace:updated');
       res.json({ success: true });
+      
+      // Auto commit after writing
+      await autoCommit(`Update ${safeName}`);
     } catch (error) {
       logger.error('Failed to write file', error);
       res.status(500).json({ error: 'Failed to write file' });
@@ -355,9 +389,60 @@ async function startServer() {
       await fs.rm(filePath, { recursive: true, force: true });
       io.emit('workspace:updated');
       res.json({ success: true });
+      
+      // Auto commit after deleting
+      await autoCommit(`Delete ${safeName}`);
     } catch (error) {
       logger.error('Failed to delete file or folder', error);
       res.status(500).json({ error: 'Failed to delete file or folder' });
+    }
+  });
+
+  // API: Get workspace history
+  app.get('/api/workspace/history', async (req, res) => {
+    try {
+      const log = await git.log();
+      res.json({ history: log.all });
+    } catch (error) {
+      logger.error('Failed to get workspace history', error);
+      res.status(500).json({ error: 'Failed to get workspace history' });
+    }
+  });
+
+  // API: Get commit details
+  app.get('/api/workspace/commit-details', async (req, res) => {
+    try {
+      const hash = req.query.hash as string;
+      if (!hash) return res.status(400).json({ error: 'Missing hash' });
+      
+      let files = [];
+      try {
+        const diffSummary = await git.diffSummary([`${hash}^`, hash]);
+        files = await Promise.all(diffSummary.files.map(async (f) => {
+          let oldContent = '';
+          let newContent = '';
+          try { oldContent = await git.show([`${hash}^:${f.file}`]); } catch (e) {}
+          try { newContent = await git.show([`${hash}:${f.file}`]); } catch (e) {}
+          return { name: f.file, oldContent, newContent };
+        }));
+      } catch (e) {
+        // Fallback for the first commit (no parent)
+        try {
+          const show = await git.show([hash, '--name-only', '--pretty=format:']);
+          const fileNames = show.split('\n').filter(Boolean);
+          files = await Promise.all(fileNames.map(async (f) => {
+            let newContent = '';
+            try { newContent = await git.show([`${hash}:${f}`]); } catch (e) {}
+            return { name: f, oldContent: '', newContent };
+          }));
+        } catch (innerError) {
+           logger.error('Failed to get first commit details', innerError);
+        }
+      }
+      res.json({ files });
+    } catch (error) {
+      logger.error('Failed to get commit details', error);
+      res.status(500).json({ error: 'Failed to get commit details' });
     }
   });
 

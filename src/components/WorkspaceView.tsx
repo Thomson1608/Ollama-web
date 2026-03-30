@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code, ChevronRight, ChevronDown } from 'lucide-react';
+import { Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code, ChevronRight, ChevronDown, History, ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import { WorkspaceFile } from '../types';
 import { toast } from 'sonner';
+import ReactDiffViewer from 'react-diff-viewer-continued';
 
 import { Socket } from 'socket.io-client';
 
@@ -21,11 +22,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
 
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [viewMode, setViewMode] = useState<'code' | 'web'>('code');
+  const [viewMode, setViewMode] = useState<'code' | 'web' | 'history'>('code');
   const [previewType, setPreviewType] = useState<'static' | 'node'>('static');
   const [previewKey, setPreviewKey] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  
+  // History state
+  const [history, setHistory] = useState<any[]>([]);
+  const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
+  const [commitDetails, setCommitDetails] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -34,11 +41,19 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
       setLogs(prev => [...prev, log]);
     };
 
+    const handleHistoryUpdate = () => {
+      if (viewMode === 'history') {
+        fetchHistory();
+      }
+    };
+
     socket.on('workspace:log', handleLog);
+    socket.on('workspace:history_updated', handleHistoryUpdate);
     return () => {
       socket.off('workspace:log', handleLog);
+      socket.off('workspace:history_updated', handleHistoryUpdate);
     };
-  }, [socket]);
+  }, [socket, viewMode]);
 
   useEffect(() => {
     if (logsEndRef.current) {
@@ -60,6 +75,43 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
       setIsLoading(false);
     }
   };
+
+  const fetchHistory = async () => {
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch('/api/workspace/history');
+      if (res.ok) {
+        const data = await res.json();
+        setHistory(data.history);
+      }
+    } catch (error) {
+      toast.error('Failed to fetch history');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const fetchCommitDetails = async (hash: string) => {
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch(`/api/workspace/commit-details?hash=${hash}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCommitDetails(data.files);
+        setSelectedCommit(hash);
+      }
+    } catch (error) {
+      toast.error('Failed to fetch commit details');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'history') {
+      fetchHistory();
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     fetchFiles();
@@ -222,6 +274,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
             <div className="flex items-center gap-2">
               <Play size={14} />
               Web
+            </div>
+          </button>
+          <button
+            onClick={() => setViewMode('history')}
+            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+              viewMode === 'history' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <History size={14} />
+              History
             </div>
           </button>
         </div>
@@ -420,7 +483,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
         )}
       </div>
           </>
-        ) : (
+        ) : viewMode === 'web' ? (
           <div className="flex-1 flex flex-col bg-gray-50/30">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2">
@@ -477,6 +540,96 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                 </div>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col bg-gray-50/30 overflow-hidden">
+            {selectedCommit ? (
+              <div className="flex flex-col h-full">
+                <div className="p-4 border-b border-gray-100 flex items-center gap-4 bg-white">
+                  <button 
+                    onClick={() => setSelectedCommit(null)}
+                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+                  >
+                    <ArrowLeft size={18} />
+                  </button>
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800">Commit Details</h3>
+                    <p className="text-xs text-gray-500 font-mono">{selectedCommit.substring(0, 7)}</p>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {commitDetails.map((file, idx) => (
+                    <div key={idx} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center gap-2">
+                        <FileText size={14} className="text-gray-500" />
+                        <span className="text-sm font-medium text-gray-700">{file.name}</span>
+                      </div>
+                      <div className="text-sm">
+                        <ReactDiffViewer
+                          oldValue={file.oldContent}
+                          newValue={file.newContent}
+                          splitView={true}
+                          useDarkTheme={false}
+                          hideLineNumbers={false}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {commitDetails.length === 0 && (
+                    <div className="text-center py-10 text-gray-400 text-sm">
+                      No file changes found in this commit.
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col h-full">
+                <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <History size={16} className="text-green-500" />
+                    Version History
+                  </h2>
+                  <button 
+                    onClick={fetchHistory}
+                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+                    title="Refresh History"
+                  >
+                    <RefreshCw size={14} className={isLoadingHistory ? "animate-spin" : ""} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  <div className="space-y-3">
+                    {history.map((commit: any) => (
+                      <div 
+                        key={commit.hash}
+                        onClick={() => fetchCommitDetails(commit.hash)}
+                        className="bg-white border border-gray-200 p-4 rounded-xl hover:border-green-300 hover:shadow-sm cursor-pointer transition-all group"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <h3 className="text-sm font-semibold text-gray-800 group-hover:text-green-700 transition-colors">
+                            {commit.message}
+                          </h3>
+                          <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded">
+                            {commit.hash.substring(0, 7)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-500">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{commit.author_name}</span>
+                          </div>
+                          <span>{new Date(commit.date).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {history.length === 0 && !isLoadingHistory && (
+                      <div className="text-center py-10 text-gray-400 text-sm">
+                        No history available yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
