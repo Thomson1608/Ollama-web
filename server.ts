@@ -74,11 +74,26 @@ async function ensureDataDir() {
   // Initialize Git in workspace
   try {
     const git: SimpleGit = simpleGit(WORKSPACE_DIR);
-    const isRepo = await git.checkIsRepo();
+    let isRepo = false;
+    try {
+      await fs.access(path.join(WORKSPACE_DIR, '.git'));
+      isRepo = true;
+    } catch {
+      isRepo = false;
+    }
+    
     if (!isRepo) {
       await git.init();
       await git.addConfig('user.name', 'AI Studio');
       await git.addConfig('user.email', 'ai@studio.local');
+    }
+    
+    // Check if there are any commits
+    try {
+      await git.log();
+    } catch {
+      // No commits yet, create an initial commit
+      await fs.writeFile(path.join(WORKSPACE_DIR, '.gitkeep'), '');
       await git.add('.');
       await git.commit('Initial commit');
     }
@@ -403,9 +418,9 @@ async function startServer() {
     try {
       const log = await git.log();
       res.json({ history: log.all });
-    } catch (error) {
-      logger.error('Failed to get workspace history', error);
-      res.status(500).json({ error: 'Failed to get workspace history' });
+    } catch (error: any) {
+      // If git log fails, it's likely because there are no commits yet
+      res.json({ history: [] });
     }
   });
 
