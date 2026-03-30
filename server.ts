@@ -386,8 +386,21 @@ async function startServer() {
           startCmd = `npm start`;
         }
 
+        let installCmd = 'npm install --no-audit --no-fund --prefer-offline && ';
+        const nodeModulesPath = path.join(WORKSPACE_DIR, 'node_modules');
+        
+        if (fsSync.existsSync(nodeModulesPath)) {
+          const pkgStat = await fs.stat(packageJsonPath);
+          const nmStat = await fs.stat(nodeModulesPath);
+          
+          if (pkgStat.mtime <= nmStat.mtime) {
+            // Skip install if node_modules is newer than package.json
+            installCmd = '';
+          }
+        }
+
         // Run npm install then the start command
-        workspaceProcess = spawn(`npm install && ${startCmd}`, {
+        workspaceProcess = spawn(`${installCmd}${startCmd}`, {
           cwd: WORKSPACE_DIR,
           shell: true,
           env: { ...process.env, PORT: WORKSPACE_PORT.toString(), VITE_PORT: WORKSPACE_PORT.toString() }
@@ -814,13 +827,31 @@ async function startServer() {
     }
   }
 
-  // Vite middleware for development
+  // Vite UI server for development
   if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
+    logger.release('Starting Vite UI server in a separate process...');
+    const viteProcess = spawn('npx', ['vite', '--port', '5173', '--strictPort', '--clearScreen', 'false'], {
+      stdio: 'inherit',
+      shell: true
     });
-    app.use(vite.middlewares);
+
+    viteProcess.on('error', (err) => {
+      logger.error('Failed to start Vite UI server', err);
+    });
+
+    // Proxy all non-API requests to the separate Vite process
+    app.use('/', createProxyMiddleware({
+      target: 'http://localhost:5173',
+      changeOrigin: true,
+      ws: true,
+      logLevel: 'silent',
+      onError: (err, req, res) => {
+        if ('writeHead' in res) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Vite UI server is starting or unavailable. Please wait...');
+        }
+      }
+    }));
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
