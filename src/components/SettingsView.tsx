@@ -9,12 +9,14 @@ import {
   Brain,
   Trash2,
   Save,
-  BarChart
+  BarChart,
+  Power
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectionStatus, Memory } from '../types';
 import { StatsView } from './StatsView';
 import { cn } from '../lib/utils';
+import { toast } from 'sonner';
 
 interface SettingsViewProps {
   systemPrompt: string;
@@ -38,6 +40,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
+  const [isConfirmingShutdown, setIsConfirmingShutdown] = useState(false);
   const hasChanges = localPrompt !== systemPrompt || JSON.stringify(localMemory) !== JSON.stringify(memory.facts);
 
   // Update local state if parent state changes (e.g. on initial load)
@@ -57,6 +60,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         // We need a way to update parent state, but for now we just save and reload
         saveSettings();
     });
+  };
+
+  const handleShutdown = async () => {
+    if (!isConfirmingShutdown) {
+      setIsConfirmingShutdown(true);
+      setTimeout(() => setIsConfirmingShutdown(false), 3000);
+      return;
+    }
+    try {
+      const res = await fetch('/api/system/shutdown', { method: 'POST' });
+      if (res.ok) {
+        toast.success('System will shut down in 1 minute.');
+      } else {
+        toast.error('Failed to initiate shutdown.');
+      }
+    } catch (e) {
+      toast.error('Error connecting to server.');
+    }
+    setIsConfirmingShutdown(false);
   };
 
   const tabs = [
@@ -160,6 +182,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
                 <p className="text-[11px] text-blue-700 leading-relaxed">
                   All AI processing and model management are now handled by the backend server for improved security and reliability when deployed on a VPS.
+                </p>
+              </div>
+
+              <div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-red-800 font-bold text-sm">
+                    <Power size={16} />
+                    System Power
+                  </div>
+                  <button
+                    onClick={handleShutdown}
+                    className={`text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 ${
+                      isConfirmingShutdown 
+                        ? "bg-red-600 hover:bg-red-700 text-white" 
+                        : "bg-white text-red-600 border border-red-200 hover:bg-red-50"
+                    }`}
+                  >
+                    <Power size={14} />
+                    {isConfirmingShutdown ? "Click to Confirm Shutdown" : "Shutdown Server (1 Min)"}
+                  </button>
+                </div>
+                <p className="text-[11px] text-red-700 leading-relaxed">
+                  This will schedule a full system shutdown in 1 minute. Use this if you are running the application on a dedicated machine or VPS and want to power it off.
                 </p>
               </div>
             </div>

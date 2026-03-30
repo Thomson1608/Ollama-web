@@ -6,7 +6,7 @@ import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, exec } from 'child_process';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { simpleGit, SimpleGit } from 'simple-git';
 
@@ -562,6 +562,22 @@ async function startServer() {
       io.emit('workspace:log', 'Process stopped by user');
     }
     res.json({ success: true });
+  });
+
+  app.post('/api/system/shutdown', (req, res) => {
+    try {
+      logger.release('Initiating system shutdown in 1 minute...');
+      exec('shutdown +1', (error, stdout, stderr) => {
+        if (error) {
+          logger.error('Failed to execute shutdown command', error);
+          return res.status(500).json({ error: 'Failed to initiate shutdown' });
+        }
+        res.json({ success: true, message: 'System will shut down in 1 minute' });
+      });
+    } catch (error) {
+      logger.error('Failed to initiate shutdown', error);
+      res.status(500).json({ error: 'Failed to initiate shutdown' });
+    }
   });
 
   app.use('/workspace-preview', createProxyMiddleware({
