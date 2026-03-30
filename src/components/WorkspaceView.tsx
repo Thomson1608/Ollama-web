@@ -500,14 +500,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                   <RefreshCw size={14} />
                   Reload
                 </button>
-                {previewType === 'node' && (
-                  <button 
-                    onClick={stopWorkspace}
-                    className="text-xs text-red-600 hover:text-red-700 font-medium px-3 py-1 rounded-lg border border-red-100 hover:bg-red-50"
-                  >
-                    Stop Server
-                  </button>
-                )}
+                <button 
+                  onClick={stopWorkspace}
+                  className="text-xs text-red-600 hover:text-red-700 font-medium px-3 py-1 rounded-lg border border-red-100 hover:bg-red-50"
+                >
+                  Stop Server
+                </button>
               </div>
             </div>
             <div className="flex-1 p-6 overflow-hidden flex flex-col gap-4">
@@ -520,25 +518,23 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                 />
               </div>
-              {previewType === 'node' && (
-                <div className="h-48 bg-gray-900 rounded-xl shadow-inner overflow-hidden flex flex-col">
-                  <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
-                    <span className="text-xs font-mono text-gray-400">Terminal Output</span>
-                    <button 
-                      onClick={() => setLogs([])}
-                      className="text-xs text-gray-500 hover:text-gray-300"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <div className="flex-1 p-4 overflow-y-auto font-mono text-xs text-green-400 whitespace-pre-wrap">
-                    {logs.map((log, i) => (
-                      <div key={i}>{log}</div>
-                    ))}
-                    <div ref={logsEndRef} />
-                  </div>
+              <div className="h-48 bg-gray-900 rounded-xl shadow-inner overflow-hidden flex flex-col">
+                <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+                  <span className="text-xs font-mono text-gray-400">Terminal Output</span>
+                  <button 
+                    onClick={() => setLogs([])}
+                    className="text-xs text-gray-500 hover:text-gray-300"
+                  >
+                    Clear
+                  </button>
                 </div>
-              )}
+                <div className="flex-1 p-4 overflow-y-auto font-mono text-xs text-green-400 whitespace-pre-wrap">
+                  {logs.map((log, i) => (
+                    <div key={i}>{log}</div>
+                  ))}
+                  <div ref={logsEndRef} />
+                </div>
+              </div>
             </div>
           </div>
         ) : (

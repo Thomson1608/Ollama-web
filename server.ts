@@ -463,6 +463,9 @@ async function startServer() {
 
   // API: Serve workspace files for preview
   app.use('/preview', express.static(WORKSPACE_DIR));
+  app.use('/preview', (req, res) => {
+    res.status(404).send('File not found in workspace');
+  });
 
   let workspaceProcess: ChildProcess | null = null;
   const WORKSPACE_PORT = 3001;
