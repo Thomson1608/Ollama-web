@@ -352,12 +352,12 @@ async function startServer() {
       if (!fileName) return res.status(400).json({ error: 'Missing filename' });
       const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
       const filePath = path.join(WORKSPACE_DIR, safeName);
-      await fs.unlink(filePath);
+      await fs.rm(filePath, { recursive: true, force: true });
       io.emit('workspace:updated');
       res.json({ success: true });
     } catch (error) {
-      logger.error('Failed to delete file', error);
-      res.status(500).json({ error: 'Failed to delete file' });
+      logger.error('Failed to delete file or folder', error);
+      res.status(500).json({ error: 'Failed to delete file or folder' });
     }
   });
 

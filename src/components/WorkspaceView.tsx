@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code } from 'lucide-react';
+import { Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code, ChevronRight, ChevronDown } from 'lucide-react';
 import { motion } from 'motion/react';
 import { WorkspaceFile } from '../types';
 import { toast } from 'sonner';
@@ -15,6 +15,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [selectedIsDirectory, setSelectedIsDirectory] = useState<boolean>(false);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [fileContent, setFileContent] = useState<string>('');
 
   const [isEditing, setIsEditing] = useState(false);
@@ -61,7 +63,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
 
   useEffect(() => {
     fetchFiles();
-    if (selectedFile && !isEditing) {
+    if (selectedFile && !isEditing && !selectedIsDirectory) {
       // Fetch content without resetting preview mode
       fetch(`/api/workspace/read?name=${encodeURIComponent(selectedFile)}`)
         .then(res => res.ok ? res.json() : Promise.reject())
@@ -75,6 +77,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
 
   const readFile = async (name: string) => {
     setSelectedFile(name);
+    setSelectedIsDirectory(false);
     setIsEditing(false);
     try {
       const res = await fetch(`/api/workspace/read?name=${encodeURIComponent(name)}`);
@@ -144,28 +147,54 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
     const name = prompt('Enter file name:');
     if (name) {
       setSelectedFile(name);
+      setSelectedIsDirectory(false);
       setFileContent('');
       setIsEditing(true);
     }
   };
 
-  const deleteFile = async (name: string) => {
-    if (!confirm(`Delete ${name}?`)) return;
+  const deleteFile = async (name: string, isDirectory: boolean) => {
+    if (!confirm(`Delete ${isDirectory ? 'folder' : 'file'} ${name}?`)) return;
     try {
       const res = await fetch(`/api/workspace/delete?name=${encodeURIComponent(name)}`, {
         method: 'DELETE'
       });
       if (res.ok) {
-        toast.success('File deleted');
-        if (selectedFile === name) {
+        toast.success(`${isDirectory ? 'Folder' : 'File'} deleted`);
+        if (selectedFile === name || selectedFile?.startsWith(name + '/')) {
           setSelectedFile(null);
+          setSelectedIsDirectory(false);
           setFileContent('');
         }
         fetchFiles();
       }
     } catch (error) {
-      toast.error('Failed to delete file');
+      toast.error(`Failed to delete ${isDirectory ? 'folder' : 'file'}`);
     }
+  };
+
+  const toggleFolder = (folderPath: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderPath)) {
+        next.delete(folderPath);
+      } else {
+        next.add(folderPath);
+      }
+      return next;
+    });
+  };
+
+  const isVisible = (filePath: string) => {
+    const parts = filePath.split('/');
+    let currentPath = '';
+    for (let i = 0; i < parts.length - 1; i++) {
+      currentPath += (i === 0 ? '' : '/') + parts[i];
+      if (!expandedFolders.has(currentPath)) {
+        return false;
+      }
+    }
+    return true;
   };
 
   return (
@@ -249,36 +278,47 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
               Workspace is empty
             </div>
           ) : (
-            files.map(file => (
+            files.filter(f => isVisible(f.name)).map(file => (
               <div 
                 key={file.name}
                 className={`group flex items-center gap-2 p-2 rounded-lg text-xs transition-all ${
-                  file.isDirectory 
-                    ? "text-gray-400 cursor-default" 
-                    : selectedFile === file.name 
-                      ? "bg-blue-50 text-blue-700 font-medium cursor-pointer" 
-                      : "hover:bg-gray-50 text-gray-600 cursor-pointer"
+                  selectedFile === file.name 
+                    ? "bg-blue-50 text-blue-700 font-medium cursor-pointer" 
+                    : "hover:bg-gray-50 text-gray-600 cursor-pointer"
                 }`}
                 style={{ paddingLeft: `${(file.name.split('/').length - 1) * 12 + 8}px` }}
-                onClick={() => !file.isDirectory && readFile(file.name)}
+                onClick={() => {
+                  setSelectedFile(file.name);
+                  setSelectedIsDirectory(file.isDirectory);
+                  if (file.isDirectory) {
+                    toggleFolder(file.name);
+                  } else {
+                    readFile(file.name);
+                  }
+                }}
               >
                 {file.isDirectory ? (
-                  <Folder size={14} className="text-blue-400/60" />
+                  <div className="flex items-center gap-1">
+                    {expandedFolders.has(file.name) ? (
+                      <ChevronDown size={14} className="text-gray-400" />
+                    ) : (
+                      <ChevronRight size={14} className="text-gray-400" />
+                    )}
+                    <Folder size={14} className="text-blue-400/60" />
+                  </div>
                 ) : (
                   <File size={14} className={selectedFile === file.name ? "text-blue-500" : "text-gray-400"} />
                 )}
                 <span className="flex-1 truncate">{file.name.split('/').pop()}</span>
-                {!file.isDirectory && (
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteFile(file.name);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-red-500"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                )}
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteFile(file.name, file.isDirectory);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-red-500"
+                >
+                  <Trash2 size={12} />
+                </button>
               </div>
             ))
           )}
@@ -288,6 +328,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
       {/* File Editor/Viewer */}
       <div className="flex-1 flex flex-col bg-gray-50/30">
         {selectedFile ? (
+          selectedIsDirectory ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-4">
+              <Folder size={48} className="text-blue-400/60" />
+              <p className="text-sm font-medium text-gray-500">Folder: {selectedFile}</p>
+            </div>
+          ) : (
           <>
             <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2">
@@ -333,6 +379,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
               </div>
             </div>
           </>
+          )
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400 space-y-4">
             <div 

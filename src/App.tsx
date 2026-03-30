@@ -802,7 +802,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
         <div className="flex-1 flex flex-col overflow-hidden">
           {currentView === 'chat' && (
             <div className="flex h-full overflow-hidden">
-              <div className="flex-1 border-r border-gray-200">
+              <div className="flex-1">
                 <ChatView 
                   activeChatId={activeChatId}
                   activeChat={activeChat}
@@ -815,9 +815,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
                   connectionStatus={connectionStatus}
                   messagesEndRef={messagesEndRef}
                 />
-              </div>
-              <div className="w-[40%] hidden lg:block">
-                <WorkspaceView refreshTrigger={workspaceRefreshTrigger} socket={socketRef.current} />
               </div>
             </div>
           )}
