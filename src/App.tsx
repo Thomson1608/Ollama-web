@@ -13,7 +13,6 @@ import { ModelsView } from './components/ModelsView';
 import { PullView } from './components/PullView';
 import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
-import { StatsView } from './components/StatsView';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall } from './types';
 
 export default function App() {
@@ -871,10 +870,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
               saveSettings={saveSettings}
               connectionStatus={connectionStatus}
             />
-          )}
-
-          {currentView === 'stats' && (
-            <StatsView />
           )}
         </div>
       </main>

@@ -8,10 +8,13 @@ import {
   UserCircle,
   Brain,
   Trash2,
-  Save
+  Save,
+  BarChart
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectionStatus, Memory } from '../types';
+import { StatsView } from './StatsView';
+import { cn } from '../lib/utils';
 
 interface SettingsViewProps {
   systemPrompt: string;
@@ -22,6 +25,8 @@ interface SettingsViewProps {
   connectionStatus: ConnectionStatus;
 }
 
+type TabType = 'general' | 'memory' | 'prompt' | 'stats';
+
 export const SettingsView: React.FC<SettingsViewProps> = ({
   systemPrompt,
   setSystemPrompt,
@@ -30,6 +35,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   saveSettings,
   connectionStatus
 }) => {
+  const [activeTab, setActiveTab] = useState<TabType>('general');
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
   const hasChanges = localPrompt !== systemPrompt || JSON.stringify(localMemory) !== JSON.stringify(memory.facts);
@@ -52,6 +58,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         saveSettings();
     });
   };
+
+  const tabs = [
+    { id: 'general', label: 'General Setting', icon: Globe },
+    { id: 'memory', label: 'Long-term Memory', icon: Brain },
+    { id: 'prompt', label: 'System Prompt', icon: UserCircle },
+    { id: 'stats', label: 'Chat Statistics', icon: BarChart },
+  ] as const;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-gray-50/30">
@@ -80,17 +93,110 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             Save Changes
           </button>
         </div>
+        
+        {/* Tabs */}
+        <div className="max-w-4xl mx-auto mt-6 flex overflow-x-auto hide-scrollbar gap-2">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors whitespace-nowrap",
+                activeTab === tab.id 
+                  ? "bg-blue-50 text-blue-700 border border-blue-100" 
+                  : "text-gray-600 hover:bg-gray-100 border border-transparent"
+              )}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Body - Scrollable */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <motion.div 
-          initial={{ opacity: 0, y: 20 }}
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-4xl mx-auto space-y-8 pb-12"
+          transition={{ duration: 0.2 }}
+          className="max-w-4xl mx-auto pb-12"
         >
-          <div className="space-y-6">
-            {/* System Prompt - Full Width */}
+          {activeTab === 'general' && (
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6 flex flex-col">
+              <div className="space-y-4 flex-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <Globe size={16} className="text-blue-500" />
+                    Ollama Server Status
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {connectionStatus === 'connected' ? (
+                      <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+                        <CheckCircle2 size={10} />
+                        CONNECTED
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+                        <AlertCircle size={10} />
+                        DISCONNECTED
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  The application is configured to connect to Ollama via the backend server. 
+                  {connectionStatus === 'connected' 
+                    ? " The connection is currently active and healthy." 
+                    : " The backend is unable to reach Ollama. Please ensure Ollama is running on the server."}
+                </p>
+              </div>
+
+              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
+                <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
+                  <Terminal size={16} />
+                  Server-Side Logic
+                </div>
+                <p className="text-[11px] text-blue-700 leading-relaxed">
+                  All AI processing and model management are now handled by the backend server for improved security and reliability when deployed on a VPS.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'memory' && (
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <Brain size={16} className="text-blue-500" />
+                    Long-term Memory
+                  </label>
+                  {memory.facts.length > 0 && (
+                    <button 
+                      onClick={clearMemory}
+                      className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
+                    >
+                      <Trash2 size={10} />
+                      CLEAR
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Information the AI has learned about you over time. This is used to personalize your experience.
+                </p>
+                <textarea
+                  value={localMemory.join('\n')}
+                  onChange={(e) => setLocalMemory(e.target.value.split('\n').filter(line => line.trim() !== ''))}
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-600 font-mono h-[300px] focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  placeholder="Enter facts about yourself, one per line..."
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'prompt' && (
             <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6">
               <div className="flex items-center justify-between">
                 <label className="text-base font-bold text-gray-700 flex items-center gap-2">
@@ -113,80 +219,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-6 py-5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-mono min-h-[400px] leading-relaxed"
               />
             </div>
+          )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Connection Status */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6 flex flex-col">
-                <div className="space-y-4 flex-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                      <Globe size={16} className="text-blue-500" />
-                      Ollama Server Status
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      {connectionStatus === 'connected' ? (
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
-                          <CheckCircle2 size={10} />
-                          CONNECTED
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
-                          <AlertCircle size={10} />
-                          DISCONNECTED
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    The application is configured to connect to Ollama via the backend server. 
-                    {connectionStatus === 'connected' 
-                      ? " The connection is currently active and healthy." 
-                      : " The backend is unable to reach Ollama. Please ensure Ollama is running on the server."}
-                  </p>
-                </div>
-
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
-                  <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
-                    <Terminal size={16} />
-                    Server-Side Logic
-                  </div>
-                  <p className="text-[11px] text-blue-700 leading-relaxed">
-                    All AI processing and model management are now handled by the backend server for improved security and reliability when deployed on a VPS.
-                  </p>
-                </div>
-              </div>
-
-              {/* Memory & Personalization */}
-              <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                      <Brain size={16} className="text-blue-500" />
-                      Long-term Memory
-                    </label>
-                    {memory.facts.length > 0 && (
-                      <button 
-                        onClick={clearMemory}
-                        className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
-                      >
-                        <Trash2 size={10} />
-                        CLEAR
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    Information the AI has learned about you over time. This is used to personalize your experience.
-                  </p>
-                  <textarea
-                    value={localMemory.join('\n')}
-                    onChange={(e) => setLocalMemory(e.target.value.split('\n').filter(line => line.trim() !== ''))}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-600 font-mono h-[180px] focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    placeholder="Enter facts about yourself, one per line..."
-                  />
-                </div>
-              </div>
+          {activeTab === 'stats' && (
+            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+              <StatsView />
             </div>
-          </div>
+          )}
         </motion.div>
       </div>
     </div>
