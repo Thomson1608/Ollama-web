@@ -367,6 +367,9 @@ async function startServer() {
   let workspaceProcess: ChildProcess | null = null;
   const WORKSPACE_PORT = 3001;
 
+  // Helper to check file existence asynchronously
+  const fileExists = async (filePath: string) => !!(await fs.stat(filePath).catch(() => false));
+
   app.post('/api/workspace/run', async (req, res) => {
     try {
       if (workspaceProcess) {
@@ -375,7 +378,7 @@ async function startServer() {
       }
 
       const packageJsonPath = path.join(WORKSPACE_DIR, 'package.json');
-      if (fsSync.existsSync(packageJsonPath)) {
+      if (await fileExists(packageJsonPath)) {
         logger.release('Starting workspace app...');
         
         const pkg = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
@@ -386,10 +389,11 @@ async function startServer() {
           startCmd = `npm start`;
         }
 
-        let installCmd = 'npm install --no-audit --no-fund --prefer-offline && ';
+        // Add --no-progress and --loglevel=error to prevent massive stdout flooding which freezes the UI
+        let installCmd = 'npm install --no-audit --no-fund --prefer-offline --no-progress --loglevel=error && ';
         const nodeModulesPath = path.join(WORKSPACE_DIR, 'node_modules');
         
-        if (fsSync.existsSync(nodeModulesPath)) {
+        if (await fileExists(nodeModulesPath)) {
           const pkgStat = await fs.stat(packageJsonPath);
           const nmStat = await fs.stat(nodeModulesPath);
           
@@ -406,18 +410,35 @@ async function startServer() {
           env: { ...process.env, PORT: WORKSPACE_PORT.toString(), VITE_PORT: WORKSPACE_PORT.toString() }
         });
 
+        // Buffer logs to prevent WebSocket flooding (which freezes the frontend UI)
+        let logBuffer = '';
+        let logTimeout: NodeJS.Timeout | null = null;
+        const emitLogs = () => {
+          if (logBuffer) {
+            io.emit('workspace:log', logBuffer);
+            logBuffer = '';
+          }
+          logTimeout = null;
+        };
+
+        const queueLog = (data: string) => {
+          logBuffer += data;
+          if (!logTimeout) {
+            logTimeout = setTimeout(emitLogs, 100); // Emit at most once per 100ms
+          }
+        };
+
         workspaceProcess.stdout?.on('data', (data) => {
-          io.emit('workspace:log', data.toString());
-          logger.debug(`Workspace stdout: ${data}`);
+          queueLog(data.toString());
         });
 
         workspaceProcess.stderr?.on('data', (data) => {
-          io.emit('workspace:log', data.toString());
-          logger.debug(`Workspace stderr: ${data}`);
+          queueLog(data.toString());
         });
 
         workspaceProcess.on('close', (code) => {
-          io.emit('workspace:log', `Process exited with code ${code}`);
+          emitLogs(); // flush remaining
+          io.emit('workspace:log', `Process exited with code ${code}\n`);
           workspaceProcess = null;
         });
 
@@ -827,31 +848,13 @@ async function startServer() {
     }
   }
 
-  // Vite UI server for development
+  // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
-    logger.release('Starting Vite UI server in a separate process...');
-    const viteProcess = spawn('npx', ['vite', '--port', '5173', '--strictPort', '--clearScreen', 'false'], {
-      stdio: 'inherit',
-      shell: true
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
     });
-
-    viteProcess.on('error', (err) => {
-      logger.error('Failed to start Vite UI server', err);
-    });
-
-    // Proxy all non-API requests to the separate Vite process
-    app.use('/', createProxyMiddleware({
-      target: 'http://localhost:5173',
-      changeOrigin: true,
-      ws: true,
-      logLevel: 'silent',
-      onError: (err, req, res) => {
-        if ('writeHead' in res) {
-          res.writeHead(500, { 'Content-Type': 'text/plain' });
-          res.end('Vite UI server is starting or unavailable. Please wait...');
-        }
-      }
-    }));
+    app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
