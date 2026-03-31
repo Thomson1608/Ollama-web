@@ -540,7 +540,12 @@ When you write code, briefly explain your plan in the chat, then immediately use
         let errorMessage = 'Failed to pull model';
         try {
           const parsed = JSON.parse(errorData);
-          if (parsed.error) errorMessage = parsed.error;
+          if (parsed.error) {
+            errorMessage = parsed.error;
+            if (parsed.signin_url) {
+              errorMessage = `Model requires authentication or does not exist. Please check the model name or sign in: ${parsed.signin_url}`;
+            }
+          }
         } catch (e) {
           errorMessage = errorData || errorMessage;
         }
@@ -703,7 +708,12 @@ When you write code, briefly explain your plan in the chat, then immediately use
         let errorMessage = 'Failed to connect to AI service';
         try {
           const parsed = JSON.parse(errorData);
-          if (parsed.error) errorMessage = parsed.error;
+          if (parsed.error) {
+            errorMessage = parsed.error;
+            if (parsed.signin_url) {
+              errorMessage = `Model requires authentication or does not exist. Please check the model name or sign in: ${parsed.signin_url}`;
+            }
+          }
         } catch (e) {
           errorMessage = errorData || errorMessage;
         }
