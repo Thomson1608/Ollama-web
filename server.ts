@@ -568,13 +568,13 @@ async function startServer() {
     try {
       logger.release('Initiating system shutdown in 1 minute...');
       // Try with sudo first, fallback to without sudo. Include sbin paths.
-      const cmd = 'PATH=$PATH:/sbin:/usr/sbin sudo -n shutdown +1 || PATH=$PATH:/sbin:/usr/sbin shutdown +1';
+      const cmd = 'PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin sudo -n shutdown +1 || PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin sudo -n systemctl poweroff || PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin shutdown +1 || PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin systemctl poweroff';
       exec(cmd, (error, stdout, stderr) => {
         if (error) {
           logger.error('Failed to execute shutdown command', { error, stdout, stderr });
           return res.status(500).json({ 
             error: 'Failed to initiate shutdown', 
-            details: stderr || error.message 
+            details: 'Linux security requires root privileges to shut down from a background service. Please run the service as root, or add NOPASSWD sudo rights for the shutdown command.' 
           });
         }
         res.json({ success: true, message: 'System will shut down in 1 minute' });

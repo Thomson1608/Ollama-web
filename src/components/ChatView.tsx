@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Send, 
   Plus, 
@@ -9,7 +9,11 @@ import {
   FileText,
   Trash2,
   FolderSearch,
-  Loader2
+  Loader2,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -91,6 +95,102 @@ export const ChatView: React.FC<ChatViewProps> = ({
   connectionStatus,
   messagesEndRef
 }) => {
+  const [isListening, setIsListening] = useState(false);
+  const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const inputRef = useRef(input);
+
+  useEffect(() => {
+    inputRef.current = input;
+  }, [input]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = 'vi-VN'; 
+
+        recognitionRef.current.onresult = (event: any) => {
+          let finalTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            }
+          }
+          if (finalTranscript) {
+            setInput(inputRef.current + (inputRef.current && !inputRef.current.endsWith(' ') ? ' ' : '') + finalTranscript);
+          }
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+          console.error('Speech recognition error', event.error);
+          setIsListening(false);
+          if (event.error !== 'no-speech') {
+            toast.error('Lỗi nhận diện giọng nói: ' + event.error);
+          }
+        };
+
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      }
+    }
+    
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      window.speechSynthesis.cancel();
+    };
+  }, [setInput]);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      if (!recognitionRef.current) {
+        toast.error('Trình duyệt của bạn không hỗ trợ nhận diện giọng nói.');
+        return;
+      }
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+        toast.success('Đang nghe...');
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
+  const toggleSpeech = (text: string, index: number) => {
+    if (speakingMessageIndex === index) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageIndex(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    
+    // Clean up markdown and tool calls before speaking
+    const cleanText = text
+      .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+      .replace(/```[\s\S]*?```/g, 'Đoạn mã code.')
+      .replace(/[*_~`#]/g, '');
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.lang = 'vi-VN';
+    
+    utterance.onend = () => setSpeakingMessageIndex(null);
+    utterance.onerror = () => setSpeakingMessageIndex(null);
+    
+    setSpeakingMessageIndex(index);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const renderMessage = (content: string) => {
     // Split by complete tool calls
     const parts = content.split(/(<tool_call>[\s\S]*?<\/tool_call>)/g);
@@ -252,11 +352,20 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   {msg.role === 'user' ? 'U' : <Cpu size={16} />}
                 </div>
                 <div className={cn(
-                  "max-w-[85%] p-4 rounded-2xl",
+                  "max-w-[85%] p-4 rounded-2xl relative group/msg",
                   msg.role === 'user' 
                     ? "bg-blue-600 text-white rounded-tr-none" 
                     : "bg-white border border-gray-200 rounded-tl-none shadow-sm"
                 )}>
+                  {msg.role === 'assistant' && (
+                    <button
+                      onClick={() => toggleSpeech(msg.content, i)}
+                      className="absolute -right-10 top-2 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover/msg:opacity-100"
+                      title={speakingMessageIndex === i ? "Dừng đọc" : "Đọc tin nhắn"}
+                    >
+                      {speakingMessageIndex === i ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                    </button>
+                  )}
                   <div className={cn("markdown-body", msg.role === 'user' ? "text-white" : "text-gray-800")}>
                     {renderMessage(msg.content)}
                   </div>
@@ -313,15 +422,31 @@ export const ChatView: React.FC<ChatViewProps> = ({
             }
             disabled={!activeChatId || isLoading || isAiTypingGlobally}
             rows={1}
-            className="w-full bg-white border border-gray-200 rounded-2xl p-4 pr-14 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
+            className="w-full bg-white border border-gray-200 rounded-2xl p-4 pr-24 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
           />
-          <button
-            type="submit"
-            disabled={!input.trim() || isLoading || isAiTypingGlobally || !activeChatId}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl transition-all shadow-lg shadow-blue-200 disabled:shadow-none"
-          >
-            <Send size={18} />
-          </button>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={toggleListening}
+              disabled={!activeChatId || isLoading || isAiTypingGlobally}
+              className={cn(
+                "p-2 rounded-xl transition-all shadow-sm disabled:shadow-none disabled:bg-transparent disabled:text-gray-400",
+                isListening 
+                  ? "bg-red-100 text-red-600 hover:bg-red-200 animate-pulse" 
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              )}
+              title={isListening ? "Dừng ghi âm" : "Nhập bằng giọng nói"}
+            >
+              {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+            </button>
+            <button
+              type="submit"
+              disabled={!input.trim() || isLoading || isAiTypingGlobally || !activeChatId}
+              className="p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl transition-all shadow-lg shadow-blue-200 disabled:shadow-none"
+            >
+              <Send size={18} />
+            </button>
+          </div>
         </form>
       </div>
     </div>
