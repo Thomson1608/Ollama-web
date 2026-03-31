@@ -567,7 +567,7 @@ async function startServer() {
   app.post('/api/system/shutdown', (req, res) => {
     try {
       logger.release('Initiating system shutdown in 1 minute...');
-      exec('shutdown +1', (error, stdout, stderr) => {
+      exec('PATH=$PATH:/sbin:/usr/sbin shutdown +1', (error, stdout, stderr) => {
         if (error) {
           logger.error('Failed to execute shutdown command', error);
           return res.status(500).json({ error: 'Failed to initiate shutdown' });
