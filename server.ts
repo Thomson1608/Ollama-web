@@ -567,10 +567,15 @@ async function startServer() {
   app.post('/api/system/shutdown', (req, res) => {
     try {
       logger.release('Initiating system shutdown in 1 minute...');
-      exec('PATH=$PATH:/sbin:/usr/sbin shutdown +1', (error, stdout, stderr) => {
+      // Try with sudo first, fallback to without sudo. Include sbin paths.
+      const cmd = 'PATH=$PATH:/sbin:/usr/sbin sudo -n shutdown +1 || PATH=$PATH:/sbin:/usr/sbin shutdown +1';
+      exec(cmd, (error, stdout, stderr) => {
         if (error) {
-          logger.error('Failed to execute shutdown command', error);
-          return res.status(500).json({ error: 'Failed to initiate shutdown' });
+          logger.error('Failed to execute shutdown command', { error, stdout, stderr });
+          return res.status(500).json({ 
+            error: 'Failed to initiate shutdown', 
+            details: stderr || error.message 
+          });
         }
         res.json({ success: true, message: 'System will shut down in 1 minute' });
       });
