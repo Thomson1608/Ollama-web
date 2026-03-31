@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code, ChevronRight, ChevronDown, History, ArrowLeft } from 'lucide-react';
+import { Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code, ChevronRight, ChevronDown, History, ArrowLeft, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { WorkspaceFile } from '../types';
 import { toast } from 'sonner';
@@ -27,6 +27,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   const [previewKey, setPreviewKey] = useState(0);
   const [logs, setLogs] = useState<string[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const [isConsoleOpen, setIsConsoleOpen] = useState(true);
   
   // History state
   const [history, setHistory] = useState<any[]>([]);
@@ -508,33 +509,55 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                 </button>
               </div>
             </div>
-            <div className="flex-1 p-6 overflow-hidden flex flex-col gap-4">
+            <div className="flex-1 p-6 overflow-hidden flex flex-col gap-4 relative">
               <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                 <iframe 
                   key={previewKey}
-                  src={previewType === 'node' ? '/workspace-preview/' : (selectedFile?.endsWith('.html') ? `/preview/${selectedFile.split('/').map(encodeURIComponent).join('/')}` : '/preview/index.html')} 
+                  src={previewType === 'node' ? `/workspace-preview/?t=${previewKey}` : (selectedFile?.endsWith('.html') ? `/preview/${selectedFile.split('/').map(encodeURIComponent).join('/')}?t=${previewKey}` : `/preview/index.html?t=${previewKey}`)} 
                   className="w-full h-full border-none bg-white"
                   title="Web Preview"
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                 />
               </div>
-              <div className="h-48 bg-gray-900 rounded-xl shadow-inner overflow-hidden flex flex-col">
-                <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
-                  <span className="text-xs font-mono text-gray-400">Terminal Output</span>
-                  <button 
-                    onClick={() => setLogs([])}
-                    className="text-xs text-gray-500 hover:text-gray-300"
-                  >
-                    Clear
-                  </button>
+              
+              {!isConsoleOpen && (
+                <button
+                  onClick={() => setIsConsoleOpen(true)}
+                  className="absolute bottom-10 right-10 bg-gray-900 text-white px-4 py-2 rounded-xl shadow-xl text-xs font-medium flex items-center gap-2 hover:bg-gray-800 transition-all border border-gray-700 z-10"
+                >
+                  <Code size={14} />
+                  Show Console
+                </button>
+              )}
+
+              {isConsoleOpen && (
+                <div className="h-48 bg-gray-900 rounded-xl shadow-inner overflow-hidden flex flex-col shrink-0">
+                  <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+                    <span className="text-xs font-mono text-gray-400">Terminal Output</span>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => setLogs([])}
+                        className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                      >
+                        Clear
+                      </button>
+                      <button 
+                        onClick={() => setIsConsoleOpen(false)}
+                        className="text-gray-500 hover:text-white transition-colors"
+                        title="Close Console"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 p-4 overflow-y-auto font-mono text-xs text-green-400 whitespace-pre-wrap">
+                    {logs.map((log, i) => (
+                      <div key={i}>{log}</div>
+                    ))}
+                    <div ref={logsEndRef} />
+                  </div>
                 </div>
-                <div className="flex-1 p-4 overflow-y-auto font-mono text-xs text-green-400 whitespace-pre-wrap">
-                  {logs.map((log, i) => (
-                    <div key={i}>{log}</div>
-                  ))}
-                  <div ref={logsEndRef} />
-                </div>
-              </div>
+              )}
             </div>
           </div>
         ) : (
