@@ -848,7 +848,7 @@ async function startServer() {
 
   // Chat with streaming
   app.post('/api/ollama/chat', async (req, res) => {
-    const { chatId, messages, model } = req.body;
+    const { chatId, messages, model, parameters } = req.body;
     
     await updateStats('sent');
 
@@ -856,11 +856,26 @@ async function startServer() {
     
     // Original Ollama logic
     try {
-      const requestBody = {
+      const options: any = {};
+      if (parameters) {
+        if (parameters.temperature !== undefined) options.temperature = parameters.temperature;
+        if (parameters.topP !== undefined) options.top_p = parameters.topP;
+        if (parameters.topK !== undefined) options.top_k = parameters.topK;
+        if (parameters.maxTokens !== undefined) options.num_predict = parameters.maxTokens;
+        if (parameters.stop !== undefined) options.stop = parameters.stop;
+      }
+
+      const requestBody: any = {
         model,
         messages,
         stream: true,
+        options,
       };
+
+      if (parameters?.jsonMode) {
+        requestBody.format = 'json';
+      }
+
       logger.debug(`[CHAT_DEBUG] Request to model ${model}:`, requestBody);
 
       const response = await fetch(`${OLLAMA_URL}/api/chat`, {

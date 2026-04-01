@@ -13,6 +13,7 @@ import { ModelsView } from './components/ModelsView';
 import { PullView } from './components/PullView';
 import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
+import { ModelSettingsSidebar } from './components/ModelSettingsSidebar';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall } from './types';
 
 export default function App() {
@@ -77,6 +78,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
   const [modelFilter, setModelFilter] = useState<'local' | 'cloud-local'>('local');
+  const [showSettingsSidebar, setShowSettingsSidebar] = useState(false);
 
   const allOllamaModels = [
     'llama3.2', 'llama3.1', 'llama3', 'llama2', 'mistral', 'mistral-nemo', 'mixtral',
@@ -749,6 +751,8 @@ When you write code, briefly explain your plan in the chat, then immediately use
       });
     }
 
+    const currentChat = chats.find(c => c.id === currentChatId);
+
     // Create new abort controller for this chat
     chatAbortController.current = new AbortController();
 
@@ -759,10 +763,12 @@ When you write code, briefly explain your plan in the chat, then immediately use
         body: JSON.stringify({
           chatId: currentChatId,
           model: selectedModel,
+          systemPrompt: currentChat?.systemPrompt || systemPrompt,
+          parameters: currentChat?.parameters,
           messages: [
             { 
               role: 'system', 
-              content: `${systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}` 
+              content: `${currentChat?.systemPrompt || systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}` 
             },
             ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: messageContent }
@@ -846,6 +852,14 @@ When you write code, briefly explain your plan in the chat, then immediately use
     toast.success('Settings saved');
   };
 
+  const updateChatParameters = (chatId: string, parameters: any) => {
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, parameters } : c));
+  };
+
+  const updateChatSystemPrompt = (chatId: string, systemPrompt: string) => {
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, systemPrompt } : c));
+  };
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#f5f5f5]">
       <Toaster position="top-center" />
@@ -881,82 +895,96 @@ When you write code, briefly explain your plan in the chat, then immediately use
           isBusy={isLoading || generatingChatIds.size > 0}
         />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {currentView === 'chat' && (
-            <div className="flex h-full overflow-hidden">
-              <div className="flex-1">
-                <ChatView 
-                  activeChatId={activeChatId}
-                  activeChat={activeChat}
-                  isLoading={isLoading || (activeChatId ? generatingChatIds.has(activeChatId) : false)}
-                  isAiTypingGlobally={activeChatId ? generatingChatIds.has(activeChatId) && !isLoading : false}
-                  isGloballyBusy={generatingChatIds.size > 0}
-                  input={input}
-                  setInput={setInput}
-                  handleSendMessage={handleSendMessage}
-                  createNewChat={createNewChat}
+        <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {currentView === 'chat' && (
+              <div className="flex h-full overflow-hidden">
+                <div className="flex-1">
+                  <ChatView 
+                    activeChatId={activeChatId}
+                    activeChat={activeChat}
+                    isLoading={isLoading || (activeChatId ? generatingChatIds.has(activeChatId) : false)}
+                    isAiTypingGlobally={activeChatId ? generatingChatIds.has(activeChatId) && !isLoading : false}
+                    isGloballyBusy={generatingChatIds.size > 0}
+                    input={input}
+                    setInput={setInput}
+                    handleSendMessage={handleSendMessage}
+                    createNewChat={createNewChat}
+                    connectionStatus={connectionStatus}
+                    messagesEndRef={messagesEndRef}
+                    showSettingsSidebar={showSettingsSidebar}
+                    setShowSettingsSidebar={setShowSettingsSidebar}
+                    onUpdateSystemPrompt={(prompt) => activeChatId && updateChatSystemPrompt(activeChatId, prompt)}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {currentView === 'models' && (
+              <div className="flex-1 overflow-y-auto bg-gray-50/30">
+                <ModelsView 
+                  models={models}
+                  runningModels={runningModels}
                   connectionStatus={connectionStatus}
-                  messagesEndRef={messagesEndRef}
+                  modelSearchQuery={modelSearchQuery}
+                  setModelSearchQuery={setModelSearchQuery}
+                  deleteModel={deleteModel}
+                  setSelectedModel={setSelectedModel}
+                  setCurrentView={setCurrentView}
+                  activeChatId={activeChatId}
+                  createNewChat={createNewChat}
+                  formatSize={formatSize}
+                  modelFilter={modelFilter}
+                  setModelFilter={setModelFilter}
+                  popularModels={popularModels}
                 />
               </div>
-            </div>
-          )}
-          
-          {currentView === 'models' && (
-            <div className="flex-1 overflow-y-auto bg-gray-50/30">
-              <ModelsView 
-                models={models}
-                runningModels={runningModels}
+            )}
+
+            {currentView === 'pull' && (
+              <div className="flex-1 overflow-y-auto bg-gray-50/30">
+                <PullView 
+                  newModelName={newModelName}
+                  setNewModelName={setNewModelName}
+                  pullModel={pullModel}
+                  pullingModel={pullingModel}
+                  cancelPull={cancelPull}
+                  showSuggestions={showSuggestions}
+                  setShowSuggestions={setShowSuggestions}
+                  suggestions={suggestions}
+                  popularModels={popularModels}
+                  modelFilter={modelFilter}
+                  setModelFilter={setModelFilter}
+                />
+              </div>
+            )}
+
+            {currentView === 'workspace' && (
+              <WorkspaceView 
+                refreshTrigger={workspaceRefreshTrigger} 
+                socket={socketRef.current} 
+                isMobile={isMobile}
+              />
+            )}
+
+            {currentView === 'settings' && (
+              <SettingsView 
+                systemPrompt={systemPrompt}
+                setSystemPrompt={setSystemPrompt}
+                memory={memory}
+                clearMemory={clearMemory}
+                saveSettings={saveSettings}
                 connectionStatus={connectionStatus}
-                modelSearchQuery={modelSearchQuery}
-                setModelSearchQuery={setModelSearchQuery}
-                deleteModel={deleteModel}
-                setSelectedModel={setSelectedModel}
-                setCurrentView={setCurrentView}
-                activeChatId={activeChatId}
-                createNewChat={createNewChat}
-                formatSize={formatSize}
-                modelFilter={modelFilter}
-                setModelFilter={setModelFilter}
-                popularModels={popularModels}
               />
-            </div>
-          )}
+            )}
+          </div>
 
-          {currentView === 'pull' && (
-            <div className="flex-1 overflow-y-auto bg-gray-50/30">
-              <PullView 
-                newModelName={newModelName}
-                setNewModelName={setNewModelName}
-                pullModel={pullModel}
-                pullingModel={pullingModel}
-                cancelPull={cancelPull}
-                showSuggestions={showSuggestions}
-                setShowSuggestions={setShowSuggestions}
-                suggestions={suggestions}
-                popularModels={popularModels}
-                modelFilter={modelFilter}
-                setModelFilter={setModelFilter}
-              />
-            </div>
-          )}
-
-          {currentView === 'workspace' && (
-            <WorkspaceView 
-              refreshTrigger={workspaceRefreshTrigger} 
-              socket={socketRef.current} 
-              isMobile={isMobile}
-            />
-          )}
-
-          {currentView === 'settings' && (
-            <SettingsView 
-              systemPrompt={systemPrompt}
-              setSystemPrompt={setSystemPrompt}
-              memory={memory}
-              clearMemory={clearMemory}
-              saveSettings={saveSettings}
-              connectionStatus={connectionStatus}
+          {currentView === 'chat' && activeChatId && (
+            <ModelSettingsSidebar 
+              isOpen={showSettingsSidebar}
+              onClose={() => setShowSettingsSidebar(false)}
+              parameters={activeChat?.parameters || {}}
+              onUpdateParameters={(params) => updateChatParameters(activeChatId, params)}
             />
           )}
         </div>

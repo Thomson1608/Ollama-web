@@ -13,7 +13,9 @@ import {
   Mic,
   MicOff,
   Volume2,
-  VolumeX
+  VolumeX,
+  Settings2,
+  ChevronDown
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -33,6 +35,9 @@ interface ChatViewProps {
   createNewChat: () => void;
   connectionStatus: ConnectionStatus;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  showSettingsSidebar: boolean;
+  setShowSettingsSidebar: (show: boolean) => void;
+  onUpdateSystemPrompt: (prompt: string) => void;
 }
 
 const ToolCallRenderer = ({ toolCall }: { toolCall: any }) => {
@@ -86,10 +91,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
   handleSendMessage,
   createNewChat,
   connectionStatus,
-  messagesEndRef
+  messagesEndRef,
+  showSettingsSidebar,
+  setShowSettingsSidebar,
+  onUpdateSystemPrompt
 }) => {
   const [isListening, setIsListening] = useState(false);
   const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
+  const [isSystemPromptExpanded, setIsSystemPromptExpanded] = useState(false);
   const recognitionRef = useRef<any>(null);
   const inputRef = useRef(input);
 
@@ -321,7 +330,68 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col relative">
+      {/* Chat Header / System Prompt */}
+      {activeChatId && (
+        <div className="bg-white border-b border-gray-100 px-4 py-2 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+          <div className="flex-1 flex items-center gap-3 overflow-hidden">
+            <button 
+              onClick={() => setIsSystemPromptExpanded(!isSystemPromptExpanded)}
+              className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-gray-800 transition-colors shrink-0"
+            >
+              <div className={cn(
+                "w-6 h-6 rounded bg-blue-50 flex items-center justify-center text-blue-600 transition-transform",
+                isSystemPromptExpanded && "rotate-180"
+              )}>
+                <ChevronDown size={14} />
+              </div>
+              System Instruction
+            </button>
+            {!isSystemPromptExpanded && (
+              <span className="text-xs text-gray-400 truncate italic">
+                {activeChat?.systemPrompt || "Default system instructions active..."}
+              </span>
+            )}
+          </div>
+          <button 
+            onClick={() => setShowSettingsSidebar(!showSettingsSidebar)}
+            className={cn(
+              "p-2 rounded-lg transition-all shrink-0",
+              showSettingsSidebar ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            )}
+            title="Model Settings"
+          >
+            <Settings2 size={20} />
+          </button>
+        </div>
+      )}
+
+      {/* Expanded System Prompt */}
+      {activeChatId && isSystemPromptExpanded && (
+        <motion.div 
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          className="bg-gray-50 border-b border-gray-200 overflow-hidden"
+        >
+          <div className="p-4 max-w-3xl mx-auto">
+            <textarea
+              value={activeChat?.systemPrompt || ''}
+              onChange={(e) => onUpdateSystemPrompt(e.target.value)}
+              placeholder="Enter system instructions to guide the model's behavior..."
+              className="w-full h-32 bg-white border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all resize-none font-mono"
+            />
+            <div className="flex justify-end mt-2">
+              <button 
+                onClick={() => setIsSystemPromptExpanded(false)}
+                className="text-xs font-bold text-blue-600 hover:text-blue-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-2 md:p-6 space-y-4 md:space-y-6">
         {!activeChatId ? (
           <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4 md:space-y-6 px-4">

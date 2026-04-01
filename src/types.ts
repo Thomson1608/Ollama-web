@@ -15,6 +15,15 @@ export interface Chat {
   messages: Message[];
   model: string;
   createdAt: number;
+  systemPrompt?: string;
+  parameters?: {
+    temperature?: number;
+    topP?: number;
+    topK?: number;
+    maxTokens?: number;
+    stop?: string[];
+    jsonMode?: boolean;
+  };
 }
 
 export interface OllamaModel {
