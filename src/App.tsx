@@ -155,6 +155,59 @@ When you write code, briefly explain your plan in the chat, then immediately use
       console.log('Socket.io: Connected to server with ID:', socket.id);
     });
 
+    socket.on('chat:active_generations', (activeGenerations) => {
+      console.log('Socket.io: chat:active_generations event received:', activeGenerations);
+      if (activeGenerations.length > 0) {
+        setIsAiTypingGlobally(true);
+        activeGenerations.forEach((gen: any) => {
+          setChats(prev => {
+            const chat = prev.find(c => c.id === gen.chatId);
+            if (chat) {
+              const lastMsg = chat.messages[chat.messages.length - 1];
+              const alreadyHasUserMsg = lastMsg && lastMsg.role === 'user' && lastMsg.content === gen.userMessage.content;
+              const hasAssistantMsg = chat.messages.some(m => m.role === 'assistant' && m.timestamp === gen.assistantMessage.timestamp);
+              
+              if (hasAssistantMsg) {
+                // Update the existing assistant message with the current content
+                return prev.map(c => 
+                  c.id === gen.chatId 
+                    ? { 
+                        ...c, 
+                        messages: c.messages.map(m => 
+                          (m.role === 'assistant' && m.timestamp === gen.assistantMessage.timestamp)
+                            ? { ...m, content: gen.assistantMessage.content }
+                            : m
+                        )
+                      }
+                    : c
+                );
+              }
+
+              return prev.map(c => 
+                c.id === gen.chatId 
+                  ? { 
+                      ...c, 
+                      messages: alreadyHasUserMsg 
+                        ? [...c.messages, gen.assistantMessage] 
+                        : [...c.messages, gen.userMessage, gen.assistantMessage] 
+                    }
+                  : c
+              );
+            } else {
+              const newChat: Chat = {
+                id: gen.chatId,
+                title: gen.userMessage.content.slice(0, 30) + (gen.userMessage.content.length > 30 ? '...' : ''),
+                messages: [gen.userMessage, gen.assistantMessage],
+                model: gen.model,
+                createdAt: Date.now(),
+              };
+              return [newChat, ...prev];
+            }
+          });
+        });
+      }
+    });
+
     socket.on('chat:start', ({ chatId, userMessage, assistantMessage, model }) => {
       console.log('Socket.io: chat:start event received for chat:', chatId);
       

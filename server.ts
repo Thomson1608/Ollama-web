@@ -160,6 +160,14 @@ async function cleanupOldChats() {
   }
 }
 
+interface ActiveGeneration {
+  chatId: string;
+  model: string;
+  userMessage: any;
+  assistantMessage: any;
+}
+const activeGenerations = new Map<string, ActiveGeneration>();
+
 async function startServer() {
   await ensureDataDir();
   await cleanupOldChats();
@@ -202,6 +210,11 @@ async function startServer() {
       handshake: socket.handshake,
       address: socket.handshake.address
     });
+
+    const active = Array.from(activeGenerations.values());
+    if (active.length > 0) {
+      socket.emit('chat:active_generations', active);
+    }
 
     socket.on('disconnect', (reason) => {
       logger.release(`Socket.io: Client disconnected: ${socket.id} (Reason: ${reason})`);
@@ -674,12 +687,22 @@ async function startServer() {
       let buffer = '';
       const decoder = new TextDecoder();
       
+      const userMessage = messages[messages.length - 1];
+      const assistantMessage = { role: 'assistant', content: '', timestamp: Date.now() };
+
+      activeGenerations.set(chatId, {
+        chatId,
+        model,
+        userMessage,
+        assistantMessage
+      });
+
       // Emit start event via Socket.io
       io.emit('chat:start', {
         chatId,
         model,
-        userMessage: messages[messages.length - 1],
-        assistantMessage: { role: 'assistant', content: '', timestamp: Date.now() }
+        userMessage,
+        assistantMessage
       });
       io.emit('chat:status', { loading: true });
 
@@ -692,6 +715,8 @@ async function startServer() {
               const json = JSON.parse(buffer);
               if (json.message?.content) {
                 assistantContent += json.message.content;
+                const gen = activeGenerations.get(chatId);
+                if (gen) gen.assistantMessage.content = assistantContent;
                 io.emit('chat:chunk', { chatId, chunk: json.message.content });
               }
             } catch (e) {
@@ -739,6 +764,8 @@ async function startServer() {
             if (json.message?.content) {
               const contentChunk = json.message.content;
               assistantContent += contentChunk;
+              const gen = activeGenerations.get(chatId);
+              if (gen) gen.assistantMessage.content = assistantContent;
               
               // Emit chunk via Socket.io
               io.emit('chat:chunk', { chatId, chunk: contentChunk });
@@ -783,6 +810,7 @@ async function startServer() {
       }
 
       // Emit end event via Socket.io
+      activeGenerations.delete(chatId);
       io.emit('chat:end', { chatId, finalContent: assistantContent });
       io.emit('chat:status', { loading: false });
       logger.release(`Ollama Proxy: Chat session complete for ${chatId}`);
@@ -795,6 +823,7 @@ async function startServer() {
       extractMemory(chatId, model, messages);
       
     } catch (error) {
+      activeGenerations.delete(chatId);
       logger.error('Ollama Chat Error:', error);
       await updateStats('fail');
       io.emit('chat:status', { loading: false });
