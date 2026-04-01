@@ -6,8 +6,13 @@ interface LoginViewProps {
   onLogin: (username: string) => void;
 }
 
+interface UserProfile {
+  username: string;
+  role: string;
+}
+
 export function LoginView({ onLogin }: LoginViewProps) {
-  const [users, setUsers] = useState<string[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [newUsername, setNewUsername] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -79,15 +84,22 @@ export function LoginView({ onLogin }: LoginViewProps) {
                 <div className="grid grid-cols-1 gap-2">
                   {users.map(user => (
                     <button
-                      key={user}
-                      onClick={() => onLogin(user)}
+                      key={user.username}
+                      onClick={() => onLogin(user.username)}
                       className="flex items-center justify-between p-3 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all group"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center group-hover:bg-blue-100">
                           <User className="w-4 h-4 text-gray-600 group-hover:text-blue-600" />
                         </div>
-                        <span className="font-medium text-gray-700 group-hover:text-blue-700">{user}</span>
+                        <div className="flex flex-col items-start">
+                          <span className="font-medium text-gray-700 group-hover:text-blue-700">{user.username}</span>
+                          {user.role === 'admin' && (
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full mt-0.5">
+                              Admin
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <LogIn className="w-4 h-4 text-gray-400 group-hover:text-blue-600" />
                     </button>

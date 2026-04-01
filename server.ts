@@ -31,7 +31,8 @@ function getUserPaths(username: string) {
     chats: path.join(userDir, 'chats.json'),
     config: path.join(userDir, 'config.json'),
     memory: path.join(userDir, 'memory.json'),
-    workspace: path.join(userDir, 'workspace')
+    workspace: path.join(userDir, 'workspace'),
+    profile: path.join(userDir, 'profile.json')
   };
 }
 
@@ -93,7 +94,8 @@ async function ensureUserDir(username: string) {
         systemPrompt: `You are a helpful assistant for ${username}.`,
         parameters: { temperature: 0.7, topP: 0.9, topK: 40 }
       } },
-      { path: paths.memory, default: { profile: `User: ${username}`, facts: [] } }
+      { path: paths.memory, default: { profile: `User: ${username}`, facts: [] } },
+      { path: paths.profile, default: { role: username === 'admin' ? 'admin' : 'user' } }
     ];
 
     for (const file of files) {
@@ -124,10 +126,18 @@ async function ensureUserDir(username: string) {
   }
 }
 
+async function initializeDefaultUsers() {
+  const defaultUsers = ['admin', 'Thompson', 'BuPro', 'Khanh', 'Bao'];
+  for (const user of defaultUsers) {
+    await ensureUserDir(user);
+  }
+}
+
 async function ensureDataDir() {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
     await fs.mkdir(USERS_DIR, { recursive: true });
+    await initializeDefaultUsers();
   } catch (e) {}
 
   try {
@@ -247,7 +257,18 @@ async function startServer() {
   app.get('/api/users', async (req, res) => {
     try {
       const users = await fs.readdir(USERS_DIR);
-      res.json(users);
+      const usersWithRoles = await Promise.all(users.map(async (username) => {
+        const paths = getUserPaths(username);
+        let role = 'user';
+        try {
+          const profileData = await fs.readFile(paths.profile, 'utf-8');
+          role = JSON.parse(profileData).role || 'user';
+        } catch (e) {
+          // Ignore if profile doesn't exist yet
+        }
+        return { username, role };
+      }));
+      res.json(usersWithRoles);
     } catch (error) {
       res.status(500).json({ error: 'Failed to list users' });
     }
