@@ -24,34 +24,46 @@ CRITICAL DIRECTIVE:
 1. NEVER just output code blocks in the chat.
 2. ALWAYS use the write_file tool to create or update files in the workspace.
 3. The user wants to see the code directly in their workspace, not in the chat window.
-4. If you are creating multiple files, use multiple <tool_call> tags in sequence.
+4. If you are creating multiple files, use multiple tool calls in sequence.
 5. The workspace supports a "Web View" feature. If the user asks to build a web app, you can create a full Node.js project (with package.json) or a static HTML project. The system will automatically run \`npm install\` and \`npm run dev\` if a package.json is present.
 
 Use the following tools to assist the user with coding tasks:
 
 1. list_files: List all files in the workspace.
-   Usage: <tool_call>{"tool": "list_files", "args": {}}</tool_call>
+   Usage:
+   \`\`\`json
+   {"tool": "list_files", "args": {}}
+   \`\`\`
 
 2. read_file: Read the content of a specific file.
-   Usage: <tool_call>{"tool": "read_file", "args": {"name": "filename.txt"}}</tool_call>
+   Usage:
+   \`\`\`json
+   {"tool": "read_file", "args": {"name": "filename.txt"}}
+   \`\`\`
 
 3. write_file: Write content to a file (creates or overwrites).
-   Usage: <tool_call>{"tool": "write_file", "args": {"name": "filename.txt", "content": "file content here"}}</tool_call>
+   Usage:
+   \`\`\`json
+   {"tool": "write_file", "args": {"name": "filename.txt", "content": "file content here"}}
+   \`\`\`
 
 4. delete_file: Delete a file from the workspace.
-   Usage: <tool_call>{"tool": "delete_file", "args": {"name": "filename.txt"}}</tool_call>
+   Usage:
+   \`\`\`json
+   {"tool": "delete_file", "args": {"name": "filename.txt"}}
+   \`\`\`
 
-When you write code, briefly explain your plan in the chat, then immediately use the <tool_call> tag(s). The files will appear in the workspace on the right side of the screen.`);
+When you write code, briefly explain your plan in the chat, then immediately use the tool call(s). The files will appear in the workspace on the right side of the screen.`);
   const [memory, setMemory] = useState<Memory>({ facts: [] });
   const [isSyncing, setIsSyncing] = useState(false);
   const isRemoteUpdate = useRef(false);
   const isRemoteConfigUpdate = useRef(false);
-  const isInitialized = useRef(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>('chat');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isAiTypingGlobally, setIsAiTypingGlobally] = useState(false);
+  const [generatingChatIds, setGeneratingChatIds] = useState<Set<string>>(new Set());
   const [pullingModel, setPullingModel] = useState<{ name: string; progress: number; status: string } | null>(null);
   const [models, setModels] = useState<OllamaModel[]>([]);
   const [runningModels, setRunningModels] = useState<RunningModel[]>([]);
@@ -114,35 +126,10 @@ When you write code, briefly explain your plan in the chat, then immediately use
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Sync isAiTypingGlobally across tabs using Socket.io
-  useEffect(() => {
-    if (!socketRef.current) return;
-    
-    const socket = socketRef.current;
-    
-    socket.on('chat:status', ({ loading }) => {
-      console.log('Socket.io: chat:status event received:', loading);
-      setIsAiTypingGlobally(loading);
-    });
-
-    return () => {
-      socket.off('chat:status');
-    };
-  }, [socketRef.current]);
-
-  // Reset global loading on tab close if this tab was the one loading
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (isLoading && socketRef.current) {
-        socketRef.current.emit('chat:status', { loading: false });
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isLoading]);
-
   // Socket.io initialization
   useEffect(() => {
+    if (!isInitialized) return;
+
     console.log('Socket.io: Initializing client...');
     // Use explicit path if needed, but usually default works
     const socket = io({
@@ -152,6 +139,18 @@ When you write code, briefly explain your plan in the chat, then immediately use
     });
     socketRef.current = socket;
 
+    socket.on('chat:status', ({ loading, chatId }) => {
+      console.log('Socket.io: chat:status event received:', loading, chatId);
+      if (chatId) {
+        setGeneratingChatIds(prev => {
+          const next = new Set(prev);
+          if (loading) next.add(chatId);
+          else next.delete(chatId);
+          return next;
+        });
+      }
+    });
+
     socket.on('connect', () => {
       console.log('Socket.io: Connected to server with ID:', socket.id);
     });
@@ -159,7 +158,11 @@ When you write code, briefly explain your plan in the chat, then immediately use
     socket.on('chat:active_generations', (activeGenerations) => {
       console.log('Socket.io: chat:active_generations event received:', activeGenerations);
       if (activeGenerations.length > 0) {
-        setIsAiTypingGlobally(true);
+        setGeneratingChatIds(prev => {
+          const next = new Set(prev);
+          activeGenerations.forEach((gen: any) => next.add(gen.chatId));
+          return next;
+        });
         activeGenerations.forEach((gen: any) => {
           setChats(prev => {
             const chat = prev.find(c => c.id === gen.chatId);
@@ -213,7 +216,11 @@ When you write code, briefly explain your plan in the chat, then immediately use
       console.log('Socket.io: chat:start event received for chat:', chatId);
       
       // Sync typing status globally
-      setIsAiTypingGlobally(true);
+      setGeneratingChatIds(prev => {
+        const next = new Set(prev);
+        next.add(chatId);
+        return next;
+      });
 
       setChats(prev => {
         const chat = prev.find(c => c.id === chatId);
@@ -247,7 +254,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
           return [newChat, ...prev];
         }
       });
-      setIsAiTypingGlobally(true);
     });
 
     socket.on('chat:chunk', ({ chatId, chunk }) => {
@@ -267,7 +273,11 @@ When you write code, briefly explain your plan in the chat, then immediately use
 
     socket.on('chat:end', ({ chatId, finalContent }) => {
       console.log('Socket.io: chat:end event received for chat:', chatId);
-      setIsAiTypingGlobally(false);
+      setGeneratingChatIds(prev => {
+        const next = new Set(prev);
+        next.delete(chatId);
+        return next;
+      });
       
       // Sync final content
       if (finalContent) {
@@ -337,7 +347,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
       console.log('Socket.io: Disconnecting client...');
       socket.disconnect();
     };
-  }, []);
+  }, [isInitialized]);
 
   // Handle model switch during loading
   useEffect(() => {
@@ -408,7 +418,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
       } finally {
-        isInitialized.current = true;
+        setIsInitialized(true);
       }
     };
     fetchInitialData();
@@ -416,10 +426,10 @@ When you write code, briefly explain your plan in the chat, then immediately use
 
   // Sync to backend whenever chats change
   useEffect(() => {
-    if (!isInitialized.current) return;
+    if (!isInitialized) return;
 
-    // Don't sync if it's a remote update
-    if (isRemoteUpdate.current) {
+    // Don't sync if it's a remote update or if any chat is generating
+    if (isRemoteUpdate.current || generatingChatIds.size > 0) {
       isRemoteUpdate.current = false;
       return;
     }
@@ -441,11 +451,11 @@ When you write code, briefly explain your plan in the chat, then immediately use
 
     const timeoutId = setTimeout(syncChats, 1000); // Debounce sync
     return () => clearTimeout(timeoutId);
-  }, [chats]);
+  }, [chats, isInitialized, generatingChatIds.size]);
 
   // Sync config to backend
   useEffect(() => {
-    if (!isInitialized.current) return;
+    if (!isInitialized) return;
 
     // Don't sync if it's a remote update
     if (isRemoteConfigUpdate.current) {
@@ -467,7 +477,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
     
     const timeoutId = setTimeout(syncConfig, 1000);
     return () => clearTimeout(timeoutId);
-  }, [systemPrompt]);
+  }, [systemPrompt, isInitialized]);
 
   useEffect(() => {
     checkConnection();
@@ -494,11 +504,17 @@ When you write code, briefly explain your plan in the chat, then immediately use
       if (!isModelRunning) {
         // Model crashed!
         setIsLoading(false);
-        setIsAiTypingGlobally(false);
+        if (activeChatId) {
+          setGeneratingChatIds(prev => {
+            const next = new Set(prev);
+            next.delete(activeChatId);
+            return next;
+          });
+        }
         toast.error('Model stopped unexpectedly.');
       }
     }
-  }, [isLoading, runningModels, selectedModel]);
+  }, [isLoading, runningModels, selectedModel, activeChatId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -688,7 +704,8 @@ When you write code, briefly explain your plan in the chat, then immediately use
     e?.preventDefault();
     
     const messageContent = isRetry ? lastUserMessageRef.current : input.trim();
-    if (!messageContent || ((isLoading || isAiTypingGlobally) && !isRetry) || !selectedModel) return;
+    const isGloballyTyping = generatingChatIds.size > 0;
+    if (!messageContent || ((isLoading || isGloballyTyping) && !isRetry) || !selectedModel) return;
 
     if (!isRetry) {
       lastUserMessageRef.current = messageContent;
@@ -724,7 +741,13 @@ When you write code, briefly explain your plan in the chat, then immediately use
     }
     
     setIsLoading(true);
-    setIsAiTypingGlobally(true);
+    if (currentChatId) {
+      setGeneratingChatIds(prev => {
+        const next = new Set(prev);
+        next.add(currentChatId);
+        return next;
+      });
+    }
 
     // Create new abort controller for this chat
     chatAbortController.current = new AbortController();
@@ -786,7 +809,13 @@ When you write code, briefly explain your plan in the chat, then immediately use
       console.error(error);
     } finally {
       setIsLoading(false);
-      setIsAiTypingGlobally(false);
+      if (currentChatId) {
+        setGeneratingChatIds(prev => {
+          const next = new Set(prev);
+          next.delete(currentChatId);
+          return next;
+        });
+      }
     }
   };
 
@@ -849,7 +878,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
           connectionStatus={connectionStatus}
           checkConnection={checkConnection}
           setShowSettings={() => setCurrentView('settings')}
-          isBusy={isLoading || isAiTypingGlobally}
+          isBusy={isLoading || generatingChatIds.size > 0}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -859,8 +888,9 @@ When you write code, briefly explain your plan in the chat, then immediately use
                 <ChatView 
                   activeChatId={activeChatId}
                   activeChat={activeChat}
-                  isLoading={isLoading || isAiTypingGlobally}
-                  isAiTypingGlobally={isAiTypingGlobally && !isLoading}
+                  isLoading={isLoading || (activeChatId ? generatingChatIds.has(activeChatId) : false)}
+                  isAiTypingGlobally={activeChatId ? generatingChatIds.has(activeChatId) && !isLoading : false}
+                  isGloballyBusy={generatingChatIds.size > 0}
                   input={input}
                   setInput={setInput}
                   handleSendMessage={handleSendMessage}

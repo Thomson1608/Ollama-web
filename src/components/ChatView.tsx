@@ -26,6 +26,7 @@ interface ChatViewProps {
   activeChat: Chat | undefined;
   isLoading: boolean;
   isAiTypingGlobally?: boolean;
+  isGloballyBusy?: boolean;
   input: string;
   setInput: (input: string) => void;
   handleSendMessage: (e?: React.FormEvent) => void;
@@ -34,17 +35,8 @@ interface ChatViewProps {
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
-const ToolCallRenderer = ({ content }: { content: string }) => {
+const ToolCallRenderer = ({ toolCall }: { toolCall: any }) => {
   try {
-    const match = content.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
-    if (!match) return null;
-    
-    let jsonString = match[1].trim();
-    if (jsonString.startsWith('```')) {
-      jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    }
-    
-    const toolCall = JSON.parse(jsonString);
     const tool = toolCall.tool;
     const args = toolCall.args;
     
@@ -88,6 +80,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   activeChat,
   isLoading,
   isAiTypingGlobally,
+  isGloballyBusy,
   input,
   setInput,
   handleSendMessage,
@@ -197,7 +190,18 @@ export const ChatView: React.FC<ChatViewProps> = ({
     
     return parts.map((part, i) => {
       if (part.startsWith('<tool_call>') && part.endsWith('</tool_call>')) {
-        return <ToolCallRenderer key={i} content={part} />;
+        try {
+          const match = part.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+          if (!match) return null;
+          let jsonString = match[1].trim();
+          if (jsonString.startsWith('```')) {
+            jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+          }
+          const toolCall = JSON.parse(jsonString);
+          return <ToolCallRenderer key={i} toolCall={toolCall} />;
+        } catch (e) {
+          return null;
+        }
       }
       
       // Handle incomplete tool calls during streaming
@@ -229,9 +233,30 @@ export const ChatView: React.FC<ChatViewProps> = ({
             code({ node, className, children, ...props }: any) {
               const match = /language-(\w+)/.exec(className || '');
               const codeString = String(children).replace(/\n$/, '');
-              const isBlock = !!match;
+              const isBlock = !!match || String(children).includes('\n');
               
               if (isBlock) {
+                // Check if it's a tool call JSON block
+                try {
+                  const parsed = JSON.parse(codeString);
+                  let calls = parsed;
+                  if (!Array.isArray(calls)) {
+                    calls = [calls];
+                  }
+                  
+                  const validCalls = calls.filter((call: any) => call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool));
+                  
+                  if (validCalls.length > 0) {
+                    return (
+                      <div className="flex flex-col gap-2">
+                        {validCalls.map((call: any, idx: number) => (
+                          <ToolCallRenderer key={idx} toolCall={call} />
+                        ))}
+                      </div>
+                    );
+                  }
+                } catch (e) {}
+
                 // Try to extract filename from language-filename pattern
                 // e.g. language-javascript:App.tsx
                 const langPart = match ? match[1] : '';
@@ -416,11 +441,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
             placeholder={
               isAiTypingGlobally 
                 ? "AI is busy in another tab..." 
-                : activeChatId 
-                  ? "Ask anything..." 
-                  : "Start a new chat first"
+                : isGloballyBusy
+                  ? "AI is busy in another chat..."
+                  : activeChatId 
+                    ? "Ask anything..." 
+                    : "Start a new chat first"
             }
-            disabled={!activeChatId || isLoading || isAiTypingGlobally}
+            disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
             rows={1}
             className="w-full bg-white border border-gray-200 rounded-2xl p-4 pr-24 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
           />
@@ -428,7 +455,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <button
               type="button"
               onClick={toggleListening}
-              disabled={!activeChatId || isLoading || isAiTypingGlobally}
+              disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
               className={cn(
                 "p-2 rounded-xl transition-all shadow-sm disabled:shadow-none disabled:bg-transparent disabled:text-gray-400",
                 isListening 
@@ -441,7 +468,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             </button>
             <button
               type="submit"
-              disabled={!input.trim() || isLoading || isAiTypingGlobally || !activeChatId}
+              disabled={!input.trim() || isLoading || isAiTypingGlobally || isGloballyBusy || !activeChatId}
               className="p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl transition-all shadow-lg shadow-blue-200 disabled:shadow-none"
             >
               <Send size={18} />
