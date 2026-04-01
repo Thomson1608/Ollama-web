@@ -430,55 +430,66 @@ export const ChatView: React.FC<ChatViewProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="p-3 md:p-6 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent">
+      <div className="p-2 md:p-6 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent shrink-0">
         <form 
           onSubmit={handleSendMessage}
-          className="max-w-3xl mx-auto relative group"
+          className="max-w-3xl mx-auto w-full"
         >
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
+          <div className={cn(
+            "flex items-end gap-1 md:gap-2 bg-white border border-gray-200 rounded-2xl p-1.5 md:p-3 shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 overflow-hidden",
+            (!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy) && "bg-gray-50 opacity-80"
+          )}>
+            <textarea
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-resize
+                e.target.style.height = 'auto';
+                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+              placeholder={
+                isAiTypingGlobally 
+                  ? "AI is busy in another tab..." 
+                  : isGloballyBusy
+                    ? "AI is busy in another chat..."
+                    : activeChatId 
+                      ? "Ask anything..." 
+                      : "Start a new chat first"
               }
-            }}
-            placeholder={
-              isAiTypingGlobally 
-                ? "AI is busy in another tab..." 
-                : isGloballyBusy
-                  ? "AI is busy in another chat..."
-                  : activeChatId 
-                    ? "Ask anything..." 
-                    : "Start a new chat first"
-            }
-            disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
-            rows={1}
-            className="w-full bg-white border border-gray-200 rounded-2xl p-3 md:p-4 pr-20 md:pr-24 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm resize-none disabled:bg-gray-50 disabled:cursor-not-allowed text-sm"
-          />
-          <div className="absolute right-1.5 md:right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={toggleListening}
               disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
-              className={cn(
-                "p-1.5 md:p-2 rounded-xl transition-all shadow-sm disabled:shadow-none disabled:bg-transparent disabled:text-gray-400",
-                isListening 
-                  ? "bg-red-100 text-red-600 hover:bg-red-200 animate-pulse" 
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              )}
-              title={isListening ? "Dừng ghi âm" : "Nhập bằng giọng nói"}
-            >
-              {isListening ? <MicOff size={16} /> : <Mic size={16} />}
-            </button>
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading || isAiTypingGlobally || isGloballyBusy || !activeChatId}
-              className="p-1.5 md:p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl transition-all shadow-lg shadow-blue-200 disabled:shadow-none"
-            >
-              <Send size={16} />
-            </button>
+              rows={1}
+              style={{ height: 'auto' }}
+              className="flex-1 min-w-0 bg-transparent border-none focus:ring-0 p-1 md:p-2 text-sm resize-none disabled:cursor-not-allowed min-h-[36px] max-h-[200px]"
+            />
+            <div className="flex items-center gap-0.5 md:gap-1 pb-1 shrink-0">
+              <button
+                type="button"
+                onClick={toggleListening}
+                disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
+                className={cn(
+                  "p-1.5 md:p-2 rounded-xl transition-all shadow-sm disabled:shadow-none disabled:bg-transparent disabled:text-gray-400 shrink-0",
+                  isListening 
+                    ? "bg-red-100 text-red-600 hover:bg-red-200 animate-pulse" 
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                )}
+                title={isListening ? "Dừng ghi âm" : "Nhập bằng giọng nói"}
+              >
+                {isListening ? <MicOff size={16} /> : <Mic size={16} />}
+              </button>
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading || isAiTypingGlobally || isGloballyBusy || !activeChatId}
+                className="p-1.5 md:p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl transition-all shadow-lg shadow-blue-200 disabled:shadow-none shrink-0"
+              >
+                <Send size={16} />
+              </button>
+            </div>
           </div>
         </form>
       </div>
