@@ -46,6 +46,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
   const [isSyncing, setIsSyncing] = useState(false);
   const isRemoteUpdate = useRef(false);
   const isRemoteConfigUpdate = useRef(false);
+  const isInitialized = useRef(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>('chat');
   const [input, setInput] = useState('');
@@ -379,24 +380,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
         const chatsRes = await fetch('/api/chats');
         if (chatsRes.ok) {
           const data = await chatsRes.json();
-          if (data && data.length > 0) {
-            setChats(data);
-          } else {
-            // Fallback to localStorage if backend is empty
-            const saved = localStorage.getItem('ollama_chats');
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              if (parsed.length > 0) {
-                setChats(parsed);
-                // Sync back to backend
-                await fetch('/api/chats', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: saved,
-                });
-              }
-            }
-          }
+          setChats(data || []);
         }
         
         // Fetch config
@@ -405,18 +389,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
           const data = await configRes.json();
           if (data.systemPrompt) {
             setSystemPrompt(data.systemPrompt);
-          } else {
-            // Fallback to localStorage if backend is empty
-            const saved = localStorage.getItem('ollama_system_prompt');
-            if (saved) {
-              setSystemPrompt(saved);
-              // Sync back to backend
-              await fetch('/api/config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ systemPrompt: saved }),
-              });
-            }
           }
         }
 
@@ -435,8 +407,8 @@ When you write code, briefly explain your plan in the chat, then immediately use
         }
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
-        const saved = localStorage.getItem('ollama_chats');
-        if (saved) setChats(JSON.parse(saved));
+      } finally {
+        isInitialized.current = true;
       }
     };
     fetchInitialData();
@@ -444,15 +416,15 @@ When you write code, briefly explain your plan in the chat, then immediately use
 
   // Sync to backend whenever chats change
   useEffect(() => {
+    if (!isInitialized.current) return;
+
+    // Don't sync if it's a remote update
+    if (isRemoteUpdate.current) {
+      isRemoteUpdate.current = false;
+      return;
+    }
+
     const syncChats = async () => {
-      // Don't sync if it's a remote update or we haven't even loaded yet
-      if (isRemoteUpdate.current) {
-        isRemoteUpdate.current = false;
-        return;
-      }
-      
-      if (chats.length === 0 && localStorage.getItem('ollama_chats') === null) return;
-      
       setIsSyncing(true);
       try {
         await fetch('/api/chats', {
@@ -473,15 +445,15 @@ When you write code, briefly explain your plan in the chat, then immediately use
 
   // Sync config to backend
   useEffect(() => {
+    if (!isInitialized.current) return;
+
+    // Don't sync if it's a remote update
+    if (isRemoteConfigUpdate.current) {
+      isRemoteConfigUpdate.current = false;
+      return;
+    }
+
     const syncConfig = async () => {
-      // Don't sync if it's a remote update or we haven't even loaded yet
-      if (isRemoteConfigUpdate.current) {
-        isRemoteConfigUpdate.current = false;
-        return;
-      }
-      
-      if (systemPrompt === '' && localStorage.getItem('ollama_system_prompt') === null) return;
-      
       try {
         await fetch('/api/config', {
           method: 'POST',
