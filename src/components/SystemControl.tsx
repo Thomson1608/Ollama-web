@@ -44,6 +44,9 @@ export const SystemControl: React.FC = () => {
   const [services, setServices] = useState<Service[]>([]);
   const [terminalInput, setTerminalInput] = useState('');
   const [terminalOutput, setTerminalOutput] = useState<{ type: 'cmd' | 'out' | 'err', text: string }[]>([]);
+  const [terminalHistory, setTerminalHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [currentUser, setCurrentUser] = useState<string>('unknown');
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<'monitor' | 'processes' | 'services' | 'terminal'>('monitor');
   const [processSearch, setProcessSearch] = useState('');
@@ -79,10 +82,22 @@ export const SystemControl: React.FC = () => {
     }
   };
 
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await fetch('/api/system/terminal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: 'whoami' })
+      });
+      const data = await res.json();
+      if (data.stdout) setCurrentUser(data.stdout.trim());
+    } catch (e) {}
+  };
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      await Promise.all([fetchStats(), fetchProcesses(), fetchServices()]);
+      await Promise.all([fetchStats(), fetchProcesses(), fetchServices(), fetchCurrentUser()]);
       setLoading(false);
     };
     init();
@@ -139,6 +154,8 @@ export const SystemControl: React.FC = () => {
 
     const cmd = terminalInput;
     setTerminalInput('');
+    setTerminalHistory(prev => [cmd, ...prev.filter(h => h !== cmd)].slice(0, 50));
+    setHistoryIndex(-1);
     setTerminalOutput(prev => [...prev, { type: 'cmd', text: cmd }]);
 
     try {
@@ -149,7 +166,12 @@ export const SystemControl: React.FC = () => {
       });
       const data = await res.json();
       if (data.stdout) setTerminalOutput(prev => [...prev, { type: 'out', text: data.stdout }]);
-      if (data.stderr) setTerminalOutput(prev => [...prev, { type: 'err', text: data.stderr }]);
+      if (data.stderr) {
+        setTerminalOutput(prev => [...prev, { type: 'err', text: data.stderr }]);
+        if (data.stderr.includes('sudo: Authentication failed') || data.stderr.includes('sudo: a password is required')) {
+          setTerminalOutput(prev => [...prev, { type: 'err', text: 'HINT: To run sudo commands without a password, you need to add your user to the sudoers file with NOPASSWD. Example: "thompson ALL=(ALL) NOPASSWD: ALL"' }]);
+        }
+      }
       if (data.error) setTerminalOutput(prev => [...prev, { type: 'err', text: data.error }]);
     } catch (e) {
       setTerminalOutput(prev => [...prev, { type: 'err', text: 'Failed to execute command' }]);
@@ -157,7 +179,24 @@ export const SystemControl: React.FC = () => {
   };
 
   const handleTerminalKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Tab') {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (historyIndex < terminalHistory.length - 1) {
+        const nextIndex = historyIndex + 1;
+        setHistoryIndex(nextIndex);
+        setTerminalInput(terminalHistory[nextIndex]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex > 0) {
+        const nextIndex = historyIndex - 1;
+        setHistoryIndex(nextIndex);
+        setTerminalInput(terminalHistory[nextIndex]);
+      } else if (historyIndex === 0) {
+        setHistoryIndex(-1);
+        setTerminalInput('');
+      }
+    } else if (e.key === 'Tab') {
       e.preventDefault();
       if (!terminalInput.trim()) return;
 
@@ -316,6 +355,7 @@ export const SystemControl: React.FC = () => {
                 <tr>
                   <th className="px-3 md:px-4 py-3">PID</th>
                   <th className="px-3 md:px-4 py-3">Name</th>
+                  <th className="px-3 md:px-4 py-3">Status</th>
                   <th className="px-3 md:px-4 py-3">CPU%</th>
                   <th className="px-3 md:px-4 py-3">MEM%</th>
                   <th className="px-3 md:px-4 py-3 hidden sm:table-cell">User</th>
@@ -326,7 +366,12 @@ export const SystemControl: React.FC = () => {
                 {processes.list
                   .filter((p: any) => p.name.toLowerCase().includes(processSearch.toLowerCase()) || p.pid.toString().includes(processSearch))
                   .sort((a: any, b: any) => {
-                    // Sort by CPU usage descending, then by memory
+                    // Sort by state 'running' first
+                    const aRunning = a.state === 'running';
+                    const bRunning = b.state === 'running';
+                    if (aRunning !== bRunning) return aRunning ? -1 : 1;
+                    
+                    // Then by CPU usage descending
                     if (b.cpu !== a.cpu) return b.cpu - a.cpu;
                     return b.mem - a.mem;
                   })
@@ -334,6 +379,16 @@ export const SystemControl: React.FC = () => {
                     <tr key={p.pid} className="hover:bg-gray-50 transition-colors">
                       <td className="px-3 md:px-4 py-3 font-mono text-gray-500">{p.pid}</td>
                       <td className="px-3 md:px-4 py-3 font-bold text-gray-700 truncate max-w-[100px] md:max-w-none">{p.name}</td>
+                      <td className="px-3 md:px-4 py-3">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold border",
+                          p.state === 'running' 
+                            ? "bg-green-50 text-green-600 border-green-100" 
+                            : "bg-gray-50 text-gray-500 border-gray-100"
+                        )}>
+                          {p.state.toUpperCase()}
+                        </span>
+                      </td>
                       <td className="px-3 md:px-4 py-3">{p.cpu.toFixed(1)}%</td>
                       <td className="px-3 md:px-4 py-3">{p.mem.toFixed(1)}%</td>
                       <td className="px-3 md:px-4 py-3 text-gray-500 hidden sm:table-cell">{p.user}</td>
@@ -426,13 +481,18 @@ export const SystemControl: React.FC = () => {
 
       {activeSection === 'terminal' && (
         <div className="bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden flex flex-col h-[400px] md:h-[500px]">
-          <div className="p-3 border-b border-gray-800 bg-gray-800/50 flex items-center gap-2">
-            <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-red-500/80" />
-              <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-yellow-500/80" />
-              <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-green-500/80" />
+          <div className="p-3 border-b border-gray-800 bg-gray-800/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-red-500/80" />
+                <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-yellow-500/80" />
+                <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-green-500/80" />
+              </div>
+              <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-2">System Terminal</span>
             </div>
-            <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-2">System Terminal</span>
+            <div className="text-[9px] md:text-[10px] font-mono text-gray-500">
+              User: <span className="text-green-500">{currentUser}</span>
+            </div>
           </div>
           <div className="flex-1 p-3 md:p-4 font-mono text-[10px] md:text-xs overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-gray-700">
             <div className="text-gray-500 mb-4">Welcome to System Terminal. Be careful with commands.</div>

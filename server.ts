@@ -7,6 +7,7 @@ import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, ChildProcess, exec } from 'child_process';
+import { promisify } from 'util';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { simpleGit, SimpleGit } from 'simple-git';
 import si from 'systeminformation';
@@ -14,6 +15,7 @@ import si from 'systeminformation';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const execAsync = promisify(exec);
 
 const DATA_DIR = path.join(__dirname, 'data');
 const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
@@ -69,15 +71,29 @@ async function ensureDataDir() {
   // Initialize Git in workspace
   try {
     const git: SimpleGit = simpleGit(WORKSPACE_DIR);
+    
+    // Check if git is installed
+    try {
+      await git.version();
+    } catch (e) {
+      logger.error('Git is not installed or not in PATH. Workspace history will not be available.');
+      return;
+    }
+
+    // Add safe directory config to avoid ownership issues (common in shared environments)
+    try {
+      await execAsync(`git config --global --add safe.directory ${WORKSPACE_DIR}`);
+    } catch (e) {}
+
     let isRepo = false;
     try {
-      await fs.access(path.join(WORKSPACE_DIR, '.git'));
-      isRepo = true;
+      isRepo = await git.checkIsRepo();
     } catch {
       isRepo = false;
     }
     
     if (!isRepo) {
+      logger.release('Initializing new git repository in workspace...');
       await git.init();
       await git.addConfig('user.name', 'AI Studio');
       await git.addConfig('user.email', 'ai@studio.local');
@@ -85,12 +101,22 @@ async function ensureDataDir() {
     
     // Check if there are any commits
     try {
-      await git.log();
+      const log = await git.log();
+      if (log.total === 0) throw new Error('No commits');
     } catch {
       // No commits yet, create an initial commit
-      await fs.writeFile(path.join(WORKSPACE_DIR, '.gitkeep'), '');
-      await git.add('.');
-      await git.commit('Initial commit');
+      const gitkeepPath = path.join(WORKSPACE_DIR, '.gitkeep');
+      if (!fsSync.existsSync(gitkeepPath)) {
+        await fs.writeFile(gitkeepPath, '');
+      }
+      
+      try {
+        await git.add('.');
+        await git.commit('Initial commit');
+        logger.release('Created initial commit in workspace');
+      } catch (addError) {
+        logger.error('Failed to create initial commit', addError);
+      }
     }
   } catch (error) {
     logger.error('Failed to initialize git repository', error);
@@ -460,10 +486,12 @@ async function startServer() {
       // Basic completion using bash compgen
       // We look at the last word of the command
       const lastWord = command.split(' ').pop() || '';
+      // Use bash -c to run compgen. We include both files (-f) and commands (-c)
       const cmd = `bash -c "compgen -f ${lastWord} && compgen -c ${lastWord}"`;
       
       exec(cmd, (error, stdout, stderr) => {
-        const suggestions = Array.from(new Set(stdout.split('\n').filter(s => s.trim() !== ''))).slice(0, 10);
+        // Filter out empty strings and duplicates
+        const suggestions = Array.from(new Set(stdout.split('\n').map(s => s.trim()).filter(s => s !== ''))).slice(0, 20);
         res.json({ suggestions });
       });
     } catch (error) {
