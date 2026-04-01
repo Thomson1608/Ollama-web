@@ -94,45 +94,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-gray-50/30">
       {/* Header - Fixed at top */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 md:px-8 py-6 z-10">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm">
-              <Settings size={24} />
+      <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 md:px-8 py-4 md:py-6 z-10 shrink-0">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-xl md:rounded-2xl flex items-center justify-center text-blue-600 shadow-sm shrink-0">
+              <Settings size={20} className="md:hidden" />
+              <Settings size={24} className="hidden md:block" />
             </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">Settings</h2>
-              <p className="text-sm text-gray-500">Configure your Ollama connection and AI behavior</p>
+            <div className="min-w-0">
+              <h2 className="text-xl md:text-2xl font-bold text-gray-800 truncate">Settings</h2>
+              <p className="text-[10px] md:text-sm text-gray-500 truncate">Configure AI behavior</p>
             </div>
           </div>
           <button 
             onClick={handleSave}
             disabled={!hasChanges}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg ${
+            className={`flex items-center justify-center gap-2 px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-lg w-full md:w-auto ${
               hasChanges 
                 ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 cursor-pointer" 
                 : "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
             }`}
           >
-            <Save size={18} />
+            <Save size={16} className="md:hidden" />
+            <Save size={18} className="hidden md:block" />
             Save Changes
           </button>
         </div>
         
         {/* Tabs */}
-        <div className="max-w-4xl mx-auto mt-6 flex overflow-x-auto hide-scrollbar gap-2">
+        <div className="max-w-4xl mx-auto mt-4 md:mt-6 flex overflow-x-auto hide-scrollbar gap-1.5 md:gap-2 pb-1">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors whitespace-nowrap",
+                "flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                 activeTab === tab.id 
                   ? "bg-blue-50 text-blue-700 border border-blue-100" 
                   : "text-gray-600 hover:bg-gray-100 border border-transparent"
               )}
             >
-              <tab.icon size={16} />
+              <tab.icon size={14} className="md:hidden" />
+              <tab.icon size={16} className="hidden md:block" />
               {tab.label}
             </button>
           ))}

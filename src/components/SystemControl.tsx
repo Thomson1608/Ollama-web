@@ -207,7 +207,7 @@ export const SystemControl: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-2 p-1 bg-gray-100 rounded-xl w-fit">
+      <div className="flex overflow-x-auto hide-scrollbar gap-1 md:gap-2 p-1 bg-gray-100 rounded-xl w-full md:w-fit">
         {[
           { id: 'monitor', label: 'Monitor', icon: Activity },
           { id: 'processes', label: 'Processes', icon: Cpu },
@@ -218,13 +218,14 @@ export const SystemControl: React.FC = () => {
             key={section.id}
             onClick={() => setActiveSection(section.id as any)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all",
+              "flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold transition-all whitespace-nowrap flex-1 md:flex-none",
               activeSection === section.id 
                 ? "bg-white text-blue-600 shadow-sm" 
                 : "text-gray-500 hover:text-gray-700"
             )}
           >
-            <section.icon size={14} />
+            <section.icon size={12} className="md:hidden" />
+            <section.icon size={14} className="hidden md:block" />
             {section.label}
           </button>
         ))}
@@ -296,29 +297,29 @@ export const SystemControl: React.FC = () => {
 
       {activeSection === 'processes' && processes && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-50 flex items-center justify-between bg-gray-50/50">
+          <div className="p-4 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between bg-gray-50/50 gap-3">
             <h4 className="text-sm font-bold text-gray-700">Running Processes ({processes.list.length})</h4>
-            <div className="relative">
+            <div className="relative w-full md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
               <input
                 type="text"
                 placeholder="Search processes..."
                 value={processSearch}
                 onChange={(e) => setProcessSearch(e.target.value)}
-                className="pl-9 pr-4 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-64"
+                className="pl-9 pr-4 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 w-full"
               />
             </div>
           </div>
           <div className="overflow-x-auto max-h-[400px]">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-[10px] md:text-xs min-w-[500px] md:min-w-0">
               <thead className="bg-gray-50 text-gray-500 font-bold uppercase tracking-wider sticky top-0">
                 <tr>
-                  <th className="px-4 py-3">PID</th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">CPU%</th>
-                  <th className="px-4 py-3">MEM%</th>
-                  <th className="px-4 py-3">User</th>
-                  <th className="px-4 py-3 text-right">Action</th>
+                  <th className="px-3 md:px-4 py-3">PID</th>
+                  <th className="px-3 md:px-4 py-3">Name</th>
+                  <th className="px-3 md:px-4 py-3">CPU%</th>
+                  <th className="px-3 md:px-4 py-3">MEM%</th>
+                  <th className="px-3 md:px-4 py-3 hidden sm:table-cell">User</th>
+                  <th className="px-3 md:px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -331,12 +332,12 @@ export const SystemControl: React.FC = () => {
                   })
                   .map((p: any) => (
                     <tr key={p.pid} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-mono text-gray-500">{p.pid}</td>
-                      <td className="px-4 py-3 font-bold text-gray-700">{p.name}</td>
-                      <td className="px-4 py-3">{p.cpu.toFixed(1)}%</td>
-                      <td className="px-4 py-3">{p.mem.toFixed(1)}%</td>
-                      <td className="px-4 py-3 text-gray-500">{p.user}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 md:px-4 py-3 font-mono text-gray-500">{p.pid}</td>
+                      <td className="px-3 md:px-4 py-3 font-bold text-gray-700 truncate max-w-[100px] md:max-w-none">{p.name}</td>
+                      <td className="px-3 md:px-4 py-3">{p.cpu.toFixed(1)}%</td>
+                      <td className="px-3 md:px-4 py-3">{p.mem.toFixed(1)}%</td>
+                      <td className="px-3 md:px-4 py-3 text-gray-500 hidden sm:table-cell">{p.user}</td>
+                      <td className="px-3 md:px-4 py-3 text-right">
                         <button
                           onClick={() => handleKillProcess(p.pid)}
                           className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
@@ -359,13 +360,13 @@ export const SystemControl: React.FC = () => {
             <h4 className="text-sm font-bold text-gray-700">System Services</h4>
           </div>
           <div className="overflow-x-auto max-h-[400px]">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-[10px] md:text-xs min-w-[400px] md:min-w-0">
               <thead className="bg-gray-50 text-gray-500 font-bold uppercase tracking-wider sticky top-0">
                 <tr>
-                  <th className="px-4 py-3">Service Name</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Mode</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-3 md:px-4 py-3">Service Name</th>
+                  <th className="px-3 md:px-4 py-3">Status</th>
+                  <th className="px-3 md:px-4 py-3 hidden sm:table-cell">Mode</th>
+                  <th className="px-3 md:px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -377,10 +378,10 @@ export const SystemControl: React.FC = () => {
                   })
                   .map((s) => (
                     <tr key={s.name} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-bold text-gray-700">{s.name}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 md:px-4 py-3 font-bold text-gray-700 truncate max-w-[120px] md:max-w-none">{s.name}</td>
+                    <td className="px-3 md:px-4 py-3">
                       <span className={cn(
-                        "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                        "px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold border",
                         s.running 
                           ? "bg-green-50 text-green-600 border-green-100" 
                           : "bg-gray-50 text-gray-500 border-gray-100"
@@ -388,8 +389,8 @@ export const SystemControl: React.FC = () => {
                         {s.running ? 'RUNNING' : 'STOPPED'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-500 uppercase">{s.startmode}</td>
-                    <td className="px-4 py-3 text-right space-x-1">
+                    <td className="px-3 md:px-4 py-3 text-gray-500 uppercase hidden sm:table-cell">{s.startmode}</td>
+                    <td className="px-3 md:px-4 py-3 text-right space-x-1 whitespace-nowrap">
                       {!s.running ? (
                         <button
                           onClick={() => handleServiceControl(s.name, 'start')}
@@ -424,16 +425,16 @@ export const SystemControl: React.FC = () => {
       )}
 
       {activeSection === 'terminal' && (
-        <div className="bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden flex flex-col h-[500px]">
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden flex flex-col h-[400px] md:h-[500px]">
           <div className="p-3 border-b border-gray-800 bg-gray-800/50 flex items-center gap-2">
             <div className="flex gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-red-500/80" />
-              <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-              <div className="w-3 h-3 rounded-full bg-green-500/80" />
+              <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-red-500/80" />
+              <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-yellow-500/80" />
+              <div className="w-2.5 h-2.5 md:w-3 h-3 rounded-full bg-green-500/80" />
             </div>
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-2">System Terminal</span>
+            <span className="text-[9px] md:text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-2">System Terminal</span>
           </div>
-          <div className="flex-1 p-4 font-mono text-xs overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-gray-700">
+          <div className="flex-1 p-3 md:p-4 font-mono text-[10px] md:text-xs overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-gray-700">
             <div className="text-gray-500 mb-4">Welcome to System Terminal. Be careful with commands.</div>
             {terminalOutput.map((line, i) => (
               <div key={i} className={cn(
@@ -447,15 +448,15 @@ export const SystemControl: React.FC = () => {
             ))}
             <div ref={terminalEndRef} />
           </div>
-          <form onSubmit={handleTerminalSubmit} className="p-3 bg-gray-800/30 border-t border-gray-800 flex items-center gap-2">
-            <span className="text-green-500 font-mono text-xs">$</span>
+          <form onSubmit={handleTerminalSubmit} className="p-2 md:p-3 bg-gray-800/30 border-t border-gray-800 flex items-center gap-2">
+            <span className="text-green-500 font-mono text-[10px] md:text-xs">$</span>
             <input
               type="text"
               value={terminalInput}
               onChange={(e) => setTerminalInput(e.target.value)}
               onKeyDown={handleTerminalKeyDown}
               placeholder="Type a command..."
-              className="flex-1 bg-transparent border-none focus:outline-none text-gray-100 font-mono text-xs"
+              className="flex-1 bg-transparent border-none focus:outline-none text-gray-100 font-mono text-[10px] md:text-xs"
               autoFocus
             />
           </form>
