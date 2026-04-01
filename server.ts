@@ -383,7 +383,8 @@ async function startServer() {
     const { pid } = req.body;
     if (!pid) return res.status(400).json({ error: 'PID is required' });
     try {
-      exec(`kill -9 ${pid}`, (error, stdout, stderr) => {
+      // Using sudo to allow non-root users (like thompson) to kill processes if configured in sudoers
+      exec(`sudo kill -9 ${pid}`, (error, stdout, stderr) => {
         if (error) {
           logger.error(`Failed to kill process ${pid}`, error);
           return res.status(500).json({ error: error.message });
@@ -412,7 +413,8 @@ async function startServer() {
     const { service, action } = req.body; // action: start, stop, restart
     if (!service || !action) return res.status(400).json({ error: 'Service and action are required' });
     try {
-      exec(`systemctl ${action} ${service}`, (error, stdout, stderr) => {
+      // Using sudo to allow non-root users (like thompson) to control services if configured in sudoers
+      exec(`sudo systemctl ${action} ${service}`, (error, stdout, stderr) => {
         if (error) {
           logger.error(`Failed to ${action} service ${service}`, error);
           return res.status(500).json({ error: error.message });
@@ -431,6 +433,7 @@ async function startServer() {
     if (!command) return res.status(400).json({ error: 'Command is required' });
     try {
       logger.debug(`Terminal: Executing command: ${command}`);
+      // Execute as the current process user (thompson if configured)
       exec(command, (error, stdout, stderr) => {
         res.json({
           stdout,
@@ -440,6 +443,26 @@ async function startServer() {
       });
     } catch (error) {
       res.status(500).json({ error: 'Failed to execute command' });
+    }
+  });
+
+  // API: Terminal completion
+  app.post('/api/system/terminal/complete', async (req, res) => {
+    const { command } = req.body;
+    if (!command) return res.json({ suggestions: [] });
+    
+    try {
+      // Basic completion using bash compgen
+      // We look at the last word of the command
+      const lastWord = command.split(' ').pop() || '';
+      const cmd = `bash -c "compgen -f ${lastWord} && compgen -c ${lastWord}"`;
+      
+      exec(cmd, (error, stdout, stderr) => {
+        const suggestions = Array.from(new Set(stdout.split('\n').filter(s => s.trim() !== ''))).slice(0, 10);
+        res.json({ suggestions });
+      });
+    } catch (error) {
+      res.json({ suggestions: [] });
     }
   });
 

@@ -156,6 +156,41 @@ export const SystemControl: React.FC = () => {
     }
   };
 
+  const handleTerminalKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (!terminalInput.trim()) return;
+
+      try {
+        const res = await fetch('/api/system/terminal/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: terminalInput })
+        });
+        const data = await res.json();
+        if (data.suggestions && data.suggestions.length > 0) {
+          const lastWord = terminalInput.split(' ').pop() || '';
+          const completion = data.suggestions[0];
+          
+          // If the suggestion starts with the last word, we append the rest
+          if (completion.startsWith(lastWord)) {
+            const newText = terminalInput.slice(0, -lastWord.length) + completion;
+            setTerminalInput(newText);
+          } else {
+            // Otherwise just append with a space if it's a new word
+            setTerminalInput(prev => prev + ' ' + completion);
+          }
+          
+          if (data.suggestions.length > 1) {
+            setTerminalOutput(prev => [...prev, { type: 'out', text: data.suggestions.join('  ') }]);
+          }
+        }
+      } catch (e) {
+        console.error('Completion failed', e);
+      }
+    }
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center p-12">
       <Loader2 className="animate-spin text-blue-500" size={32} />
@@ -289,7 +324,11 @@ export const SystemControl: React.FC = () => {
               <tbody className="divide-y divide-gray-50">
                 {processes.list
                   .filter((p: any) => p.name.toLowerCase().includes(processSearch.toLowerCase()) || p.pid.toString().includes(processSearch))
-                  .sort((a: any, b: any) => b.cpu - a.cpu)
+                  .sort((a: any, b: any) => {
+                    // Sort by CPU usage descending, then by memory
+                    if (b.cpu !== a.cpu) return b.cpu - a.cpu;
+                    return b.mem - a.mem;
+                  })
                   .map((p: any) => (
                     <tr key={p.pid} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 font-mono text-gray-500">{p.pid}</td>
@@ -330,8 +369,14 @@ export const SystemControl: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {services.map((s) => (
-                  <tr key={s.name} className="hover:bg-gray-50 transition-colors">
+                {services
+                  .sort((a, b) => {
+                    // Sort by running status first (true first)
+                    if (a.running !== b.running) return a.running ? -1 : 1;
+                    return a.name.localeCompare(b.name);
+                  })
+                  .map((s) => (
+                    <tr key={s.name} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-bold text-gray-700">{s.name}</td>
                     <td className="px-4 py-3">
                       <span className={cn(
@@ -408,6 +453,7 @@ export const SystemControl: React.FC = () => {
               type="text"
               value={terminalInput}
               onChange={(e) => setTerminalInput(e.target.value)}
+              onKeyDown={handleTerminalKeyDown}
               placeholder="Type a command..."
               className="flex-1 bg-transparent border-none focus:outline-none text-gray-100 font-mono text-xs"
               autoFocus
