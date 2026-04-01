@@ -65,9 +65,9 @@ const ToolCallRenderer = ({ toolCall }: { toolCall: any }) => {
     }
 
     return (
-      <div className="my-3 inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm">
-        {icon}
-        <span>{text}</span>
+      <div className="my-3 inline-flex max-w-full items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm overflow-hidden">
+        <div className="shrink-0">{icon}</div>
+        <span className="truncate">{text}</span>
       </div>
     );
   } catch (e) {
@@ -299,7 +299,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         Copy
                       </button>
                     </div>
-                    <pre className={cn("rounded-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm", className)}>
+                    <pre className={cn("rounded-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm max-w-full", className)}>
                       <code {...props}>{children}</code>
                     </pre>
                     {filename && (
@@ -322,7 +322,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex-1 overflow-y-auto p-2 md:p-6 space-y-4 md:space-y-6">
         {!activeChatId ? (
           <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4 md:space-y-6 px-4">
             <div className="w-12 h-12 md:w-16 md:h-16 bg-blue-100 rounded-xl md:rounded-2xl flex items-center justify-center text-blue-600">
@@ -358,14 +358,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
             )}
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto w-full space-y-4 md:space-y-6">
+          <div className="max-w-3xl mx-auto w-full space-y-4 md:space-y-6 overflow-x-hidden">
             {activeChat?.messages.map((msg, i) => (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 key={i} 
                 className={cn(
-                  "flex gap-2 md:gap-4",
+                  "flex gap-2 md:gap-4 w-full overflow-hidden items-start",
                   msg.role === 'user' ? "flex-row-reverse" : "flex-row"
                 )}
               >
@@ -383,7 +383,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   )}
                 </div>
                 <div className={cn(
-                  "max-w-[90%] md:max-w-[85%] p-3 md:p-4 rounded-2xl relative group/msg",
+                  "flex-1 min-w-0 max-w-[85%] md:max-w-[80%] p-3 md:p-4 rounded-2xl relative group/msg break-words overflow-hidden",
                   msg.role === 'user' 
                     ? "bg-blue-600 text-white rounded-tr-none" 
                     : "bg-white border border-gray-200 rounded-tl-none shadow-sm"
@@ -397,7 +397,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       {speakingMessageIndex === i ? <VolumeX size={14} /> : <Volume2 size={14} />}
                     </button>
                   )}
-                  <div className={cn("markdown-body text-xs md:text-sm", msg.role === 'user' ? "text-white" : "text-gray-800")}>
+                  <div className={cn("markdown-body text-xs md:text-sm break-words overflow-hidden", msg.role === 'user' ? "text-white" : "text-gray-800")}>
                     {renderMessage(msg.content)}
                   </div>
                 </div>
