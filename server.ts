@@ -237,6 +237,7 @@ async function startServer() {
       const chats = req.body;
       logger.debug(`API: Saving ${chats.length} chats`);
       await fs.writeFile(CHATS_FILE, JSON.stringify(chats, null, 2));
+      io.emit('chats:updated', chats);
       res.json({ success: true });
     } catch (error) {
       logger.error('API Error: Failed to save chats', error);
@@ -259,6 +260,7 @@ async function startServer() {
     try {
       const config = req.body;
       await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
+      io.emit('config:updated', config);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save config' });
@@ -679,6 +681,7 @@ async function startServer() {
         userMessage: messages[messages.length - 1],
         assistantMessage: { role: 'assistant', content: '', timestamp: Date.now() }
       });
+      io.emit('chat:status', { loading: true });
 
       while (true) {
         const { done, value } = await reader.read();
@@ -719,6 +722,7 @@ async function startServer() {
             lastProcessedToolCallIndex = toolCallEnd;
             toolCallEndIndex = assistantContent.indexOf(toolCallEndTag, lastProcessedToolCallIndex);
           }
+          io.emit('chat:status', { loading: false });
           break;
         }
         
@@ -780,6 +784,7 @@ async function startServer() {
 
       // Emit end event via Socket.io
       io.emit('chat:end', { chatId, finalContent: assistantContent });
+      io.emit('chat:status', { loading: false });
       logger.release(`Ollama Proxy: Chat session complete for ${chatId}`);
       logger.debug(`[CHAT_DEBUG] Response from model ${model}:`, assistantContent);
       
@@ -792,6 +797,7 @@ async function startServer() {
     } catch (error) {
       logger.error('Ollama Chat Error:', error);
       await updateStats('fail');
+      io.emit('chat:status', { loading: false });
       res.status(500).json({ error: 'Failed to communicate with Ollama' });
     }
   });

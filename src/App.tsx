@@ -44,6 +44,8 @@ Use the following tools to assist the user with coding tasks:
 When you write code, briefly explain your plan in the chat, then immediately use the <tool_call> tag(s). The files will appear in the workspace on the right side of the screen.`);
   const [memory, setMemory] = useState<Memory>({ facts: [] });
   const [isSyncing, setIsSyncing] = useState(false);
+  const isRemoteUpdate = useRef(false);
+  const isRemoteConfigUpdate = useRef(false);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>('chat');
   const [input, setInput] = useState('');
@@ -111,28 +113,27 @@ When you write code, briefly explain your plan in the chat, then immediately use
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Sync isAiTypingGlobally across tabs using localStorage
+  // Sync isAiTypingGlobally across tabs using Socket.io
   useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'ollama_is_loading') {
-        const loading = e.newValue === 'true';
-        setIsAiTypingGlobally(loading);
-      }
-    };
-    window.addEventListener('storage', handleStorage);
+    if (!socketRef.current) return;
     
-    // Initial check
-    const initialLoading = localStorage.getItem('ollama_is_loading') === 'true';
-    setIsAiTypingGlobally(initialLoading);
+    const socket = socketRef.current;
+    
+    socket.on('chat:status', ({ loading }) => {
+      console.log('Socket.io: chat:status event received:', loading);
+      setIsAiTypingGlobally(loading);
+    });
 
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
+    return () => {
+      socket.off('chat:status');
+    };
+  }, [socketRef.current]);
 
   // Reset global loading on tab close if this tab was the one loading
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (isLoading) {
-        localStorage.setItem('ollama_is_loading', 'false');
+      if (isLoading && socketRef.current) {
+        socketRef.current.emit('chat:status', { loading: false });
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -159,7 +160,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
       
       // Sync typing status globally
       setIsAiTypingGlobally(true);
-      localStorage.setItem('ollama_is_loading', 'true');
 
       setChats(prev => {
         const chat = prev.find(c => c.id === chatId);
@@ -214,7 +214,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
     socket.on('chat:end', ({ chatId, finalContent }) => {
       console.log('Socket.io: chat:end event received for chat:', chatId);
       setIsAiTypingGlobally(false);
-      localStorage.setItem('ollama_is_loading', 'false');
       
       // Sync final content
       if (finalContent) {
@@ -230,6 +229,20 @@ When you write code, briefly explain your plan in the chat, then immediately use
               }
             : c
         ));
+      }
+    });
+
+    socket.on('chats:updated', (updatedChats) => {
+      console.log('Socket.io: chats:updated event received');
+      isRemoteUpdate.current = true;
+      setChats(updatedChats);
+    });
+
+    socket.on('config:updated', (updatedConfig) => {
+      console.log('Socket.io: config:updated event received');
+      if (updatedConfig.systemPrompt !== undefined) {
+        isRemoteConfigUpdate.current = true;
+        setSystemPrompt(updatedConfig.systemPrompt);
       }
     });
 
@@ -379,7 +392,12 @@ When you write code, briefly explain your plan in the chat, then immediately use
   // Sync to backend whenever chats change
   useEffect(() => {
     const syncChats = async () => {
-      // Don't sync if we haven't even loaded yet (to avoid overwriting with empty)
+      // Don't sync if it's a remote update or we haven't even loaded yet
+      if (isRemoteUpdate.current) {
+        isRemoteUpdate.current = false;
+        return;
+      }
+      
       if (chats.length === 0 && localStorage.getItem('ollama_chats') === null) return;
       
       setIsSyncing(true);
@@ -389,7 +407,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(chats),
         });
-        localStorage.setItem('ollama_chats', JSON.stringify(chats));
       } catch (error) {
         console.error('Failed to sync chats to backend:', error);
       } finally {
@@ -404,7 +421,12 @@ When you write code, briefly explain your plan in the chat, then immediately use
   // Sync config to backend
   useEffect(() => {
     const syncConfig = async () => {
-      // Don't sync if we haven't even loaded yet
+      // Don't sync if it's a remote update or we haven't even loaded yet
+      if (isRemoteConfigUpdate.current) {
+        isRemoteConfigUpdate.current = false;
+        return;
+      }
+      
       if (systemPrompt === '' && localStorage.getItem('ollama_system_prompt') === null) return;
       
       try {
@@ -413,7 +435,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ systemPrompt }),
         });
-        localStorage.setItem('ollama_system_prompt', systemPrompt);
       } catch (error) {
         console.error('Failed to sync config to backend:', error);
       }
@@ -678,7 +699,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
     }
     
     setIsLoading(true);
-    localStorage.setItem('ollama_is_loading', 'true');
     setIsAiTypingGlobally(true);
 
     // Create new abort controller for this chat
@@ -742,7 +762,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
     } finally {
       setIsLoading(false);
       setIsAiTypingGlobally(false);
-      localStorage.setItem('ollama_is_loading', 'false');
     }
   };
 
