@@ -21,8 +21,7 @@ const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
 const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
-const DEBUG_LOG_FILE = path.join(DATA_DIR, 'debug.log');
-const RELEASE_LOG_FILE = path.join(DATA_DIR, 'release.log');
+const SYSTEM_LOG_FILE = path.join(DATA_DIR, 'system.log');
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
@@ -35,7 +34,7 @@ const logger = {
       const logMsg = `[DEBUG] ${new Date().toISOString()} - ${message}${data ? ' ' + JSON.stringify(data, null, 2) : ''}\n`;
       process.stdout.write(logMsg);
       try {
-        fsSync.appendFileSync(DEBUG_LOG_FILE, logMsg);
+        fsSync.appendFileSync(SYSTEM_LOG_FILE, logMsg);
       } catch (e) {}
     }
   },
@@ -43,19 +42,14 @@ const logger = {
     const logMsg = `[RELEASE] ${new Date().toISOString()} - ${message}${data ? ' ' + JSON.stringify(data, null, 2) : ''}\n`;
     process.stdout.write(logMsg);
     try {
-      if (LOG_LEVEL === 'release') {
-        fsSync.appendFileSync(RELEASE_LOG_FILE, logMsg);
-      } else if (LOG_LEVEL === 'debug') {
-        fsSync.appendFileSync(DEBUG_LOG_FILE, logMsg);
-      }
+      fsSync.appendFileSync(SYSTEM_LOG_FILE, logMsg);
     } catch (e) {}
   },
   error: (message: string, error?: any) => {
     const logMsg = `[ERROR] ${new Date().toISOString()} - ${message}${error ? ' ' + JSON.stringify(error, null, 2) : ''}\n`;
     process.stderr.write(logMsg);
     try {
-      const targetFile = LOG_LEVEL === 'release' ? RELEASE_LOG_FILE : DEBUG_LOG_FILE;
-      fsSync.appendFileSync(targetFile, logMsg);
+      fsSync.appendFileSync(SYSTEM_LOG_FILE, logMsg);
     } catch (e) {}
   }
 };
@@ -170,6 +164,7 @@ const activeGenerations = new Map<string, ActiveGeneration>();
 
 async function startServer() {
   await ensureDataDir();
+  logger.release('Starting server initialization...');
   await cleanupOldChats();
   
   // Run cleanup every 24 hours
@@ -185,6 +180,7 @@ async function startServer() {
   });
 
   const PORT = 3000;
+  logger.release(`Server configuration: PORT=${PORT}, LOG_LEVEL=${LOG_LEVEL}`);
 
   const git: SimpleGit = simpleGit(WORKSPACE_DIR);
 
@@ -312,24 +308,43 @@ async function startServer() {
     }
   });
 
-  // API: Get error logs
+  // API: Get logs with filtering
+  app.get('/api/logs', async (req, res) => {
+    try {
+      const type = req.query.type as string; // 'debug', 'release', 'error', 'all'
+      const data = await fs.readFile(SYSTEM_LOG_FILE, 'utf-8');
+      const entries = data.split(/(?=\[(?:DEBUG|ERROR|RELEASE)\])/);
+      
+      let filteredLogs = entries;
+      if (type && type !== 'all') {
+        const prefix = `[${type.toUpperCase()}]`;
+        filteredLogs = entries.filter(entry => entry.startsWith(prefix));
+      }
+      
+      res.json({ logs: filteredLogs.slice(-100) }); // Get last 100 entries
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to read logs' });
+    }
+  });
+
+  // API: Get error logs (legacy support)
   app.get('/api/logs/errors', async (req, res) => {
     try {
-      const data = await fs.readFile(DEBUG_LOG_FILE, 'utf-8');
+      const data = await fs.readFile(SYSTEM_LOG_FILE, 'utf-8');
       const entries = data.split(/(?=\[(?:DEBUG|ERROR|RELEASE)\])/);
-      const errorLogs = entries.filter(entry => entry.includes('[ERROR]')).slice(-50); // Get last 50 errors
+      const errorLogs = entries.filter(entry => entry.includes('[ERROR]')).slice(-50);
       res.json({ logs: errorLogs });
     } catch (error) {
       res.status(500).json({ error: 'Failed to read error logs' });
     }
   });
 
-  // API: Get chat debug logs
+  // API: Get chat debug logs (legacy support)
   app.get('/api/logs/chat-debug', async (req, res) => {
     try {
-      const data = await fs.readFile(DEBUG_LOG_FILE, 'utf-8');
+      const data = await fs.readFile(SYSTEM_LOG_FILE, 'utf-8');
       const entries = data.split(/(?=\[(?:DEBUG|ERROR|RELEASE)\])/);
-      const debugLogs = entries.filter(entry => entry.includes('[CHAT_DEBUG]')).slice(-50); // Get last 50 chat debug logs
+      const debugLogs = entries.filter(entry => entry.includes('[CHAT_DEBUG]')).slice(-50);
       res.json({ logs: debugLogs });
     } catch (error) {
       res.status(500).json({ error: 'Failed to read chat debug logs' });
@@ -941,17 +956,27 @@ async function startServer() {
       logger.debug(`Executing tool ${call.tool}`, call.args);
       switch (call.tool) {
         case 'list_files':
-          const allFiles = await getAllFiles(WORKSPACE_DIR);
-          io.emit('tool:result', { chatId, tool: 'list_files', result: allFiles.map(f => f.name) });
-          logger.debug(`Tool list_files success: ${allFiles.length} files`);
+          try {
+            const allFiles = await getAllFiles(WORKSPACE_DIR);
+            io.emit('tool:result', { chatId, tool: 'list_files', result: allFiles.map(f => f.name) });
+            logger.release(`Tool list_files success: ${allFiles.length} files`);
+          } catch (e) {
+            logger.error(`Tool list_files failed`, e);
+            throw e;
+          }
           break;
         case 'read_file':
           if (call.args.name) {
             const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
             const filePath = path.join(WORKSPACE_DIR, safeName);
-            const fileContent = await fs.readFile(filePath, 'utf-8');
-            io.emit('tool:result', { chatId, tool: 'read_file', result: fileContent });
-            logger.debug(`Tool read_file success: ${safeName}`);
+            try {
+              const fileContent = await fs.readFile(filePath, 'utf-8');
+              io.emit('tool:result', { chatId, tool: 'read_file', result: fileContent });
+              logger.release(`Tool read_file success: ${safeName}`);
+            } catch (e) {
+              logger.error(`Tool read_file failed: ${safeName}`, e);
+              throw e;
+            }
           }
           break;
         case 'write_file':
@@ -960,23 +985,32 @@ async function startServer() {
             const filePath = path.join(WORKSPACE_DIR, safeName);
             const dirPath = path.dirname(filePath);
             
-            // Ensure directory exists
-            await fs.mkdir(dirPath, { recursive: true });
-            
-            await fs.writeFile(filePath, call.args.content, 'utf-8');
-            io.emit('workspace:updated');
-            io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${safeName}` });
-            logger.debug(`Tool write_file success: ${safeName}`);
+            try {
+              // Ensure directory exists
+              await fs.mkdir(dirPath, { recursive: true });
+              await fs.writeFile(filePath, call.args.content, 'utf-8');
+              io.emit('workspace:updated');
+              io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${safeName}` });
+              logger.release(`Tool write_file success: ${safeName}`);
+            } catch (e) {
+              logger.error(`Tool write_file failed: ${safeName}`, e);
+              throw e;
+            }
           }
           break;
         case 'delete_file':
           if (call.args.name) {
             const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
             const filePath = path.join(WORKSPACE_DIR, safeName);
-            await fs.unlink(filePath);
-            io.emit('workspace:updated');
-            io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${safeName}` });
-            logger.debug(`Tool delete_file success: ${safeName}`);
+            try {
+              await fs.unlink(filePath);
+              io.emit('workspace:updated');
+              io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${safeName}` });
+              logger.release(`Tool delete_file success: ${safeName}`);
+            } catch (e) {
+              logger.error(`Tool delete_file failed: ${safeName}`, e);
+              throw e;
+            }
           }
           break;
       }

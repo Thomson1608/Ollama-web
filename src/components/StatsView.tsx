@@ -4,23 +4,27 @@ import { AlertCircle, CheckCircle, Send, Loader2 } from 'lucide-react';
 export function StatsView() {
   const [stats, setStats] = useState({ sent: 0, success: 0, fail: 0 });
   const [logs, setLogs] = useState<string[]>([]);
-  const [chatDebugLogs, setChatDebugLogs] = useState<string[]>([]);
+  const [logType, setLogType] = useState<'all' | 'debug' | 'release' | 'error'>('all');
   const [loading, setLoading] = useState(true);
+
+  const fetchLogs = async (type: string) => {
+    try {
+      const res = await fetch(`/api/logs?type=${type}`);
+      const data = await res.json();
+      setLogs(data.logs || []);
+    } catch (error) {
+      console.error('Failed to fetch logs', error);
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        const [statsRes, logsRes, chatDebugLogsRes] = await Promise.all([
-          fetch('/api/stats'),
-          fetch('/api/logs/errors'),
-          fetch('/api/logs/chat-debug')
-        ]);
+        const statsRes = await fetch('/api/stats');
         const statsData = await statsRes.json();
-        const logsData = await logsRes.json();
-        const chatDebugLogsData = await chatDebugLogsRes.json();
         setStats(statsData);
-        setLogs(logsData.logs);
-        setChatDebugLogs(chatDebugLogsData.logs);
+        await fetchLogs(logType);
       } catch (error) {
         console.error('Failed to fetch stats/logs', error);
       } finally {
@@ -28,9 +32,9 @@ export function StatsView() {
       }
     };
     fetchData();
-  }, []);
+  }, [logType]);
 
-  if (loading) return <div className="p-4 flex items-center gap-2"><Loader2 className="animate-spin" /> Loading stats...</div>;
+  if (loading && logs.length === 0) return <div className="p-4 flex items-center gap-2"><Loader2 className="animate-spin" /> Loading stats...</div>;
 
   return (
     <div className="p-6 space-y-6">
@@ -58,21 +62,41 @@ export function StatsView() {
         </div>
       </div>
 
-      <h3 className="text-xl font-bold">Recent Error Logs</h3>
-      <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-64 overflow-y-auto">
-        {logs.length > 0 ? (
-          logs.map((log, i) => <div key={i} className="border-b border-gray-800 py-1">{log}</div>)
-        ) : (
-          <p>No recent errors.</p>
-        )}
+      <div className="flex items-center justify-between">
+        <h3 className="text-xl font-bold">System Logs</h3>
+        <div className="flex gap-2">
+          {(['all', 'debug', 'release', 'error'] as const).map((type) => (
+            <button
+              key={type}
+              onClick={() => setLogType(type)}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                logType === type
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-200"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {type.toUpperCase()}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <h3 className="text-xl font-bold">Chat Debug Logs (Request/Response)</h3>
-      <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto">
-        {chatDebugLogs.length > 0 ? (
-          chatDebugLogs.map((log, i) => <div key={i} className="border-b border-gray-800 py-1 whitespace-pre-wrap">{log}</div>)
+      <div className="bg-gray-900 text-gray-100 p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-[500px] overflow-y-auto">
+        {logs.length > 0 ? (
+          logs.map((log, i) => {
+            let color = "text-gray-300";
+            if (log.includes('[ERROR]')) color = "text-red-400";
+            if (log.includes('[RELEASE]')) color = "text-green-400";
+            if (log.includes('[DEBUG]')) color = "text-blue-400";
+            
+            return (
+              <div key={i} className={`border-b border-gray-800 py-1 whitespace-pre-wrap ${color}`}>
+                {log}
+              </div>
+            );
+          })
         ) : (
-          <p>No recent chat debug logs.</p>
+          <p className="text-gray-500 italic">No logs found for this category.</p>
         )}
       </div>
     </div>
