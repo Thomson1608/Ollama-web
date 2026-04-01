@@ -433,8 +433,13 @@ async function startServer() {
     if (!command) return res.status(400).json({ error: 'Command is required' });
     try {
       logger.debug(`Terminal: Executing command: ${command}`);
-      // Execute as the current process user (thompson if configured)
-      exec(command, (error, stdout, stderr) => {
+      // Add common sbin paths to PATH so management commands are found
+      const env = { 
+        ...process.env, 
+        PATH: `${process.env.PATH}:/usr/sbin:/sbin:/usr/local/sbin` 
+      };
+      
+      exec(command, { env }, (error, stdout, stderr) => {
         res.json({
           stdout,
           stderr,
