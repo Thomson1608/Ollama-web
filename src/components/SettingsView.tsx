@@ -15,6 +15,7 @@ import {
 import { motion } from 'motion/react';
 import { ConnectionStatus, Memory } from '../types';
 import { StatsView } from './StatsView';
+import { MemoryEditor } from './MemoryEditor';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -231,11 +232,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <p className="text-xs text-gray-500 leading-relaxed">
                   Information the AI has learned about you over time. This is used to personalize your experience.
                 </p>
-                <textarea
-                  value={localMemory.join('\n')}
-                  onChange={(e) => setLocalMemory(e.target.value.split('\n').filter(line => line.trim() !== ''))}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-4 text-xs text-gray-600 font-mono h-[300px] focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="Enter facts about yourself, one per line..."
+                <MemoryEditor 
+                  facts={localMemory} 
+                  onChange={setLocalMemory} 
                 />
               </div>
             </div>
