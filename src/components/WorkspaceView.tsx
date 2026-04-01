@@ -12,9 +12,10 @@ interface WorkspaceViewProps {
   refreshTrigger?: number;
   socket?: Socket | null;
   isMobile?: boolean;
+  username?: string | null;
 }
 
-export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, socket, isMobile }) => {
+export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, socket, isMobile, username }) => {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -39,7 +40,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !username) return;
     
     const handleLog = (log: string) => {
       setLogs(prev => [...prev, log]);
@@ -51,13 +52,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
       }
     };
 
-    socket.on('workspace:log', handleLog);
-    socket.on('workspace:history_updated', handleHistoryUpdate);
+    socket.on(`workspace:log:${username}`, handleLog);
+    socket.on(`workspace:history_updated:${username}`, handleHistoryUpdate);
     return () => {
-      socket.off('workspace:log', handleLog);
-      socket.off('workspace:history_updated', handleHistoryUpdate);
+      socket.off(`workspace:log:${username}`, handleLog);
+      socket.off(`workspace:history_updated:${username}`, handleHistoryUpdate);
     };
-  }, [socket, viewMode]);
+  }, [socket, viewMode, username]);
 
   useEffect(() => {
     if (logsEndRef.current) {
@@ -66,9 +67,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   }, [logs]);
 
   const fetchFiles = async () => {
+    if (!username) return;
     setIsLoading(true);
     try {
-      const res = await fetch('/api/workspace');
+      const res = await fetch('/api/workspace', {
+        headers: { 'x-username': username }
+      });
       if (res.ok) {
         const data = await res.json();
         setFiles(data);
@@ -81,9 +85,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const fetchHistory = async () => {
+    if (!username) return;
     setIsLoadingHistory(true);
     try {
-      const res = await fetch('/api/workspace/history');
+      const res = await fetch('/api/workspace/history', {
+        headers: { 'x-username': username }
+      });
       if (res.ok) {
         const data = await res.json();
         setHistory(data.history);
@@ -96,9 +103,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const fetchCommitDetails = async (hash: string) => {
+    if (!username) return;
     setIsLoadingHistory(true);
     try {
-      const res = await fetch(`/api/workspace/commit-details?hash=${hash}`);
+      const res = await fetch(`/api/workspace/commit-details?hash=${hash}`, {
+        headers: { 'x-username': username }
+      });
       if (res.ok) {
         const data = await res.json();
         setCommitDetails(data.files);
@@ -119,9 +129,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
 
   useEffect(() => {
     fetchFiles();
-    if (selectedFile && !isEditing && !selectedIsDirectory) {
+    if (selectedFile && !isEditing && !selectedIsDirectory && username) {
       // Fetch content without resetting preview mode
-      fetch(`/api/workspace/read?name=${encodeURIComponent(selectedFile)}`)
+      fetch(`/api/workspace/read?name=${encodeURIComponent(selectedFile)}`, {
+        headers: { 'x-username': username }
+      })
         .then(res => res.ok ? res.json() : Promise.reject())
         .then(data => {
           setFileContent(data.content);
@@ -129,14 +141,17 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
         })
         .catch(() => {});
     }
-  }, [refreshTrigger]);
+  }, [refreshTrigger, username]);
 
   const readFile = async (name: string) => {
+    if (!username) return;
     setSelectedFile(name);
     setSelectedIsDirectory(false);
     setIsEditing(false);
     try {
-      const res = await fetch(`/api/workspace/read?name=${encodeURIComponent(name)}`);
+      const res = await fetch(`/api/workspace/read?name=${encodeURIComponent(name)}`, {
+        headers: { 'x-username': username }
+      });
       if (res.ok) {
         const data = await res.json();
         setFileContent(data.content);
@@ -147,10 +162,14 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const runWorkspace = async () => {
+    if (!username) return;
     setIsLoading(true);
     setViewMode('web'); // Switch immediately for better UX
     try {
-      const res = await fetch('/api/workspace/run', { method: 'POST' });
+      const res = await fetch('/api/workspace/run', { 
+        method: 'POST',
+        headers: { 'x-username': username }
+      });
       if (res.ok) {
         const data = await res.json();
         setPreviewType(data.type);
@@ -164,8 +183,12 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const stopWorkspace = async () => {
+    if (!username) return;
     try {
-      await fetch('/api/workspace/stop', { method: 'POST' });
+      await fetch('/api/workspace/stop', { 
+        method: 'POST',
+        headers: { 'x-username': username }
+      });
     } catch (error) {
       console.error('Failed to stop workspace', error);
     }
@@ -178,12 +201,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   }, []);
 
   const saveFile = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !username) return;
     setIsSaving(true);
     try {
       const res = await fetch('/api/workspace/write', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
         body: JSON.stringify({ name: selectedFile, content: fileContent })
       });
       if (res.ok) {
@@ -210,10 +236,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const deleteFile = async (name: string, isDirectory: boolean) => {
-    if (!confirm(`Delete ${isDirectory ? 'folder' : 'file'} ${name}?`)) return;
+    if (!confirm(`Delete ${isDirectory ? 'folder' : 'file'} ${name}?`) || !username) return;
     try {
       const res = await fetch(`/api/workspace/delete?name=${encodeURIComponent(name)}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'x-username': username }
       });
       if (res.ok) {
         toast.success(`${isDirectory ? 'Folder' : 'File'} deleted`);
@@ -328,10 +355,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                   <button 
                     onClick={() => {
                       const name = prompt('Enter folder name:');
-                      if (name) {
+                      if (name && username) {
                         fetch('/api/workspace/write', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: { 
+                            'Content-Type': 'application/json',
+                            'x-username': username
+                          },
                           body: JSON.stringify({ name: `${name}/.gitkeep`, content: '' })
                         }).then(() => fetchFiles());
                       }
@@ -495,10 +525,13 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                       <button 
                         onClick={() => {
                           const name = prompt('Enter folder name:');
-                          if (name) {
+                          if (name && username) {
                             fetch('/api/workspace/write', {
                               method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
+                              headers: { 
+                                'Content-Type': 'application/json',
+                                'x-username': username
+                              },
                               body: JSON.stringify({ name: `${name}/.gitkeep`, content: '' })
                             }).then(() => fetchFiles());
                           }
@@ -545,7 +578,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
               <div className="flex-1 bg-white rounded-xl md:rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
                 <iframe 
                   key={previewKey}
-                  src={previewType === 'node' ? `/workspace-preview/?t=${previewKey}` : (selectedFile?.endsWith('.html') ? `/preview/${selectedFile.split('/').map(encodeURIComponent).join('/')}?t=${previewKey}` : `/preview/index.html?t=${previewKey}`)} 
+                  src={previewType === 'node' ? `/workspace-preview/${username}/?t=${previewKey}` : (selectedFile?.endsWith('.html') ? `/preview/${username}/${selectedFile.split('/').map(encodeURIComponent).join('/')}?t=${previewKey}` : `/preview/${username}/index.html?t=${previewKey}`)} 
                   className="w-full h-full border-none bg-white"
                   title="Web Preview"
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"

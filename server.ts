@@ -18,13 +18,22 @@ const __dirname = path.dirname(__filename);
 const execAsync = promisify(exec);
 
 const DATA_DIR = path.join(__dirname, 'data');
-const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
-const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
-const MEMORY_FILE = path.join(DATA_DIR, 'memory.json');
+const USERS_DIR = path.join(DATA_DIR, 'users');
 const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
-const WORKSPACE_DIR = path.join(DATA_DIR, 'workspace');
 const SYSTEM_LOG_FILE = path.join(DATA_DIR, 'system.log');
+
+// Helper to get user-specific paths
+function getUserPaths(username: string) {
+  const userDir = path.join(USERS_DIR, username);
+  return {
+    dir: userDir,
+    chats: path.join(userDir, 'chats.json'),
+    config: path.join(userDir, 'config.json'),
+    memory: path.join(userDir, 'memory.json'),
+    workspace: path.join(userDir, 'workspace')
+  };
+}
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
@@ -62,116 +71,69 @@ const logger = {
   }
 };
 
-async function ensureDataDir() {
+async function fileExists(path: string): Promise<boolean> {
   try {
-    await fs.access(DATA_DIR);
+    await fs.access(path);
+    return true;
   } catch {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    return false;
   }
+}
 
+async function ensureUserDir(username: string) {
+  const paths = getUserPaths(username);
   try {
-    await fs.mkdir(WORKSPACE_DIR, { recursive: true });
-  } catch {}
-  
-  // Initialize Git in workspace
-  try {
-    const git: SimpleGit = simpleGit(WORKSPACE_DIR);
-    
-    // Check if git is installed
-    try {
-      await git.version();
-    } catch (e) {
-      logger.error('Git is not installed or not in PATH. Workspace history will not be available.');
-      return;
-    }
+    await fs.mkdir(paths.dir, { recursive: true });
+    await fs.mkdir(paths.workspace, { recursive: true });
 
-    // Add safe directory config to avoid ownership issues (common in shared environments)
-    try {
-      await execAsync(`git config --global --add safe.directory ${WORKSPACE_DIR}`);
-    } catch (e) {}
+    // Initialize files if they don't exist
+    const files = [
+      { path: paths.chats, default: [] },
+      { path: paths.config, default: { 
+        systemPrompt: `You are a helpful assistant for ${username}.`,
+        parameters: { temperature: 0.7, topP: 0.9, topK: 40 }
+      } },
+      { path: paths.memory, default: { profile: `User: ${username}`, facts: [] } }
+    ];
 
-    // Ensure workspace directory exists
-    if (!fsSync.existsSync(WORKSPACE_DIR)) {
-      await fs.mkdir(WORKSPACE_DIR, { recursive: true });
-    }
-
-    // Attempt to fix permissions on startup to avoid EACCES errors
-    try {
-      await execAsync(`chmod -R 777 ${WORKSPACE_DIR}`);
-      logger.release('Workspace permissions fixed on startup');
-    } catch (e) {
-      logger.error('Failed to fix workspace permissions on startup', e);
-    }
-
-    let isRepo = false;
-    try {
-      isRepo = await git.checkIsRepo();
-    } catch {
-      isRepo = false;
-    }
-    
-    if (!isRepo) {
-      logger.release('Initializing new git repository in workspace...');
-      await git.init();
-      await git.addConfig('user.name', 'AI Studio');
-      await git.addConfig('user.email', 'ai@studio.local');
-    }
-    
-    // Check if there are any commits
-    try {
-      const log = await git.log();
-      if (log.total === 0) throw new Error('No commits');
-    } catch {
-      // No commits yet, create an initial commit
-      const gitkeepPath = path.join(WORKSPACE_DIR, '.gitkeep');
-      if (!fsSync.existsSync(gitkeepPath)) {
-        await fs.writeFile(gitkeepPath, '');
-      }
-      
+    for (const file of files) {
       try {
+        await fs.access(file.path);
+      } catch {
+        await fs.writeFile(file.path, JSON.stringify(file.default, null, 2));
+      }
+    }
+
+    // Initialize Git in user workspace
+    const git = simpleGit(paths.workspace);
+    try {
+      const isRepo = await git.checkIsRepo();
+      if (!isRepo) {
+        await git.init();
+        await git.addConfig('user.name', username);
+        await git.addConfig('user.email', `${username}@family.local`);
+        await fs.writeFile(path.join(paths.workspace, '.gitkeep'), '');
         await git.add('.');
         await git.commit('Initial commit');
-        logger.release('Created initial commit in workspace');
-      } catch (addError) {
-        logger.error('Failed to create initial commit', addError);
       }
+    } catch (e) {
+      logger.error(`Git init failed for ${username}`, e);
     }
   } catch (error) {
-    logger.error('Failed to initialize git repository', error);
+    logger.error(`Failed to ensure user dir for ${username}`, error);
   }
+}
 
+async function ensureDataDir() {
   try {
-    await fs.access(CHATS_FILE);
-  } catch {
-    await fs.writeFile(CHATS_FILE, JSON.stringify([], null, 2));
-  }
-
-  try {
-    await fs.access(CONFIG_FILE);
-  } catch {
-    await fs.writeFile(CONFIG_FILE, JSON.stringify({ 
-      systemPrompt: '',
-      parameters: {
-        temperature: 0.7,
-        topP: 0.9,
-        topK: 40,
-        maxTokens: undefined,
-        stop: [],
-        jsonMode: false
-      }
-    }, null, 2));
-  }
-
-  try {
-    await fs.access(MEMORY_FILE);
-  } catch {
-    await fs.writeFile(MEMORY_FILE, JSON.stringify({ facts: [] }, null, 2));
-  }
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(USERS_DIR, { recursive: true });
+  } catch (e) {}
 
   try {
     await fs.access(USAGE_FILE);
   } catch {
-    await fs.writeFile(USAGE_FILE, JSON.stringify({ claude: { used: 0, total: 1000000 } }, null, 2));
+    await fs.writeFile(USAGE_FILE, JSON.stringify({ used: 0, total: 1000000 }, null, 2));
   }
 
   try {
@@ -181,16 +143,16 @@ async function ensureDataDir() {
   }
 }
 
-async function cleanupOldChats() {
+async function cleanupOldChats(username: string) {
   try {
-    logger.release('Cleanup: Checking for chats older than 30 days');
-    const data = await fs.readFile(CHATS_FILE, 'utf-8');
+    const paths = getUserPaths(username);
+    logger.release(`Cleanup: Checking for chats older than 30 days for ${username}`);
+    const data = await fs.readFile(paths.chats, 'utf-8');
     const chats = JSON.parse(data);
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     
     const initialCount = chats.length;
     const filteredChats = chats.filter((chat: any) => {
-      // Use the timestamp of the last message if available, otherwise createdAt
       const lastMessageTime = chat.messages?.length > 0 
         ? chat.messages[chat.messages.length - 1].timestamp 
         : chat.createdAt;
@@ -199,13 +161,13 @@ async function cleanupOldChats() {
     });
 
     if (filteredChats.length < initialCount) {
-      await fs.writeFile(CHATS_FILE, JSON.stringify(filteredChats, null, 2));
-      logger.release(`Cleanup: Removed ${initialCount - filteredChats.length} old chats`);
+      await fs.writeFile(paths.chats, JSON.stringify(filteredChats, null, 2));
+      logger.release(`Cleanup: Removed ${initialCount - filteredChats.length} old chats for ${username}`);
     } else {
-      logger.debug('Cleanup: No old chats to remove');
+      logger.debug(`Cleanup: No old chats to remove for ${username}`);
     }
   } catch (error) {
-    logger.error('Cleanup Error: Failed to cleanup old chats', error);
+    logger.error(`Cleanup Error: Failed to cleanup old chats for ${username}`, error);
   }
 }
 
@@ -214,16 +176,13 @@ interface ActiveGeneration {
   model: string;
   userMessage: any;
   assistantMessage: any;
+  username: string;
 }
 const activeGenerations = new Map<string, ActiveGeneration>();
 
 async function startServer() {
   await ensureDataDir();
   logger.release('Starting server initialization...');
-  await cleanupOldChats();
-  
-  // Run cleanup every 24 hours
-  setInterval(cleanupOldChats, 24 * 60 * 60 * 1000);
   
   const app = express();
   const httpServer = createServer(app);
@@ -237,18 +196,19 @@ async function startServer() {
   const PORT = 3000;
   logger.release(`Server configuration: PORT=${PORT}, LOG_LEVEL=${LOG_LEVEL}`);
 
-  const git: SimpleGit = simpleGit(WORKSPACE_DIR);
-
-  async function autoCommit(message: string) {
+  async function autoCommit(username: string, message: string) {
     try {
+      const paths = getUserPaths(username);
+      const git: SimpleGit = simpleGit(paths.workspace);
       await git.add('.');
       const status = await git.status();
       if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
         await git.commit(message);
-        io.emit('workspace:history_updated');
+        logger.debug(`Auto-commit for ${username}: ${message}`);
+        io.emit(`workspace:history_updated:${username}`);
       }
     } catch (error) {
-      logger.error('Auto commit failed', error);
+      logger.error(`Auto-commit failed for ${username}`, error);
     }
   }
 
@@ -283,36 +243,63 @@ async function startServer() {
     }
   }
 
+  // API: Get all users
+  app.get('/api/users', async (req, res) => {
+    try {
+      const users = await fs.readdir(USERS_DIR);
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to list users' });
+    }
+  });
+
+  // API: Create/Login user
+  app.post('/api/users', async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: 'Username is required' });
+    try {
+      await ensureUserDir(username);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create user' });
+    }
+  });
+
   // API: Get all chats
   app.get('/api/chats', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      logger.debug('API: Fetching all chats');
-      const data = await fs.readFile(CHATS_FILE, 'utf-8');
+      const paths = getUserPaths(username);
+      const data = await fs.readFile(paths.chats, 'utf-8');
       res.json(JSON.parse(data));
     } catch (error) {
-      logger.error('API Error: Failed to read chats', error);
       res.status(500).json({ error: 'Failed to read chats' });
     }
   });
 
   // API: Save all chats
   app.post('/api/chats', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
+      const paths = getUserPaths(username);
       const chats = req.body;
-      logger.debug(`API: Saving ${chats.length} chats`);
-      await fs.writeFile(CHATS_FILE, JSON.stringify(chats, null, 2));
-      io.emit('chats:updated', chats);
+      await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
+      io.emit(`chats:updated:${username}`, chats);
       res.json({ success: true });
     } catch (error) {
-      logger.error('API Error: Failed to save chats', error);
       res.status(500).json({ error: 'Failed to save chats' });
     }
   });
 
   // API: Get config
   app.get('/api/config', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      const data = await fs.readFile(CONFIG_FILE, 'utf-8');
+      const paths = getUserPaths(username);
+      const data = await fs.readFile(paths.config, 'utf-8');
       res.json(JSON.parse(data));
     } catch (error) {
       res.status(500).json({ error: 'Failed to read config' });
@@ -321,10 +308,13 @@ async function startServer() {
 
   // API: Save config
   app.post('/api/config', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
+      const paths = getUserPaths(username);
       const config = req.body;
-      await fs.writeFile(CONFIG_FILE, JSON.stringify(config, null, 2));
-      io.emit('config:updated', config);
+      await fs.writeFile(paths.config, JSON.stringify(config, null, 2));
+      io.emit(`config:updated:${username}`, config);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save config' });
@@ -333,8 +323,11 @@ async function startServer() {
 
   // API: Get memory
   app.get('/api/memory', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      const data = await fs.readFile(MEMORY_FILE, 'utf-8');
+      const paths = getUserPaths(username);
+      const data = await fs.readFile(paths.memory, 'utf-8');
       res.json(JSON.parse(data));
     } catch (error) {
       res.status(500).json({ error: 'Failed to read memory' });
@@ -343,10 +336,13 @@ async function startServer() {
 
   // API: Save memory
   app.post('/api/memory', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
+      const paths = getUserPaths(username);
       const memory = req.body;
-      await fs.writeFile(MEMORY_FILE, JSON.stringify(memory, null, 2));
-      io.emit('memory:updated', memory);
+      await fs.writeFile(paths.memory, JSON.stringify(memory, null, 2));
+      io.emit(`memory:updated:${username}`, memory);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save memory' });
@@ -530,7 +526,7 @@ async function startServer() {
 
 
   // Helper: Get all files recursively
-  async function getAllFiles(dirPath: string, baseDir: string = WORKSPACE_DIR): Promise<any[]> {
+  async function getAllFiles(dirPath: string, baseDir: string): Promise<any[]> {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const files = await Promise.all(entries.map(async (entry) => {
       const fullPath = path.join(dirPath, entry.name);
@@ -549,11 +545,14 @@ async function startServer() {
 
   // API: List workspace files
   app.get('/api/workspace', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      if (!fsSync.existsSync(WORKSPACE_DIR)) {
-        await fs.mkdir(WORKSPACE_DIR, { recursive: true });
+      const paths = getUserPaths(username);
+      if (!fsSync.existsSync(paths.workspace)) {
+        await fs.mkdir(paths.workspace, { recursive: true });
       }
-      const stats = await getAllFiles(WORKSPACE_DIR);
+      const stats = await getAllFiles(paths.workspace, paths.workspace);
       res.json(stats);
     } catch (error) {
       logger.error('Failed to list workspace', error);
@@ -563,11 +562,14 @@ async function startServer() {
 
   // API: Read workspace file
   app.get('/api/workspace/read', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const fileName = req.query.name as string;
       if (!fileName) return res.status(400).json({ error: 'Missing filename' });
+      const paths = getUserPaths(username);
       const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
-      const filePath = path.join(WORKSPACE_DIR, safeName);
+      const filePath = path.join(paths.workspace, safeName);
       const content = await fs.readFile(filePath, 'utf-8');
       res.json({ content });
     } catch (error) {
@@ -578,22 +580,35 @@ async function startServer() {
 
   // API: Write workspace file
   app.post('/api/workspace/write', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const { name, content } = req.body;
       if (!name) return res.status(400).json({ error: 'Missing filename' });
+      const paths = getUserPaths(username);
       const safeName = path.normalize(name).replace(/^(\.\.[\/\\])+/, '');
-      const filePath = path.join(WORKSPACE_DIR, safeName);
+      const filePath = path.join(paths.workspace, safeName);
       const dirPath = path.dirname(filePath);
       
       // Ensure directory exists
       await fs.mkdir(dirPath, { recursive: true });
       
       await fs.writeFile(filePath, content, 'utf-8');
-      io.emit('workspace:updated');
+      io.emit(`workspace:updated:${username}`);
       res.json({ success: true });
       
       // Auto commit after writing
-      await autoCommit(`Update ${safeName}`);
+      const git = simpleGit(paths.workspace);
+      try {
+        await git.add('.');
+        const status = await git.status();
+        if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
+          await git.commit(`Update ${safeName}`);
+          io.emit(`workspace:history_updated:${username}`);
+        }
+      } catch (e) {
+        logger.error('Auto commit failed', e);
+      }
     } catch (error) {
       logger.error('Failed to write file', error);
       res.status(500).json({ error: 'Failed to write file' });
@@ -602,17 +617,30 @@ async function startServer() {
 
   // API: Delete workspace file
   app.delete('/api/workspace/delete', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const fileName = req.query.name as string;
       if (!fileName) return res.status(400).json({ error: 'Missing filename' });
+      const paths = getUserPaths(username);
       const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
-      const filePath = path.join(WORKSPACE_DIR, safeName);
+      const filePath = path.join(paths.workspace, safeName);
       await fs.rm(filePath, { recursive: true, force: true });
-      io.emit('workspace:updated');
+      io.emit(`workspace:updated:${username}`);
       res.json({ success: true });
       
       // Auto commit after deleting
-      await autoCommit(`Delete ${safeName}`);
+      const git = simpleGit(paths.workspace);
+      try {
+        await git.add('.');
+        const status = await git.status();
+        if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
+          await git.commit(`Delete ${safeName}`);
+          io.emit(`workspace:history_updated:${username}`);
+        }
+      } catch (e) {
+        logger.error('Auto commit failed', e);
+      }
     } catch (error) {
       logger.error('Failed to delete file or folder', error);
       res.status(500).json({ error: 'Failed to delete file or folder' });
@@ -621,20 +649,27 @@ async function startServer() {
 
   // API: Get workspace history
   app.get('/api/workspace/history', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
+      const paths = getUserPaths(username);
+      const git = simpleGit(paths.workspace);
       const log = await git.log();
       res.json({ history: log.all });
     } catch (error: any) {
-      // If git log fails, it's likely because there are no commits yet
       res.json({ history: [] });
     }
   });
 
   // API: Get commit details
   app.get('/api/workspace/commit-details', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const hash = req.query.hash as string;
       if (!hash) return res.status(400).json({ error: 'Missing hash' });
+      const paths = getUserPaths(username);
+      const git = simpleGit(paths.workspace);
       
       let files = [];
       try {
@@ -647,7 +682,6 @@ async function startServer() {
           return { name: f.file, oldContent, newContent };
         }));
       } catch (e) {
-        // Fallback for the first commit (no parent)
         try {
           const show = await git.show([hash, '--name-only', '--pretty=format:']);
           const fileNames = show.split('\n').filter(Boolean);
@@ -668,73 +702,205 @@ async function startServer() {
   });
 
   // API: Serve workspace files for preview
-  app.use('/preview', express.static(WORKSPACE_DIR));
-  app.use('/preview', (req, res) => {
+  app.use('/preview/:username', (req, res, next) => {
+    const username = req.params.username;
+    const paths = getUserPaths(username);
+    express.static(paths.workspace)(req, res, next);
+  });
+  app.use('/preview/:username', (req, res) => {
     res.status(404).send('File not found in workspace');
   });
 
-  let workspaceProcess: ChildProcess | null = null;
-  const WORKSPACE_PORT = 3001;
+  const workspaceProcesses = new Map<string, ChildProcess>();
+  const WORKSPACE_PORTS = new Map<string, number>();
+  let nextPort = 3001;
 
-  // Helper to check file existence asynchronously
-  const fileExists = async (filePath: string) => !!(await fs.stat(filePath).catch(() => false));
+  // API: Write workspace file
+  app.post('/api/workspace/write', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    try {
+      const { name, content } = req.body;
+      if (!name) return res.status(400).json({ error: 'Missing filename' });
+      const paths = getUserPaths(username);
+      const safeName = path.normalize(name).replace(/^(\.\.[\/\\])+/, '');
+      const filePath = path.join(paths.workspace, safeName);
+      const dirPath = path.dirname(filePath);
+      
+      // Ensure directory exists
+      await fs.mkdir(dirPath, { recursive: true });
+      
+      await fs.writeFile(filePath, content, 'utf-8');
+      io.emit(`workspace:updated:${username}`);
+      res.json({ success: true });
+      
+      // Auto commit after writing
+      const git = simpleGit(paths.workspace);
+      try {
+        await git.add('.');
+        const status = await git.status();
+        if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
+          await git.commit(`Update ${safeName}`);
+          io.emit(`workspace:history_updated:${username}`);
+        }
+      } catch (e) {
+        logger.error('Auto commit failed', e);
+      }
+    } catch (error) {
+      logger.error('Failed to write file', error);
+      res.status(500).json({ error: 'Failed to write file' });
+    }
+  });
+
+  // API: Delete workspace file
+  app.delete('/api/workspace/delete', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    try {
+      const fileName = req.query.name as string;
+      if (!fileName) return res.status(400).json({ error: 'Missing filename' });
+      const paths = getUserPaths(username);
+      const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
+      const filePath = path.join(paths.workspace, safeName);
+      await fs.rm(filePath, { recursive: true, force: true });
+      io.emit(`workspace:updated:${username}`);
+      res.json({ success: true });
+      
+      // Auto commit after deleting
+      const git = simpleGit(paths.workspace);
+      try {
+        await git.add('.');
+        const status = await git.status();
+        if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
+          await git.commit(`Delete ${safeName}`);
+          io.emit(`workspace:history_updated:${username}`);
+        }
+      } catch (e) {
+        logger.error('Auto commit failed', e);
+      }
+    } catch (error) {
+      logger.error('Failed to delete file or folder', error);
+      res.status(500).json({ error: 'Failed to delete file or folder' });
+    }
+  });
+
+  // API: Get workspace history
+  app.get('/api/workspace/history', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    try {
+      const paths = getUserPaths(username);
+      const git = simpleGit(paths.workspace);
+      const log = await git.log();
+      res.json({ history: log.all });
+    } catch (error: any) {
+      res.json({ history: [] });
+    }
+  });
+
+  // API: Get commit details
+  app.get('/api/workspace/commit-details', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    try {
+      const hash = req.query.hash as string;
+      if (!hash) return res.status(400).json({ error: 'Missing hash' });
+      const paths = getUserPaths(username);
+      const git = simpleGit(paths.workspace);
+      
+      let files = [];
+      try {
+        const diffSummary = await git.diffSummary([`${hash}^`, hash]);
+        files = await Promise.all(diffSummary.files.map(async (f) => {
+          let oldContent = '';
+          let newContent = '';
+          try { oldContent = await git.show([`${hash}^:${f.file}`]); } catch (e) {}
+          try { newContent = await git.show([`${hash}:${f.file}`]); } catch (e) {}
+          return { name: f.file, oldContent, newContent };
+        }));
+      } catch (e) {
+        try {
+          const show = await git.show([hash, '--name-only', '--pretty=format:']);
+          const fileNames = show.split('\n').filter(Boolean);
+          files = await Promise.all(fileNames.map(async (f) => {
+            let newContent = '';
+            try { newContent = await git.show([`${hash}:${f}`]); } catch (e) {}
+            return { name: f, oldContent: '', newContent };
+          }));
+        } catch (innerError) {
+           logger.error('Failed to get first commit details', innerError);
+        }
+      }
+      res.json({ files });
+    } catch (error) {
+      logger.error('Failed to get commit details', error);
+      res.status(500).json({ error: 'Failed to get commit details' });
+    }
+  });
+
+  // API: Serve workspace files for preview
+  app.use('/preview/:username', (req, res, next) => {
+    const username = req.params.username;
+    const paths = getUserPaths(username);
+    express.static(paths.workspace)(req, res, next);
+  });
 
   app.post('/api/workspace/run', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      logger.debug('API: Running workspace...');
-      if (workspaceProcess) {
-        logger.debug('Killing existing workspace process');
-        workspaceProcess.kill();
-        workspaceProcess = null;
+      const paths = getUserPaths(username);
+      logger.debug(`API: Running workspace for ${username}...`);
+      
+      if (workspaceProcesses.has(username)) {
+        logger.debug(`Killing existing workspace process for ${username}`);
+        workspaceProcesses.get(username)?.kill();
+        workspaceProcesses.delete(username);
       }
 
-      const packageJsonPath = path.join(WORKSPACE_DIR, 'package.json');
-      logger.debug(`Checking for package.json at: ${packageJsonPath}`);
+      const packageJsonPath = path.join(paths.workspace, 'package.json');
       if (await fileExists(packageJsonPath)) {
-        logger.release('Starting workspace app...');
+        logger.release(`Starting workspace app for ${username}...`);
         
+        let port = WORKSPACE_PORTS.get(username);
+        if (!port) {
+          port = nextPort++;
+          WORKSPACE_PORTS.set(username, port);
+        }
+
         const pkgContent = await fs.readFile(packageJsonPath, 'utf-8');
-        logger.debug('package.json content read');
         const pkg = JSON.parse(pkgContent);
         let startCmd = 'npm run dev';
         if (pkg.scripts?.dev) {
-          startCmd = `npm run dev -- --port ${WORKSPACE_PORT}`;
+          startCmd = `npm run dev -- --port ${port}`;
         } else if (pkg.scripts?.start) {
           startCmd = `npm start`;
         }
 
-        logger.debug(`Start command: ${startCmd}`);
-
-        // Add --no-progress and --loglevel=error to prevent massive stdout flooding which freezes the UI
         let installCmd = 'npm install --no-audit --no-fund --prefer-offline --no-progress --loglevel=error && ';
-        const nodeModulesPath = path.join(WORKSPACE_DIR, 'node_modules');
+        const nodeModulesPath = path.join(paths.workspace, 'node_modules');
         
         if (await fileExists(nodeModulesPath)) {
           const pkgStat = await fs.stat(packageJsonPath);
           const nmStat = await fs.stat(nodeModulesPath);
-          
           if (pkgStat.mtime <= nmStat.mtime) {
-            // Skip install if node_modules is newer than package.json
-            logger.debug('Skipping npm install, node_modules is up to date');
             installCmd = '';
           }
         }
 
-        logger.release(`Executing: ${installCmd}${startCmd}`);
-
-        // Run npm install then the start command
-        workspaceProcess = spawn(`${installCmd}${startCmd}`, {
-          cwd: WORKSPACE_DIR,
+        const proc = spawn(`${installCmd}${startCmd}`, {
+          cwd: paths.workspace,
           shell: true,
-          env: { ...process.env, PORT: WORKSPACE_PORT.toString(), VITE_PORT: WORKSPACE_PORT.toString() }
+          env: { ...process.env, PORT: port.toString(), VITE_PORT: port.toString() }
         });
 
-        // Buffer logs to prevent WebSocket flooding (which freezes the frontend UI)
+        workspaceProcesses.set(username, proc);
+
         let logBuffer = '';
         let logTimeout: NodeJS.Timeout | null = null;
         const emitLogs = () => {
           if (logBuffer) {
-            io.emit('workspace:log', logBuffer);
+            io.emit(`workspace:log:${username}`, logBuffer);
             logBuffer = '';
           }
           logTimeout = null;
@@ -743,30 +909,23 @@ async function startServer() {
         const queueLog = (data: string) => {
           logBuffer += data;
           if (!logTimeout) {
-            logTimeout = setTimeout(emitLogs, 100); // Emit at most once per 100ms
+            logTimeout = setTimeout(emitLogs, 100);
           }
         };
 
-        workspaceProcess.stdout?.on('data', (data) => {
-          queueLog(data.toString());
+        proc.stdout?.on('data', (data) => queueLog(data.toString()));
+        proc.stderr?.on('data', (data) => queueLog(data.toString()));
+        proc.on('error', (err) => {
+          logger.error(`Workspace process error for ${username}`, err);
+          io.emit(`workspace:log:${username}`, `Process error: ${err.message}\n`);
+        });
+        proc.on('close', (code) => {
+          emitLogs();
+          io.emit(`workspace:log:${username}`, `Process exited with code ${code}\n`);
+          workspaceProcesses.delete(username);
         });
 
-        workspaceProcess.stderr?.on('data', (data) => {
-          queueLog(data.toString());
-        });
-
-        workspaceProcess.on('error', (err) => {
-          logger.error('Workspace process error', err);
-          io.emit('workspace:log', `Process error: ${err.message}\n`);
-        });
-
-        workspaceProcess.on('close', (code) => {
-          emitLogs(); // flush remaining
-          io.emit('workspace:log', `Process exited with code ${code}\n`);
-          workspaceProcess = null;
-        });
-
-        res.json({ success: true, type: 'node', port: WORKSPACE_PORT });
+        res.json({ success: true, type: 'node', port });
       } else {
         res.json({ success: true, type: 'static' });
       }
@@ -777,51 +936,39 @@ async function startServer() {
   });
 
   app.post('/api/workspace/stop', (req, res) => {
-    if (workspaceProcess) {
-      workspaceProcess.kill();
-      workspaceProcess = null;
-      io.emit('workspace:log', 'Process stopped by user');
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    
+    if (workspaceProcesses.has(username)) {
+      workspaceProcesses.get(username)?.kill();
+      workspaceProcesses.delete(username);
+      io.emit(`workspace:log:${username}`, 'Process stopped by user');
     }
     res.json({ success: true });
   });
 
-  app.post('/api/system/shutdown', (req, res) => {
-    try {
-      logger.release('Initiating system shutdown in 1 minute...');
-      // Try with sudo first, fallback to without sudo. Include sbin paths.
-      const cmd = 'PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin sudo -n shutdown +1 || PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin sudo -n systemctl poweroff || PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin shutdown +1 || PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin systemctl poweroff';
-      exec(cmd, (error, stdout, stderr) => {
-        if (error) {
-          logger.error('Failed to execute shutdown command', { error, stdout, stderr });
-          return res.status(500).json({ 
-            error: 'Failed to initiate shutdown', 
-            details: 'Linux security requires root privileges to shut down from a background service. Please run the service as root, or add NOPASSWD sudo rights for the shutdown command.' 
-          });
-        }
-        res.json({ success: true, message: 'System will shut down in 1 minute' });
-      });
-    } catch (error) {
-      logger.error('Failed to initiate shutdown', error);
-      res.status(500).json({ error: 'Failed to initiate shutdown' });
-    }
-  });
-
-  app.use('/workspace-preview', createProxyMiddleware({
-    target: `http://localhost:${WORKSPACE_PORT}`,
-    changeOrigin: true,
-    ws: true,
-    pathRewrite: {
-      '^/workspace-preview': '',
-    },
-    on: {
-      error: (err, req, res) => {
-        if ('writeHead' in res) {
-          res.writeHead(500, { 'Content-Type': 'text/plain' });
-          res.end('Workspace app is starting or not running.');
+  app.use('/workspace-preview/:username', (req, res, next) => {
+    const username = req.params.username;
+    const port = WORKSPACE_PORTS.get(username);
+    if (!port) return res.status(404).send('Workspace not running');
+    
+    createProxyMiddleware({
+      target: `http://localhost:${port}`,
+      changeOrigin: true,
+      ws: true,
+      pathRewrite: {
+        [`^/workspace-preview/${username}`]: '',
+      },
+      on: {
+        error: (err, req, res) => {
+          if ('writeHead' in res) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Workspace app is starting or not running.');
+          }
         }
       }
-    }
-  }));
+    })(req, res, next);
+  });
 
   // --- Ollama Proxy Endpoints ---
 
@@ -858,14 +1005,36 @@ async function startServer() {
 
   // Chat with streaming
   app.post('/api/ollama/chat', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+
     const { chatId, messages, model, parameters } = req.body;
     
     await updateStats('sent');
 
-    logger.release(`Proxy: Starting chat session for ${chatId} using ${model}`);
+    logger.release(`Proxy: Starting chat session for ${chatId} (${username}) using ${model}`);
     
-    // Original Ollama logic
     try {
+      const paths = getUserPaths(username);
+      const configData = await fs.readFile(paths.config, 'utf-8');
+      const config = JSON.parse(configData);
+      const memoryData = await fs.readFile(paths.memory, 'utf-8');
+      const memory = JSON.parse(memoryData);
+
+      // Inject memory into system prompt
+      const systemPrompt = config.systemPrompt || '';
+      const memoryContext = memory.facts.length > 0 
+        ? `\n\nUser Context (Long-term Memory):\n${memory.facts.map((f: string) => `- ${f}`).join('\n')}`
+        : '';
+      
+      const enrichedMessages = [...messages];
+      const systemMsgIndex = enrichedMessages.findIndex(m => m.role === 'system');
+      if (systemMsgIndex !== -1) {
+        enrichedMessages[systemMsgIndex].content += memoryContext;
+      } else {
+        enrichedMessages.unshift({ role: 'system', content: systemPrompt + memoryContext });
+      }
+
       const options: any = {};
       if (parameters) {
         if (parameters.temperature !== undefined) options.temperature = parameters.temperature;
@@ -877,7 +1046,7 @@ async function startServer() {
 
       const requestBody: any = {
         model,
-        messages,
+        messages: enrichedMessages,
         stream: true,
         options,
       };
@@ -886,7 +1055,7 @@ async function startServer() {
         requestBody.format = 'json';
       }
 
-      logger.debug(`[CHAT_DEBUG] Request to model ${model}:`, requestBody);
+      logger.debug(`[CHAT_DEBUG] Request to model ${model} for ${username}:`, requestBody);
 
       const response = await fetch(`${OLLAMA_URL}/api/chat`, {
         method: 'POST',
@@ -896,8 +1065,7 @@ async function startServer() {
 
       if (!response.ok) {
         const error = await response.text();
-        logger.error(`Ollama Proxy Error: Chat request failed for ${chatId}`, error);
-        logger.debug(`[CHAT_DEBUG] Error response from model ${model}:`, error);
+        logger.error(`Ollama Proxy Error: Chat request failed for ${chatId} (${username})`, error);
         return res.status(response.status).send(error);
       }
 
@@ -918,24 +1086,24 @@ async function startServer() {
 
       activeGenerations.set(chatId, {
         chatId,
+        username,
         model,
         userMessage,
         assistantMessage
       });
 
       // Emit start event via Socket.io
-      io.emit('chat:start', {
+      io.emit(`chat:start:${username}`, {
         chatId,
         model,
         userMessage,
         assistantMessage
       });
-      io.emit('chat:status', { loading: true, chatId });
+      io.emit(`chat:status:${username}`, { loading: true, chatId });
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
-          // Process any remaining buffer
           if (buffer.trim()) {
             try {
               const json = JSON.parse(buffer);
@@ -943,14 +1111,11 @@ async function startServer() {
                 assistantContent += json.message.content;
                 const gen = activeGenerations.get(chatId);
                 if (gen) gen.assistantMessage.content = assistantContent;
-                io.emit('chat:chunk', { chatId, chunk: json.message.content });
+                io.emit(`chat:chunk:${username}`, { chatId, chunk: json.message.content });
               }
-            } catch (e) {
-              // Ignore final parse error
-            }
+            } catch (e) {}
           }
           
-          // Check for any remaining tool calls at the very end
           const newContent = assistantContent.substring(lastProcessedToolCallIndex);
           let latestIndex = lastProcessedToolCallIndex;
 
@@ -964,7 +1129,7 @@ async function startServer() {
               }
               const call = JSON.parse(jsonString);
               if (call.tool && call.args) {
-                executeToolCall(chatId, call);
+                executeToolCall(chatId, call, username);
               }
             } catch (e) {
               logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
@@ -985,25 +1150,21 @@ async function startServer() {
                 if (call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
                   const isInsideXml = newContent.substring(0, match.index).lastIndexOf('<tool_call>') > newContent.substring(0, match.index).lastIndexOf('</tool_call>');
                   if (!isInsideXml) {
-                    executeToolCall(chatId, call);
+                    executeToolCall(chatId, call, username);
                   }
                 }
               }
-            } catch (e) {
-              // Not a valid JSON tool call, ignore
-            }
+            } catch (e) {}
             latestIndex = Math.max(latestIndex, lastProcessedToolCallIndex + match.index + match[0].length);
           }
 
           lastProcessedToolCallIndex = latestIndex;
-          io.emit('chat:status', { loading: false, chatId });
+          io.emit(`chat:status:${username}`, { loading: false, chatId });
           break;
         }
         
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
-        
-        // Keep the last partial line in the buffer
         buffer = lines.pop() || '';
         
         for (const line of lines) {
@@ -1016,10 +1177,8 @@ async function startServer() {
               const gen = activeGenerations.get(chatId);
               if (gen) gen.assistantMessage.content = assistantContent;
               
-              // Emit chunk via Socket.io
-              io.emit('chat:chunk', { chatId, chunk: contentChunk });
+              io.emit(`chat:chunk:${username}`, { chatId, chunk: contentChunk });
               
-              // Check for new complete tool calls
               const newContent = assistantContent.substring(lastProcessedToolCallIndex);
               let latestIndex = lastProcessedToolCallIndex;
 
@@ -1033,7 +1192,7 @@ async function startServer() {
                   }
                   const call = JSON.parse(jsonString);
                   if (call.tool && call.args) {
-                    executeToolCall(chatId, call);
+                    executeToolCall(chatId, call, username);
                   }
                 } catch (e) {
                   logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
@@ -1054,44 +1213,37 @@ async function startServer() {
                     if (call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
                       const isInsideXml = newContent.substring(0, match.index).lastIndexOf('<tool_call>') > newContent.substring(0, match.index).lastIndexOf('</tool_call>');
                       if (!isInsideXml) {
-                        executeToolCall(chatId, call);
+                        executeToolCall(chatId, call, username);
                       }
                     }
                   }
-                } catch (e) {
-                  // Not a valid JSON tool call, ignore
-                }
+                } catch (e) {}
                 latestIndex = Math.max(latestIndex, lastProcessedToolCallIndex + match.index + match[0].length);
               }
 
               lastProcessedToolCallIndex = latestIndex;
             }
-          } catch (e) {
-            // Ignore parse errors for partial lines (should be rare now with buffering)
-          }
+          } catch (e) {}
         }
         
         res.write(value);
       }
 
-      // Emit end event via Socket.io
       activeGenerations.delete(chatId);
-      io.emit('chat:end', { chatId, finalContent: assistantContent });
-      io.emit('chat:status', { loading: false, chatId });
-      logger.release(`Ollama Proxy: Chat session complete for ${chatId}`);
-      logger.debug(`[CHAT_DEBUG] Response from model ${model}:`, assistantContent);
+      io.emit(`chat:end:${username}`, { chatId, finalContent: assistantContent });
+      io.emit(`chat:status:${username}`, { loading: false, chatId });
+      logger.release(`Ollama Proxy: Chat session complete for ${chatId} (${username})`);
       
       res.end();
       await updateStats('success');
 
-      // --- Post-chat logic: Memory extraction ---
-      extractMemory(chatId, model, messages);
+      extractMemory(chatId, model, messages, username);
       
     } catch (error) {
       activeGenerations.delete(chatId);
       logger.error('Ollama Chat Error:', error);
       await updateStats('fail');
-      io.emit('chat:status', { loading: false, chatId });
+      io.emit(`chat:status:${username}`, { loading: false, chatId });
       res.status(500).json({ error: 'Failed to communicate with Ollama' });
     }
   });
@@ -1162,30 +1314,31 @@ async function startServer() {
 
   // --- End Ollama Proxy Endpoints ---
 
-  async function executeToolCall(chatId: string, call: any) {
+  async function executeToolCall(chatId: string, call: any, username: string) {
     try {
-      logger.debug(`Executing tool ${call.tool}`, call.args);
+      const paths = getUserPaths(username);
+      logger.debug(`Executing tool ${call.tool} for ${username}`, call.args);
       switch (call.tool) {
         case 'list_files':
           try {
-            const allFiles = await getAllFiles(WORKSPACE_DIR);
-            io.emit('tool:result', { chatId, tool: 'list_files', result: allFiles.map(f => f.name) });
-            logger.release(`Tool list_files success: ${allFiles.length} files`);
+            const allFiles = await getAllFiles(paths.workspace, paths.workspace);
+            io.emit(`tool:result:${username}`, { chatId, tool: 'list_files', result: allFiles.map(f => f.name) });
+            logger.release(`Tool list_files success for ${username}: ${allFiles.length} files`);
           } catch (e) {
-            logger.error(`Tool list_files failed`, e);
+            logger.error(`Tool list_files failed for ${username}`, e);
             throw e;
           }
           break;
         case 'read_file':
           if (call.args.name) {
             const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
-            const filePath = path.join(WORKSPACE_DIR, safeName);
+            const filePath = path.join(paths.workspace, safeName);
             try {
               const fileContent = await fs.readFile(filePath, 'utf-8');
-              io.emit('tool:result', { chatId, tool: 'read_file', result: fileContent });
-              logger.release(`Tool read_file success: ${safeName}`);
+              io.emit(`tool:result:${username}`, { chatId, tool: 'read_file', result: fileContent });
+              logger.release(`Tool read_file success for ${username}: ${safeName}`);
             } catch (e) {
-              logger.error(`Tool read_file failed: ${safeName}`, e);
+              logger.error(`Tool read_file failed for ${username}: ${safeName}`, e);
               throw e;
             }
           }
@@ -1193,18 +1346,18 @@ async function startServer() {
         case 'write_file':
           if (call.args.name && call.args.content !== undefined) {
             const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
-            const filePath = path.join(WORKSPACE_DIR, safeName);
+            const filePath = path.join(paths.workspace, safeName);
             const dirPath = path.dirname(filePath);
             
             try {
               // Ensure directory exists
               await fs.mkdir(dirPath, { recursive: true });
               await fs.writeFile(filePath, call.args.content, 'utf-8');
-              io.emit('workspace:updated');
-              io.emit('tool:result', { chatId, tool: 'write_file', result: `Successfully wrote to ${safeName}` });
-              logger.release(`Tool write_file success: ${safeName}`);
+              io.emit(`workspace:updated:${username}`);
+              io.emit(`tool:result:${username}`, { chatId, tool: 'write_file', result: `Successfully wrote to ${safeName}` });
+              logger.release(`Tool write_file success for ${username}: ${safeName}`);
             } catch (e) {
-              logger.error(`Tool write_file failed: ${safeName}`, e);
+              logger.error(`Tool write_file failed for ${username}: ${safeName}`, e);
               throw e;
             }
           }
@@ -1212,30 +1365,31 @@ async function startServer() {
         case 'delete_file':
           if (call.args.name) {
             const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
-            const filePath = path.join(WORKSPACE_DIR, safeName);
+            const filePath = path.join(paths.workspace, safeName);
             try {
               await fs.unlink(filePath);
-              io.emit('workspace:updated');
-              io.emit('tool:result', { chatId, tool: 'delete_file', result: `Successfully deleted ${safeName}` });
-              logger.release(`Tool delete_file success: ${safeName}`);
+              io.emit(`workspace:updated:${username}`);
+              io.emit(`tool:result:${username}`, { chatId, tool: 'delete_file', result: `Successfully deleted ${safeName}` });
+              logger.release(`Tool delete_file success for ${username}: ${safeName}`);
             } catch (e) {
-              logger.error(`Tool delete_file failed: ${safeName}`, e);
+              logger.error(`Tool delete_file failed for ${username}: ${safeName}`, e);
               throw e;
             }
           }
           break;
       }
     } catch (error) {
-      logger.error(`Tool execution failed (${call.tool}) for ${chatId}`, error);
+      logger.error(`Tool execution failed (${call.tool}) for ${chatId} (${username})`, error);
     }
   }
 
-  async function extractMemory(chatId: string, model: string, messages: any[]) {
+  async function extractMemory(chatId: string, model: string, messages: any[], username: string) {
     // Memory Extraction
     if (chatId !== 'memory-extraction') {
       try {
-        logger.debug(`Post-chat logic: Starting memory extraction for ${chatId}`);
-        const currentMemoryData = await fs.readFile(MEMORY_FILE, 'utf-8');
+        const paths = getUserPaths(username);
+        logger.debug(`Post-chat logic: Starting memory extraction for ${chatId} (${username})`);
+        const currentMemoryData = await fs.readFile(paths.memory, 'utf-8');
         const currentMemory = JSON.parse(currentMemoryData);
         
         const context = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
@@ -1256,9 +1410,8 @@ async function startServer() {
                 Instructions:
                 1. Extract any NEW facts from the conversation snippet.
                 2. Combine them with the Current Memory.
-                3. CRITICAL: Review the combined list and REMOVE any semantic duplicates, redundancies, or overlapping information. Merge related facts into single, comprehensive sentences if possible (e.g., instead of "User wants a website" and "User wants to use Next.js", output "User wants to build a website using Next.js").
-                4. Output ONLY a JSON array of strings representing the FINAL, consolidated memory list. You MUST include the existing facts from the Current Memory unless they are superseded or merged with new facts. Do not output markdown code blocks, just the JSON array.
-                Example output: ["User prefers communicating in Vietnamese", "User is a software engineer building a Next.js medical website"]` 
+                3. CRITICAL: Review the combined list and REMOVE any semantic duplicates, redundancies, or overlapping information. Merge related facts into single, comprehensive sentences if possible.
+                4. Output ONLY a JSON array of strings representing the FINAL, consolidated memory list. You MUST include the existing facts from the Current Memory unless they are superseded or merged with new facts. Do not output markdown code blocks, just the JSON array.` 
               },
               { role: 'user', content: `Conversation snippet:\n${context}` }
             ],
@@ -1269,24 +1422,22 @@ async function startServer() {
         if (memoryResponse.ok) {
           const json = await memoryResponse.json();
           const memoryContent = json.message?.content || '[]';
-          logger.debug(`Post-chat logic: Raw memory extraction response for ${chatId}`, memoryContent);
+          logger.debug(`Post-chat logic: Raw memory extraction response for ${chatId} (${username})`, memoryContent);
           const match = memoryContent.match(/\[.*\]/s);
           if (match) {
             const consolidatedFacts = JSON.parse(match[0]);
             if (Array.isArray(consolidatedFacts)) {
-              // Safety check: if it returns empty but we had memory, it might be a hallucination. 
-              // But we will trust the LLM for now.
               const updatedMemory = { facts: consolidatedFacts };
-              await fs.writeFile(MEMORY_FILE, JSON.stringify(updatedMemory, null, 2));
-              io.emit('memory:updated', updatedMemory);
-              logger.release(`Post-chat logic: Memory consolidated. Total facts: ${consolidatedFacts.length}`);
+              await fs.writeFile(paths.memory, JSON.stringify(updatedMemory, null, 2));
+              io.emit(`memory:updated:${username}`, updatedMemory);
+              logger.release(`Post-chat logic: Memory consolidated for ${username}. Total facts: ${consolidatedFacts.length}`);
             }
           }
         } else {
-          logger.error(`Post-chat logic Error: Memory extraction request failed for ${chatId}`);
+          logger.error(`Post-chat logic Error: Memory extraction request failed for ${chatId} (${username})`);
         }
       } catch (error) {
-        logger.error(`Post-chat logic Error: Memory extraction failed for ${chatId}`, error);
+        logger.error(`Post-chat logic Error: Memory extraction failed for ${chatId} (${username})`, error);
       }
     }
   }
@@ -1308,13 +1459,16 @@ async function startServer() {
 
   // API: Fix workspace permissions
   app.post('/api/system/fix-permissions', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      logger.release('Fixing workspace permissions...');
+      const paths = getUserPaths(username);
+      logger.release(`Fixing workspace permissions for ${username}...`);
       // Use chmod -R 777 as a broad fix for permission issues in the workspace
-      await execAsync(`chmod -R 777 ${WORKSPACE_DIR}`);
+      await execAsync(`chmod -R 777 ${paths.workspace}`);
       res.json({ success: true });
     } catch (error: any) {
-      logger.error('Failed to fix permissions', error);
+      logger.error(`Failed to fix permissions for ${username}`, error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -1324,8 +1478,7 @@ async function startServer() {
     logger.debug(`Server configuration:`, {
       OLLAMA_URL,
       LOG_LEVEL,
-      DATA_DIR,
-      WORKSPACE_DIR
+      DATA_DIR
     });
   });
 }

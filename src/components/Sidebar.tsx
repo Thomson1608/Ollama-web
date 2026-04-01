@@ -9,7 +9,9 @@ import {
   Settings,
   Download,
   Folder,
-  BarChart
+  BarChart,
+  LogOut,
+  User
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -29,6 +31,8 @@ interface SidebarProps {
   deleteChat: (id: string, e: React.MouseEvent) => void;
   clearAllChats: () => void;
   isSyncing?: boolean;
+  username?: string | null;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -44,7 +48,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   createNewChat,
   deleteChat,
   clearAllChats,
-  isSyncing
+  isSyncing,
+  username,
+  onLogout
 }) => {
   return (
     <>
@@ -118,6 +124,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       <div className="p-4 border-t border-gray-100 space-y-3">
+        {username && (
+          <div className="flex items-center justify-between p-2 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                <User size={16} className="text-blue-600" />
+              </div>
+              <span className="text-sm font-medium text-gray-700 truncate">{username}</span>
+            </div>
+            <button 
+              onClick={onLogout}
+              className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors text-gray-500 hover:text-red-600"
+              title="Logout"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        )}
         <div className="flex items-center justify-between text-xs px-1">
           <span className="text-gray-500">Status</span>
           <div className="flex items-center gap-1.5">

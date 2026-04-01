@@ -13,9 +13,11 @@ import { ModelsView } from './components/ModelsView';
 import { PullView } from './components/PullView';
 import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
+import { LoginView } from './components/LoginView';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters } from './types';
 
 export default function App() {
+  const [username, setUsername] = useState<string | null>(() => localStorage.getItem('ollama_username'));
   const [chats, setChats] = useState<Chat[]>([]);
   const [systemPrompt, setSystemPrompt] = useState(`You are a world-class software engineer.
 You have access to a workspace where you can read, write, and list files.
@@ -130,10 +132,9 @@ Your primary goal is to manage the workspace files efficiently while keeping the
 
   // Socket.io initialization
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || !username) return;
 
-    console.log('Socket.io: Initializing client...');
-    // Use explicit path if needed, but usually default works
+    console.log(`Socket.io: Initializing client for ${username}...`);
     const socket = io({
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -141,7 +142,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     });
     socketRef.current = socket;
 
-    socket.on('chat:status', ({ loading, chatId }) => {
+    socket.on(`chat:status:${username}`, ({ loading, chatId }) => {
       console.log('Socket.io: chat:status event received:', loading, chatId);
       if (chatId) {
         setGeneratingChatIds(prev => {
@@ -157,67 +158,9 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       console.log('Socket.io: Connected to server with ID:', socket.id);
     });
 
-    socket.on('chat:active_generations', (activeGenerations) => {
-      console.log('Socket.io: chat:active_generations event received:', activeGenerations);
-      if (activeGenerations.length > 0) {
-        setGeneratingChatIds(prev => {
-          const next = new Set(prev);
-          activeGenerations.forEach((gen: any) => next.add(gen.chatId));
-          return next;
-        });
-        activeGenerations.forEach((gen: any) => {
-          setChats(prev => {
-            const chat = prev.find(c => c.id === gen.chatId);
-            if (chat) {
-              const lastMsg = chat.messages[chat.messages.length - 1];
-              const alreadyHasUserMsg = lastMsg && lastMsg.role === 'user' && lastMsg.content === gen.userMessage.content;
-              const hasAssistantMsg = chat.messages.some(m => m.role === 'assistant' && m.timestamp === gen.assistantMessage.timestamp);
-              
-              if (hasAssistantMsg) {
-                // Update the existing assistant message with the current content
-                return prev.map(c => 
-                  c.id === gen.chatId 
-                    ? { 
-                        ...c, 
-                        messages: c.messages.map(m => 
-                          (m.role === 'assistant' && m.timestamp === gen.assistantMessage.timestamp)
-                            ? { ...m, content: gen.assistantMessage.content }
-                            : m
-                        )
-                      }
-                    : c
-                );
-              }
-
-              return prev.map(c => 
-                c.id === gen.chatId 
-                  ? { 
-                      ...c, 
-                      messages: alreadyHasUserMsg 
-                        ? [...c.messages, gen.assistantMessage] 
-                        : [...c.messages, gen.userMessage, gen.assistantMessage] 
-                    }
-                  : c
-              );
-            } else {
-              const newChat: Chat = {
-                id: gen.chatId,
-                title: gen.userMessage.content.slice(0, 30) + (gen.userMessage.content.length > 30 ? '...' : ''),
-                messages: [gen.userMessage, gen.assistantMessage],
-                model: gen.model,
-                createdAt: Date.now(),
-              };
-              return [newChat, ...prev];
-            }
-          });
-        });
-      }
-    });
-
-    socket.on('chat:start', ({ chatId, userMessage, assistantMessage, model }) => {
+    socket.on(`chat:start:${username}`, ({ chatId, userMessage, assistantMessage, model }) => {
       console.log('Socket.io: chat:start event received for chat:', chatId);
       
-      // Sync typing status globally
       setGeneratingChatIds(prev => {
         const next = new Set(prev);
         next.add(chatId);
@@ -227,11 +170,8 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       setChats(prev => {
         const chat = prev.find(c => c.id === chatId);
         if (chat) {
-          // Check if userMessage is already the last message (to avoid duplication for the requester)
           const lastMsg = chat.messages[chat.messages.length - 1];
           const alreadyHasUserMsg = lastMsg && lastMsg.role === 'user' && lastMsg.content === userMessage.content;
-          
-          // Check if assistant message already exists (to avoid duplication)
           const hasAssistantMsg = chat.messages.some(m => m.role === 'assistant' && m.timestamp === assistantMessage.timestamp);
           if (hasAssistantMsg) return prev;
 
@@ -258,7 +198,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       });
     });
 
-    socket.on('chat:chunk', ({ chatId, chunk }) => {
+    socket.on(`chat:chunk:${username}`, ({ chatId, chunk }) => {
       setChats(prev => prev.map(c => 
         c.id === chatId 
           ? { 
@@ -273,7 +213,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       ));
     });
 
-    socket.on('chat:end', ({ chatId, finalContent }) => {
+    socket.on(`chat:end:${username}`, ({ chatId, finalContent }) => {
       console.log('Socket.io: chat:end event received for chat:', chatId);
       setGeneratingChatIds(prev => {
         const next = new Set(prev);
@@ -281,7 +221,6 @@ Your primary goal is to manage the workspace files efficiently while keeping the
         return next;
       });
       
-      // Sync final content
       if (finalContent) {
         setChats(prev => prev.map(c => 
           c.id === chatId 
@@ -298,13 +237,13 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       }
     });
 
-    socket.on('chats:updated', (updatedChats) => {
+    socket.on(`chats:updated:${username}`, (updatedChats) => {
       console.log('Socket.io: chats:updated event received');
       isRemoteUpdate.current = true;
       setChats(updatedChats);
     });
 
-    socket.on('config:updated', (updatedConfig) => {
+    socket.on(`config:updated:${username}`, (updatedConfig) => {
       console.log('Socket.io: config:updated event received');
       if (updatedConfig.systemPrompt !== undefined) {
         isRemoteConfigUpdate.current = true;
@@ -312,22 +251,17 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       }
     });
 
-    socket.on('memory:updated', (updatedMemory) => {
+    socket.on(`memory:updated:${username}`, (updatedMemory) => {
       console.log('Socket.io: memory:updated event received');
       setMemory(updatedMemory);
     });
 
-    socket.on('usage:updated', (newUsage: any) => {
-      console.log('Socket.io: usage:updated event received');
-
-    });
-
-    socket.on('tool:result', ({ chatId, tool, result }) => {
+    socket.on(`tool:result:${username}`, ({ chatId, tool, result }) => {
       console.log(`Socket.io: tool:result event received (${tool}):`, result);
       toast.info(result, { id: `tool-${chatId}-${tool}` });
     });
 
-    socket.on('workspace:updated', () => {
+    socket.on(`workspace:updated:${username}`, () => {
       console.log('Socket.io: workspace:updated event received');
       setWorkspaceRefreshTrigger(prev => prev + 1);
     });
@@ -349,7 +283,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       console.log('Socket.io: Disconnecting client...');
       socket.disconnect();
     };
-  }, [isInitialized]);
+  }, [isInitialized, username]);
 
   // Handle model switch during loading
   useEffect(() => {
@@ -386,17 +320,24 @@ Your primary goal is to manage the workspace files efficiently while keeping the
 
   // Initial load from backend
   useEffect(() => {
+    if (!username) {
+      setIsInitialized(true);
+      return;
+    }
+
     const fetchInitialData = async () => {
       try {
+        const headers = { 'x-username': username };
+        
         // Fetch chats
-        const chatsRes = await fetch('/api/chats');
+        const chatsRes = await fetch('/api/chats', { headers });
         if (chatsRes.ok) {
           const data = await chatsRes.json();
           setChats(data || []);
         }
         
         // Fetch config
-        const configRes = await fetch('/api/config');
+        const configRes = await fetch('/api/config', { headers });
         if (configRes.ok) {
           const data = await configRes.json();
           if (data.systemPrompt) {
@@ -408,17 +349,10 @@ Your primary goal is to manage the workspace files efficiently while keeping the
         }
 
         // Fetch memory
-        const memoryRes = await fetch('/api/memory');
+        const memoryRes = await fetch('/api/memory', { headers });
         if (memoryRes.ok) {
           const data = await memoryRes.json();
           setMemory(data);
-        }
-
-        // Fetch usage
-        const usageRes = await fetch('/api/usage');
-        if (usageRes.ok) {
-          const data = await usageRes.json();
-
         }
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
@@ -427,13 +361,12 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       }
     };
     fetchInitialData();
-  }, []);
+  }, [username]);
 
   // Sync to backend whenever chats change
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || !username) return;
 
-    // Don't sync if it's a remote update or if any chat is generating
     if (isRemoteUpdate.current || generatingChatIds.size > 0) {
       isRemoteUpdate.current = false;
       return;
@@ -444,7 +377,10 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       try {
         await fetch('/api/chats', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-username': username
+          },
           body: JSON.stringify(chats),
         });
       } catch (error) {
@@ -454,15 +390,14 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       }
     };
 
-    const timeoutId = setTimeout(syncChats, 1000); // Debounce sync
+    const timeoutId = setTimeout(syncChats, 1000);
     return () => clearTimeout(timeoutId);
-  }, [chats, isInitialized, generatingChatIds.size]);
+  }, [chats, isInitialized, generatingChatIds.size, username]);
 
   // Sync config to backend
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || !username) return;
 
-    // Don't sync if it's a remote update
     if (isRemoteConfigUpdate.current) {
       isRemoteConfigUpdate.current = false;
       return;
@@ -472,7 +407,10 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       try {
         await fetch('/api/config', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-username': username
+          },
           body: JSON.stringify({ systemPrompt, parameters: globalParameters }),
         });
       } catch (error) {
@@ -482,7 +420,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     
     const timeoutId = setTimeout(syncConfig, 1000);
     return () => clearTimeout(timeoutId);
-  }, [systemPrompt, globalParameters, isInitialized]);
+  }, [systemPrompt, globalParameters, isInitialized, username]);
 
   useEffect(() => {
     checkConnection();
@@ -705,6 +643,12 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     return gb.toFixed(2) + ' GB';
   };
 
+  const updateChatSystemPrompt = (chatId: string, prompt: string) => {
+    setChats(prev => prev.map(chat => 
+      chat.id === chatId ? { ...chat, systemPrompt: prompt } : chat
+    ));
+  };
+
   const handleSendMessage = async (e?: React.FormEvent, isRetry = false) => {
     e?.preventDefault();
     
@@ -762,17 +706,16 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     try {
       const response = await fetch('/api/ollama/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username || ''
+        },
         body: JSON.stringify({
           chatId: currentChatId,
           model: selectedModel,
           systemPrompt: currentChat?.systemPrompt || systemPrompt,
           parameters: currentChat?.parameters || globalParameters,
           messages: [
-            { 
-              role: 'system', 
-              content: `${currentChat?.systemPrompt || systemPrompt}${memory.facts.length > 0 ? `\n\nUser Information (Memory):\n- ${memory.facts.join('\n- ')}` : ''}` 
-            },
             ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
             { role: 'user', content: messageContent }
           ],
@@ -828,21 +771,16 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     }
   };
 
-  const extractMemory = async (chatId: string) => {
-    // This is now handled by the backend
-  };
-
-  const handleToolCalls = async (chatId: string, content: string) => {
-    // This is now handled by the backend
-  };
-
   const clearMemory = () => {
     if (confirm('Are you sure you want to clear all extracted facts? This will reset the AI\'s long-term memory of you.')) {
       const emptyMemory = { facts: [] };
       setMemory(emptyMemory);
       fetch('/api/memory', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username || ''
+        },
         body: JSON.stringify(emptyMemory),
       });
       toast.success('Memory cleared');
@@ -855,9 +793,28 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     toast.success('Settings saved');
   };
 
-  const updateChatSystemPrompt = (chatId: string, systemPrompt: string) => {
-    setChats(prev => prev.map(c => c.id === chatId ? { ...c, systemPrompt } : c));
+  const handleLogin = (user: string) => {
+    setUsername(user);
+    localStorage.setItem('ollama_username', user);
+    toast.success(`Welcome, ${user}!`);
   };
+
+  const handleLogout = () => {
+    setUsername(null);
+    localStorage.removeItem('ollama_username');
+    setChats([]);
+    setActiveChatId(null);
+    toast.info('Logged out');
+  };
+
+  if (!username) {
+    return (
+      <div className="h-screen w-full bg-[#f5f5f5]">
+        <Toaster position="top-center" />
+        <LoginView onLogin={handleLogin} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#f5f5f5]">
@@ -877,6 +834,8 @@ Your primary goal is to manage the workspace files efficiently while keeping the
         deleteChat={deleteChat}
         clearAllChats={clearAllChats}
         isSyncing={isSyncing}
+        username={username}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1 flex flex-col relative min-w-0">
@@ -961,6 +920,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
                 refreshTrigger={workspaceRefreshTrigger} 
                 socket={socketRef.current} 
                 isMobile={isMobile}
+                username={username}
               />
             )}
 
