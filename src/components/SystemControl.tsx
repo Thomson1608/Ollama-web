@@ -52,6 +52,25 @@ export const SystemControl: React.FC = () => {
   const [processSearch, setProcessSearch] = useState('');
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
+  const [isFixingPermissions, setIsFixingPermissions] = useState(false);
+
+  const fixPermissions = async () => {
+    setIsFixingPermissions(true);
+    try {
+      const res = await fetch('/api/system/fix-permissions', { method: 'POST' });
+      if (res.ok) {
+        toast.success('Workspace permissions fixed successfully');
+      } else {
+        const data = await res.json();
+        toast.error(`Failed to fix permissions: ${data.error}`);
+      }
+    } catch (e) {
+      toast.error('Failed to fix permissions');
+    } finally {
+      setIsFixingPermissions(false);
+    }
+  };
+
   const fetchStats = async () => {
     try {
       const res = await fetch('/api/system/stats');
@@ -246,28 +265,42 @@ export const SystemControl: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex overflow-x-auto hide-scrollbar gap-1 md:gap-2 p-1 bg-gray-100 rounded-xl w-full md:w-fit">
-        {[
-          { id: 'monitor', label: 'Monitor', icon: Activity },
-          { id: 'processes', label: 'Processes', icon: Cpu },
-          { id: 'services', label: 'Services', icon: Database },
-          { id: 'terminal', label: 'Terminal', icon: TerminalIcon },
-        ].map(section => (
-          <button
-            key={section.id}
-            onClick={() => setActiveSection(section.id as any)}
-            className={cn(
-              "flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold transition-all whitespace-nowrap flex-1 md:flex-none",
-              activeSection === section.id 
-                ? "bg-white text-blue-600 shadow-sm" 
-                : "text-gray-500 hover:text-gray-700"
-            )}
-          >
-            <section.icon size={12} className="md:hidden" />
-            <section.icon size={14} className="hidden md:block" />
-            {section.label}
-          </button>
-        ))}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex overflow-x-auto hide-scrollbar gap-1 md:gap-2 p-1 bg-gray-100 rounded-xl w-full md:w-fit">
+          {[
+            { id: 'monitor', label: 'Monitor', icon: Activity },
+            { id: 'processes', label: 'Processes', icon: Cpu },
+            { id: 'services', label: 'Services', icon: Database },
+            { id: 'terminal', label: 'Terminal', icon: TerminalIcon },
+          ].map(section => (
+            <button
+              key={section.id}
+              onClick={() => setActiveSection(section.id as any)}
+              className={cn(
+                "flex items-center justify-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 rounded-lg text-[10px] md:text-xs font-bold transition-all whitespace-nowrap flex-1 md:flex-none",
+                activeSection === section.id 
+                  ? "bg-white text-blue-600 shadow-sm" 
+                  : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              <section.icon size={12} className="md:hidden" />
+              <section.icon size={14} className="hidden md:block" />
+              {section.label}
+            </button>
+          ))}
+        </div>
+
+        <button 
+          onClick={fixPermissions}
+          disabled={isFixingPermissions}
+          className={cn(
+            "flex items-center justify-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-xl transition-all text-xs font-bold border border-amber-200 shadow-sm",
+            isFixingPermissions && "opacity-50 cursor-not-allowed"
+          )}
+        >
+          {isFixingPermissions ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
+          {isFixingPermissions ? 'Fixing...' : 'Fix Workspace Permissions'}
+        </button>
       </div>
 
       {activeSection === 'monitor' && stats && (

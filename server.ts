@@ -90,6 +90,19 @@ async function ensureDataDir() {
       await execAsync(`git config --global --add safe.directory ${WORKSPACE_DIR}`);
     } catch (e) {}
 
+    // Ensure workspace directory exists
+    if (!fsSync.existsSync(WORKSPACE_DIR)) {
+      await fs.mkdir(WORKSPACE_DIR, { recursive: true });
+    }
+
+    // Attempt to fix permissions on startup to avoid EACCES errors
+    try {
+      await execAsync(`chmod -R 777 ${WORKSPACE_DIR}`);
+      logger.release('Workspace permissions fixed on startup');
+    } catch (e) {
+      logger.error('Failed to fix workspace permissions on startup', e);
+    }
+
     let isRepo = false;
     try {
       isRepo = await git.checkIsRepo();
@@ -1267,6 +1280,19 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // API: Fix workspace permissions
+  app.post('/api/system/fix-permissions', async (req, res) => {
+    try {
+      logger.release('Fixing workspace permissions...');
+      // Use chmod -R 777 as a broad fix for permission issues in the workspace
+      await execAsync(`chmod -R 777 ${WORKSPACE_DIR}`);
+      res.json({ success: true });
+    } catch (error: any) {
+      logger.error('Failed to fix permissions', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     logger.release(`Server status: Running on http://localhost:${PORT}`);
