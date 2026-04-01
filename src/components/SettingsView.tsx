@@ -11,10 +11,13 @@ import {
   Save,
   BarChart,
   Power,
-  Activity
+  Activity,
+  Cpu,
+  Hash,
+  Info
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { ConnectionStatus, Memory } from '../types';
+import { ConnectionStatus, Memory, ModelParameters } from '../types';
 import { StatsView } from './StatsView';
 import { MemoryEditor } from './MemoryEditor';
 import { SystemControl } from './SystemControl';
@@ -24,17 +27,21 @@ import { toast } from 'sonner';
 interface SettingsViewProps {
   systemPrompt: string;
   setSystemPrompt: (prompt: string) => void;
+  parameters: ModelParameters;
+  setParameters: (params: ModelParameters) => void;
   memory: Memory;
   clearMemory: () => void;
   saveSettings: () => void;
   connectionStatus: ConnectionStatus;
 }
 
-type TabType = 'general' | 'memory' | 'prompt' | 'stats';
+type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'stats';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   systemPrompt,
   setSystemPrompt,
+  parameters,
+  setParameters,
   memory,
   clearMemory,
   saveSettings,
@@ -42,18 +49,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
+  const [localParameters, setLocalParameters] = useState<ModelParameters>(parameters);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
   const [isConfirmingShutdown, setIsConfirmingShutdown] = useState(false);
-  const hasChanges = localPrompt !== systemPrompt || JSON.stringify(localMemory) !== JSON.stringify(memory.facts);
+  
+  const hasChanges = 
+    localPrompt !== systemPrompt || 
+    JSON.stringify(localMemory) !== JSON.stringify(memory.facts) ||
+    JSON.stringify(localParameters) !== JSON.stringify(parameters);
 
   // Update local state if parent state changes (e.g. on initial load)
   useEffect(() => {
     setLocalPrompt(systemPrompt);
     setLocalMemory(memory.facts);
-  }, [systemPrompt, memory]);
+    setLocalParameters(parameters);
+  }, [systemPrompt, memory, parameters]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
+    setParameters(localParameters);
     // Update memory via API
     fetch('/api/memory', {
       method: 'POST',
@@ -63,6 +77,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         // We need a way to update parent state, but for now we just save and reload
         saveSettings();
     });
+  };
+
+  const updateParam = (key: keyof ModelParameters, value: any) => {
+    setLocalParameters(prev => ({ ...prev, [key]: value }));
   };
 
   const handleShutdown = async () => {
@@ -88,6 +106,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { id: 'general', label: 'General Setting', icon: Globe },
     { id: 'memory', label: 'Long-term Memory', icon: Brain },
     { id: 'prompt', label: 'System Prompt', icon: UserCircle },
+    { id: 'model', label: 'Model Defaults', icon: Cpu },
     { id: 'stats', label: 'Chat Statistics', icon: BarChart },
   ] as const;
 
@@ -277,6 +296,134 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 placeholder="Tell the AI who you are and how it should behave..."
                 className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-6 py-5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-mono min-h-[400px] leading-relaxed"
               />
+            </div>
+          )}
+
+          {activeTab === 'model' && (
+            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-8">
+              <div className="flex items-center justify-between">
+                <label className="text-base font-bold text-gray-700 flex items-center gap-2">
+                  <Cpu size={20} className="text-blue-500" />
+                  Model Default Parameters
+                </label>
+                {hasChanges && (
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 animate-pulse">
+                    UNSAVED CHANGES
+                  </span>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Temperature */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                      Temperature
+                      <Info size={14} className="text-gray-400 cursor-help" />
+                    </label>
+                    <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                      {(localParameters.temperature ?? 0.7).toFixed(1)}
+                    </span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="2" 
+                    step="0.1"
+                    value={localParameters.temperature ?? 0.7}
+                    onChange={(e) => updateParam('temperature', parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                </div>
+
+                {/* Top P */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                      Top P
+                      <Info size={14} className="text-gray-400 cursor-help" />
+                    </label>
+                    <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                      {(localParameters.topP ?? 0.9).toFixed(2)}
+                    </span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="1" 
+                    step="0.01"
+                    value={localParameters.topP ?? 0.9}
+                    onChange={(e) => updateParam('topP', parseFloat(e.target.value))}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                </div>
+
+                {/* Top K */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                      Top K
+                      <Info size={14} className="text-gray-400 cursor-help" />
+                    </label>
+                    <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                      {localParameters.topK ?? 40}
+                    </span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="100" 
+                    step="1"
+                    value={localParameters.topK ?? 40}
+                    onChange={(e) => updateParam('topK', parseInt(e.target.value))}
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                </div>
+
+                {/* Max Tokens */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                      Max Tokens
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <input 
+                      type="number" 
+                      placeholder="Default"
+                      value={localParameters.maxTokens ?? ''}
+                      onChange={(e) => updateParam('maxTokens', e.target.value ? parseInt(e.target.value) : undefined)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* JSON Mode */}
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-600 shadow-sm">
+                    <Terminal size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800">JSON Mode</h4>
+                    <p className="text-[10px] text-gray-500">Force the model to output valid JSON</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => updateParam('jsonMode', !localParameters.jsonMode)}
+                  className={cn(
+                    "w-12 h-6 rounded-full transition-all relative",
+                    localParameters.jsonMode ? "bg-blue-600" : "bg-gray-300"
+                  )}
+                >
+                  <div className={cn(
+                    "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                    localParameters.jsonMode ? "left-7" : "left-1"
+                  )} />
+                </button>
+              </div>
             </div>
           )}
 

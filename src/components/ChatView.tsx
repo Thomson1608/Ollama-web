@@ -35,8 +35,6 @@ interface ChatViewProps {
   createNewChat: () => void;
   connectionStatus: ConnectionStatus;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
-  showSettingsSidebar: boolean;
-  setShowSettingsSidebar: (show: boolean) => void;
   onUpdateSystemPrompt: (prompt: string) => void;
 }
 
@@ -92,8 +90,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
   createNewChat,
   connectionStatus,
   messagesEndRef,
-  showSettingsSidebar,
-  setShowSettingsSidebar,
   onUpdateSystemPrompt
 }) => {
   const [isListening, setIsListening] = useState(false);
@@ -353,16 +349,6 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </span>
             )}
           </div>
-          <button 
-            onClick={() => setShowSettingsSidebar(!showSettingsSidebar)}
-            className={cn(
-              "p-2 rounded-lg transition-all shrink-0",
-              showSettingsSidebar ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-            )}
-            title="Model Settings"
-          >
-            <Settings2 size={20} />
-          </button>
         </div>
       )}
 

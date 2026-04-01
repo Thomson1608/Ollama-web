@@ -9,6 +9,15 @@ export interface Message {
   timestamp: number;
 }
 
+export interface ModelParameters {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxTokens?: number;
+  stop?: string[];
+  jsonMode?: boolean;
+}
+
 export interface Chat {
   id: string;
   title: string;
@@ -16,14 +25,7 @@ export interface Chat {
   model: string;
   createdAt: number;
   systemPrompt?: string;
-  parameters?: {
-    temperature?: number;
-    topP?: number;
-    topK?: number;
-    maxTokens?: number;
-    stop?: string[];
-    jsonMode?: boolean;
-  };
+  parameters?: ModelParameters;
 }
 
 export interface OllamaModel {
@@ -55,6 +57,11 @@ export type ConnectionStatus = 'connected' | 'disconnected' | 'checking';
 
 export interface Memory {
   facts: string[];
+}
+
+export interface Config {
+  systemPrompt: string;
+  parameters: ModelParameters;
 }
 
 export interface WorkspaceFile {

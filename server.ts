@@ -149,7 +149,17 @@ async function ensureDataDir() {
   try {
     await fs.access(CONFIG_FILE);
   } catch {
-    await fs.writeFile(CONFIG_FILE, JSON.stringify({ systemPrompt: '' }, null, 2));
+    await fs.writeFile(CONFIG_FILE, JSON.stringify({ 
+      systemPrompt: '',
+      parameters: {
+        temperature: 0.7,
+        topP: 0.9,
+        topK: 40,
+        maxTokens: undefined,
+        stop: [],
+        jsonMode: false
+      }
+    }, null, 2));
   }
 
   try {

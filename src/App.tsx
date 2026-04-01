@@ -13,8 +13,7 @@ import { ModelsView } from './components/ModelsView';
 import { PullView } from './components/PullView';
 import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
-import { ModelSettingsSidebar } from './components/ModelSettingsSidebar';
-import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall } from './types';
+import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters } from './types';
 
 export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
@@ -55,6 +54,14 @@ Use the following tools to assist the user with coding tasks:
    \`\`\`
 
 When you write code, briefly explain your plan in the chat, then immediately use the tool call(s). The files will appear in the workspace on the right side of the screen.`);
+  const [globalParameters, setGlobalParameters] = useState<ModelParameters>({
+    temperature: 0.7,
+    topP: 0.9,
+    topK: 40,
+    maxTokens: undefined,
+    stop: [],
+    jsonMode: false
+  });
   const [memory, setMemory] = useState<Memory>({ facts: [] });
   const [isSyncing, setIsSyncing] = useState(false);
   const isRemoteUpdate = useRef(false);
@@ -78,7 +85,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
   const [modelFilter, setModelFilter] = useState<'local' | 'cloud-local'>('local');
-  const [showSettingsSidebar, setShowSettingsSidebar] = useState(false);
 
   const allOllamaModels = [
     'llama3.2', 'llama3.1', 'llama3', 'llama2', 'mistral', 'mistral-nemo', 'mixtral',
@@ -402,6 +408,9 @@ When you write code, briefly explain your plan in the chat, then immediately use
           if (data.systemPrompt) {
             setSystemPrompt(data.systemPrompt);
           }
+          if (data.parameters) {
+            setGlobalParameters(data.parameters);
+          }
         }
 
         // Fetch memory
@@ -470,7 +479,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
         await fetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ systemPrompt }),
+          body: JSON.stringify({ systemPrompt, parameters: globalParameters }),
         });
       } catch (error) {
         console.error('Failed to sync config to backend:', error);
@@ -479,7 +488,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
     
     const timeoutId = setTimeout(syncConfig, 1000);
     return () => clearTimeout(timeoutId);
-  }, [systemPrompt, isInitialized]);
+  }, [systemPrompt, globalParameters, isInitialized]);
 
   useEffect(() => {
     checkConnection();
@@ -764,7 +773,7 @@ When you write code, briefly explain your plan in the chat, then immediately use
           chatId: currentChatId,
           model: selectedModel,
           systemPrompt: currentChat?.systemPrompt || systemPrompt,
-          parameters: currentChat?.parameters,
+          parameters: currentChat?.parameters || globalParameters,
           messages: [
             { 
               role: 'system', 
@@ -852,10 +861,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
     toast.success('Settings saved');
   };
 
-  const updateChatParameters = (chatId: string, parameters: any) => {
-    setChats(prev => prev.map(c => c.id === chatId ? { ...c, parameters } : c));
-  };
-
   const updateChatSystemPrompt = (chatId: string, systemPrompt: string) => {
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, systemPrompt } : c));
   };
@@ -912,8 +917,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
                     createNewChat={createNewChat}
                     connectionStatus={connectionStatus}
                     messagesEndRef={messagesEndRef}
-                    showSettingsSidebar={showSettingsSidebar}
-                    setShowSettingsSidebar={setShowSettingsSidebar}
                     onUpdateSystemPrompt={(prompt) => activeChatId && updateChatSystemPrompt(activeChatId, prompt)}
                   />
                 </div>
@@ -971,6 +974,8 @@ When you write code, briefly explain your plan in the chat, then immediately use
               <SettingsView 
                 systemPrompt={systemPrompt}
                 setSystemPrompt={setSystemPrompt}
+                parameters={globalParameters}
+                setParameters={setGlobalParameters}
                 memory={memory}
                 clearMemory={clearMemory}
                 saveSettings={saveSettings}
@@ -978,15 +983,6 @@ When you write code, briefly explain your plan in the chat, then immediately use
               />
             )}
           </div>
-
-          {currentView === 'chat' && activeChatId && (
-            <ModelSettingsSidebar 
-              isOpen={showSettingsSidebar}
-              onClose={() => setShowSettingsSidebar(false)}
-              parameters={activeChat?.parameters || {}}
-              onUpdateParameters={(params) => updateChatParameters(activeChatId, params)}
-            />
-          )}
         </div>
       </main>
     </div>
