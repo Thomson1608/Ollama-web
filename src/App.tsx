@@ -942,7 +942,11 @@ When you write code, briefly explain your plan in the chat, then immediately use
           )}
 
           {currentView === 'workspace' && (
-            <WorkspaceView refreshTrigger={workspaceRefreshTrigger} socket={socketRef.current} />
+            <WorkspaceView 
+              refreshTrigger={workspaceRefreshTrigger} 
+              socket={socketRef.current} 
+              isMobile={isMobile}
+            />
           )}
 
           {currentView === 'settings' && (
