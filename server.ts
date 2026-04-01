@@ -22,6 +22,7 @@ const USERS_DIR = path.join(DATA_DIR, 'users');
 const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const SYSTEM_LOG_FILE = path.join(DATA_DIR, 'system.log');
+const ADMIN_CONFIG_FILE = path.join(DATA_DIR, 'admin_config.json');
 
 // Helper to get user-specific paths
 function getUserPaths(username: string) {
@@ -34,6 +35,16 @@ function getUserPaths(username: string) {
     workspace: path.join(userDir, 'workspace'),
     profile: path.join(userDir, 'profile.json')
   };
+}
+
+async function isAdmin(username: string) {
+  try {
+    const paths = getUserPaths(username);
+    const profileData = await fs.readFile(paths.profile, 'utf-8');
+    return JSON.parse(profileData).role === 'admin';
+  } catch (e) {
+    return false;
+  }
 }
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
@@ -319,8 +330,20 @@ async function startServer() {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
+      const isUserAdmin = await isAdmin(username);
       const paths = getUserPaths(username);
-      const data = await fs.readFile(paths.config, 'utf-8');
+      const configFile = isUserAdmin ? ADMIN_CONFIG_FILE : paths.config;
+      
+      let data;
+      try {
+        data = await fs.readFile(configFile, 'utf-8');
+      } catch (e) {
+        // If config doesn't exist, return default config
+        data = JSON.stringify({
+          systemPrompt: "You are a helpful assistant.",
+          parameters: { temperature: 0.7, topP: 0.9, topK: 40, maxTokens: null, stop: [], jsonMode: false }
+        });
+      }
       res.json(JSON.parse(data));
     } catch (error) {
       res.status(500).json({ error: 'Failed to read config' });
@@ -332,6 +355,10 @@ async function startServer() {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
+      const isUserAdmin = await isAdmin(username);
+      if (isUserAdmin) {
+        return res.status(403).json({ error: 'Admin config cannot be modified' });
+      }
       const paths = getUserPaths(username);
       const config = req.body;
       await fs.writeFile(paths.config, JSON.stringify(config, null, 2));
