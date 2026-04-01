@@ -49,7 +49,12 @@ const logger = {
     } catch (e) {}
   },
   error: (message: string, error?: any) => {
-    const logMsg = `[ERROR] ${new Date().toISOString()} - ${message}${error ? ' ' + JSON.stringify(error, null, 2) : ''}\n`;
+    const errorData = error instanceof Error ? {
+      message: error.message,
+      stack: error.stack,
+      ...(error as any)
+    } : error;
+    const logMsg = `[ERROR] ${new Date().toISOString()} - ${message}${errorData ? ' ' + JSON.stringify(errorData, null, 2) : ''}\n`;
     process.stderr.write(logMsg);
     try {
       fsSync.appendFileSync(SYSTEM_LOG_FILE, logMsg);
@@ -653,22 +658,29 @@ async function startServer() {
 
   app.post('/api/workspace/run', async (req, res) => {
     try {
+      logger.debug('API: Running workspace...');
       if (workspaceProcess) {
+        logger.debug('Killing existing workspace process');
         workspaceProcess.kill();
         workspaceProcess = null;
       }
 
       const packageJsonPath = path.join(WORKSPACE_DIR, 'package.json');
+      logger.debug(`Checking for package.json at: ${packageJsonPath}`);
       if (await fileExists(packageJsonPath)) {
         logger.release('Starting workspace app...');
         
-        const pkg = JSON.parse(await fs.readFile(packageJsonPath, 'utf-8'));
+        const pkgContent = await fs.readFile(packageJsonPath, 'utf-8');
+        logger.debug('package.json content read');
+        const pkg = JSON.parse(pkgContent);
         let startCmd = 'npm run dev';
         if (pkg.scripts?.dev) {
           startCmd = `npm run dev -- --port ${WORKSPACE_PORT}`;
         } else if (pkg.scripts?.start) {
           startCmd = `npm start`;
         }
+
+        logger.debug(`Start command: ${startCmd}`);
 
         // Add --no-progress and --loglevel=error to prevent massive stdout flooding which freezes the UI
         let installCmd = 'npm install --no-audit --no-fund --prefer-offline --no-progress --loglevel=error && ';
@@ -680,9 +692,12 @@ async function startServer() {
           
           if (pkgStat.mtime <= nmStat.mtime) {
             // Skip install if node_modules is newer than package.json
+            logger.debug('Skipping npm install, node_modules is up to date');
             installCmd = '';
           }
         }
+
+        logger.release(`Executing: ${installCmd}${startCmd}`);
 
         // Run npm install then the start command
         workspaceProcess = spawn(`${installCmd}${startCmd}`, {
@@ -715,6 +730,11 @@ async function startServer() {
 
         workspaceProcess.stderr?.on('data', (data) => {
           queueLog(data.toString());
+        });
+
+        workspaceProcess.on('error', (err) => {
+          logger.error('Workspace process error', err);
+          io.emit('workspace:log', `Process error: ${err.message}\n`);
         });
 
         workspaceProcess.on('close', (code) => {
@@ -785,8 +805,13 @@ async function startServer() {
   // List models
   app.get('/api/ollama/tags', async (req, res) => {
     try {
-      logger.debug('Ollama Proxy: Fetching tags');
-      const response = await fetch(`${OLLAMA_URL}/api/tags`);
+      logger.debug(`Ollama Proxy: Fetching tags from ${OLLAMA_URL}/api/tags`);
+      const response = await fetch(`${OLLAMA_URL}/api/tags`).catch(err => {
+        throw new Error(`Connection failed: ${err.message}`);
+      });
+      if (!response.ok) {
+        throw new Error(`Ollama returned ${response.status}: ${await response.text()}`);
+      }
       const data = await response.json();
       logger.debug('Ollama Proxy: Tags fetched successfully', { count: data.models?.length });
       res.json(data);
