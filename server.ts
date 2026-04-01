@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 import { spawn, ChildProcess, exec } from 'child_process';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { simpleGit, SimpleGit } from 'simple-git';
+import si from 'systeminformation';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -348,6 +349,97 @@ async function startServer() {
       res.json({ logs: debugLogs });
     } catch (error) {
       res.status(500).json({ error: 'Failed to read chat debug logs' });
+    }
+  });
+
+  // API: Get system stats (CPU, Memory, Disk)
+  app.get('/api/system/stats', async (req, res) => {
+    try {
+      const [cpu, mem, fsSize] = await Promise.all([
+        si.currentLoad(),
+        si.mem(),
+        si.fsSize()
+      ]);
+      res.json({ cpu, mem, fsSize });
+    } catch (error) {
+      logger.error('Failed to get system stats', error);
+      res.status(500).json({ error: 'Failed to get system stats' });
+    }
+  });
+
+  // API: Get processes
+  app.get('/api/system/processes', async (req, res) => {
+    try {
+      const processes = await si.processes();
+      res.json(processes);
+    } catch (error) {
+      logger.error('Failed to get processes', error);
+      res.status(500).json({ error: 'Failed to get processes' });
+    }
+  });
+
+  // API: Kill process
+  app.post('/api/system/processes/kill', async (req, res) => {
+    const { pid } = req.body;
+    if (!pid) return res.status(400).json({ error: 'PID is required' });
+    try {
+      exec(`kill -9 ${pid}`, (error, stdout, stderr) => {
+        if (error) {
+          logger.error(`Failed to kill process ${pid}`, error);
+          return res.status(500).json({ error: error.message });
+        }
+        logger.release(`Killed process ${pid}`);
+        res.json({ success: true });
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to kill process' });
+    }
+  });
+
+  // API: Get services
+  app.get('/api/system/services', async (req, res) => {
+    try {
+      const services = await si.services('*');
+      res.json(services);
+    } catch (error) {
+      logger.error('Failed to get services', error);
+      res.status(500).json({ error: 'Failed to get services' });
+    }
+  });
+
+  // API: Control service
+  app.post('/api/system/services/control', async (req, res) => {
+    const { service, action } = req.body; // action: start, stop, restart
+    if (!service || !action) return res.status(400).json({ error: 'Service and action are required' });
+    try {
+      exec(`systemctl ${action} ${service}`, (error, stdout, stderr) => {
+        if (error) {
+          logger.error(`Failed to ${action} service ${service}`, error);
+          return res.status(500).json({ error: error.message });
+        }
+        logger.release(`Service ${service} ${action}ed`);
+        res.json({ success: true });
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to control service' });
+    }
+  });
+
+  // API: Terminal execute
+  app.post('/api/system/terminal', async (req, res) => {
+    const { command } = req.body;
+    if (!command) return res.status(400).json({ error: 'Command is required' });
+    try {
+      logger.debug(`Terminal: Executing command: ${command}`);
+      exec(command, (error, stdout, stderr) => {
+        res.json({
+          stdout,
+          stderr,
+          error: error ? error.message : null
+        });
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to execute command' });
     }
   });
 

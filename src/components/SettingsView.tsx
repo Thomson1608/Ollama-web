@@ -10,12 +10,14 @@ import {
   Trash2,
   Save,
   BarChart,
-  Power
+  Power,
+  Activity
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectionStatus, Memory } from '../types';
 import { StatsView } from './StatsView';
 import { MemoryEditor } from './MemoryEditor';
+import { SystemControl } from './SystemControl';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -207,6 +209,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <p className="text-[11px] text-red-700 leading-relaxed">
                   This will schedule a full system shutdown in 1 minute. Use this if you are running the application on a dedicated machine or VPS and want to power it off.
                 </p>
+              </div>
+
+              <div className="pt-6 border-t border-gray-50">
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                    <Activity size={18} />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800">System Control & Monitoring</h3>
+                </div>
+                <SystemControl />
               </div>
             </div>
           )}
