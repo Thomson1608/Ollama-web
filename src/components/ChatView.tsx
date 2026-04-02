@@ -486,7 +486,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="p-2 md:p-6 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent shrink-0">
+      <div 
+        className="p-2 md:p-6 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent shrink-0"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--keyboard-offset, 0px))' }}
+      >
         <form 
           onSubmit={handleSendMessage}
           className="max-w-3xl mx-auto w-full"

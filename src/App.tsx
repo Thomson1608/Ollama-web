@@ -463,6 +463,35 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     scrollToBottom();
   }, [activeChat?.messages, isLoading]);
 
+  useEffect(() => {
+    const handleVisualViewportChange = () => {
+      if (window.visualViewport) {
+        const viewportHeight = window.visualViewport.height;
+        const windowHeight = window.innerHeight;
+        const keyboardHeight = Math.max(0, windowHeight - viewportHeight);
+        
+        if (keyboardHeight > 100) {
+          document.documentElement.style.setProperty('--keyboard-offset', `${keyboardHeight}px`);
+          setTimeout(scrollToBottom, 100);
+        } else {
+          document.documentElement.style.setProperty('--keyboard-offset', '0px');
+        }
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleVisualViewportChange);
+      window.visualViewport.addEventListener('scroll', handleVisualViewportChange);
+    }
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+        window.visualViewport.removeEventListener('scroll', handleVisualViewportChange);
+      }
+    };
+  }, []);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -817,7 +846,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#f5f5f5]">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-[#f5f5f5]">
       <Toaster position="top-center" />
       
       <Sidebar 
