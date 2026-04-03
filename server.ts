@@ -1219,9 +1219,28 @@ async function startServer() {
           while ((match = mdRegex.exec(newContent)) !== null) {
             try {
               const jsonString = match[1].trim();
-              let calls = JSON.parse(jsonString);
-              if (!Array.isArray(calls)) {
-                calls = [calls];
+              let calls;
+              try {
+                calls = JSON.parse(jsonString);
+                if (!Array.isArray(calls)) {
+                  calls = [calls];
+                }
+              } catch (e) {
+                // Heuristic: If it's not JSON, check if there's a filename hint before the block
+                // Look for [filename.ts] or similar in the text before the match
+                const textBefore = newContent.substring(0, match.index);
+                const filenameHintRegex = /(?:\[|`|file:?\s*)([\w./-]+\.[\w]+)(?:\]|`|:?)/i;
+                const hintMatch = textBefore.match(filenameHintRegex);
+                
+                if (hintMatch && username === 'admin') {
+                  const filename = hintMatch[1];
+                  logger.release(`Heuristic: Detected code block for ${filename} for ${username}`);
+                  executeToolCall(chatId, {
+                    tool: 'write_file',
+                    args: { name: filename, content: jsonString }
+                  }, username);
+                }
+                continue;
               }
               
               for (const call of calls) {
@@ -1395,6 +1414,18 @@ async function startServer() {
   async function executeToolCall(chatId: string, call: any, username: string) {
     try {
       const paths = getUserPaths(username);
+      
+      // Check if user is admin for workspace tools
+      if (username !== 'admin' && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
+        logger.error(`Unauthorized tool access attempt by ${username}: ${call.tool}`);
+        io.emit(`tool:result:${username}`, { 
+          chatId, 
+          tool: call.tool, 
+          result: `Error: Access denied. Only administrators can perform workspace operations.` 
+        });
+        return;
+      }
+
       logger.debug(`Executing tool ${call.tool} for ${username}`, call.args);
       switch (call.tool) {
         case 'list_files':

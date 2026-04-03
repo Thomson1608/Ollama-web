@@ -165,7 +165,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className={cn("grid gap-2", username === 'admin' ? "grid-cols-4" : "grid-cols-1")}>
           <button 
             onClick={() => {
               setCurrentView('chat');
@@ -179,45 +179,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <MessageSquare size={16} />
           </button>
-          <button 
-            onClick={() => {
-              setCurrentView('models');
-              if (isMobile) setIsSidebarOpen(false);
-            }}
-            className={cn(
-              "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-              currentView === 'models' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
-            )}
-            title="Models"
-          >
-            <Cpu size={16} />
-          </button>
-          <button 
-            onClick={() => {
-              setCurrentView('pull');
-              if (isMobile) setIsSidebarOpen(false);
-            }}
-            className={cn(
-              "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-              currentView === 'pull' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
-            )}
-            title="Pull"
-          >
-            <Download size={16} />
-          </button>
-          <button 
-            onClick={() => {
-              setCurrentView('workspace');
-              if (isMobile) setIsSidebarOpen(false);
-            }}
-            className={cn(
-              "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-              currentView === 'workspace' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
-            )}
-            title="Workspace"
-          >
-            <Folder size={16} />
-          </button>
+          
+          {username === 'admin' && (
+            <>
+              <button 
+                onClick={() => {
+                  setCurrentView('models');
+                  if (isMobile) setIsSidebarOpen(false);
+                }}
+                className={cn(
+                  "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
+                  currentView === 'models' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+                )}
+                title="Models"
+              >
+                <Cpu size={16} />
+              </button>
+              <button 
+                onClick={() => {
+                  setCurrentView('pull');
+                  if (isMobile) setIsSidebarOpen(false);
+                }}
+                className={cn(
+                  "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
+                  currentView === 'pull' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+                )}
+                title="Pull"
+              >
+                <Download size={16} />
+              </button>
+              <button 
+                onClick={() => {
+                  setCurrentView('workspace');
+                  if (isMobile) setIsSidebarOpen(false);
+                }}
+                className={cn(
+                  "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
+                  currentView === 'workspace' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+                )}
+                title="Workspace"
+              >
+                <Folder size={16} />
+              </button>
+            </>
+          )}
         </div>
         <button 
           onClick={() => {

@@ -19,7 +19,7 @@ import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, M
 export default function App() {
   const [username, setUsername] = useState<string | null>(() => localStorage.getItem('ollama_username'));
   const [chats, setChats] = useState<Chat[]>([]);
-  const [systemPrompt, setSystemPrompt] = useState(`You are a world-class software engineer.
+  const ADMIN_SYSTEM_PROMPT = `You are a world-class software engineer.
 You have access to a workspace where you can read, write, and list files.
 
 CRITICAL DIRECTIVES:
@@ -52,7 +52,26 @@ AVAILABLE TOOLS:
 4. delete_file: Delete a file from the workspace.
    Usage: <tool_call>{"tool": "delete_file", "args": {"name": "filename.txt"}}</tool_call>
 
-Your primary goal is to manage the workspace files efficiently while keeping the chat clean of large code blocks.`);
+Your primary goal is to manage the workspace files efficiently while keeping the chat clean of large code blocks.`;
+
+  const USER_SYSTEM_PROMPT = `You are a helpful AI assistant. 
+Your goal is to provide clear, accurate, and helpful information to the user.
+You do NOT have access to any file system or workspace tools.
+If the user asks you to write code, you should provide it in a markdown code block within the chat.
+`;
+
+  const [systemPrompt, setSystemPrompt] = useState(() => {
+    const saved = localStorage.getItem('ollama_system_prompt');
+    if (saved) return saved;
+    return username === 'admin' ? ADMIN_SYSTEM_PROMPT : USER_SYSTEM_PROMPT;
+  });
+
+  // Update system prompt when username changes
+  useEffect(() => {
+    if (!localStorage.getItem('ollama_system_prompt')) {
+      setSystemPrompt(username === 'admin' ? ADMIN_SYSTEM_PROMPT : USER_SYSTEM_PROMPT);
+    }
+  }, [username]);
   const [globalParameters, setGlobalParameters] = useState<ModelParameters>({
     temperature: 0.7,
     topP: 0.9,
