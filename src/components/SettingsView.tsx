@@ -92,7 +92,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       return;
     }
     try {
-      const res = await fetch('/api/system/shutdown', { method: 'POST' });
+      const res = await fetch('/api/system/shutdown', { 
+        method: 'POST',
+        headers: {
+          'x-username': username || ''
+        }
+      });
       if (res.ok) {
         toast.success('System will shut down in 1 minute.');
       } else {

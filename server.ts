@@ -589,6 +589,30 @@ async function startServer() {
     }
   });
 
+  // API: Shutdown
+  app.post('/api/system/shutdown', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+
+    try {
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) {
+        return res.status(403).json({ error: 'Access denied. Only administrators can shutdown the system.' });
+      }
+
+      logger.release(`System shutdown initiated by ${username}`);
+      exec('sudo shutdown +1', (error, stdout, stderr) => {
+        if (error) {
+          logger.error(`Failed to initiate shutdown for ${username}`, error);
+          return res.status(500).json({ error: error.message });
+        }
+        res.json({ success: true });
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to initiate shutdown' });
+    }
+  });
+
   // API: Terminal execute
   app.post('/api/system/terminal', async (req, res) => {
     const username = req.headers['x-username'] as string;
