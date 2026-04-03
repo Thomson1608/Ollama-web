@@ -282,73 +282,78 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 }
 
                 return (
-                  <div className="relative group/code my-6">
-                    <div className="absolute right-2 -top-8 flex gap-2 opacity-100 md:opacity-0 md:group-hover/code:opacity-100 transition-opacity z-10">
-                      {filename ? (
-                        <button
-                          onClick={async () => {
-                            try {
-                              const res = await fetch('/api/workspace/write', {
-                                method: 'POST',
-                                headers: { 
-                                  'Content-Type': 'application/json',
-                                  'x-username': username || ''
-                                },
-                                body: JSON.stringify({ name: filename, content: codeString })
-                              });
-                              if (res.ok) {
-                                toast.success(`Applied to ${filename}`);
+                  <div className="relative group/code my-8">
+                    <div className="flex items-center justify-between bg-gray-800 text-gray-300 px-4 py-2 rounded-t-xl border-x border-t border-gray-700">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                        <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                        <span className="ml-2 text-[10px] font-mono truncate max-w-[150px] md:max-w-xs">
+                          {filename || langPart || 'code'}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        {filename ? (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch('/api/workspace/write', {
+                                  method: 'POST',
+                                  headers: { 
+                                    'Content-Type': 'application/json',
+                                    'x-username': username || ''
+                                  },
+                                  body: JSON.stringify({ name: filename, content: codeString })
+                                });
+                                if (res.ok) {
+                                  toast.success(`Applied to ${filename}`);
+                                }
+                              } catch (err) {
+                                toast.error('Failed to apply to workspace');
                               }
-                            } catch (err) {
-                              toast.error('Failed to apply to workspace');
-                            }
-                          }}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95"
-                        >
-                          <Plus size={12} />
-                          Apply to {filename}
-                        </button>
-                      ) : (
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95"
+                          >
+                            <Plus size={10} />
+                            Apply
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const name = prompt('Enter filename to save this code to (e.g., App.tsx):');
+                              if (name) {
+                                fetch('/api/workspace/write', {
+                                  method: 'POST',
+                                  headers: { 
+                                    'Content-Type': 'application/json',
+                                    'x-username': username || ''
+                                  },
+                                  body: JSON.stringify({ name, content: codeString })
+                                }).then(res => {
+                                  if (res.ok) toast.success(`Saved to ${name}`);
+                                });
+                              }
+                            }}
+                            className="bg-gray-700 hover:bg-gray-800 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95"
+                          >
+                            <Plus size={10} />
+                            Save
+                          </button>
+                        )}
                         <button
                           onClick={() => {
-                            const name = prompt('Enter filename to save this code to (e.g., App.tsx):');
-                            if (name) {
-                              fetch('/api/workspace/write', {
-                                method: 'POST',
-                                headers: { 
-                                  'Content-Type': 'application/json',
-                                  'x-username': username || ''
-                                },
-                                body: JSON.stringify({ name, content: codeString })
-                              }).then(res => {
-                                if (res.ok) toast.success(`Saved to ${name}`);
-                              });
-                            }
+                            navigator.clipboard.writeText(codeString);
+                            toast.success('Copied to clipboard');
                           }}
-                          className="bg-gray-700 hover:bg-gray-800 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95"
+                          className="bg-gray-700 hover:bg-gray-600 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95"
                         >
-                          <Plus size={12} />
-                          Save to Workspace
+                          Copy
                         </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(codeString);
-                          toast.success('Copied to clipboard');
-                        }}
-                        className="bg-gray-800 hover:bg-black text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95"
-                      >
-                        Copy
-                      </button>
+                      </div>
                     </div>
-                    <pre className={cn("rounded-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm max-w-full border border-gray-800 shadow-inner", className)}>
+                    <pre className={cn("rounded-b-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm max-w-full border-x border-b border-gray-800 shadow-inner", className)}>
                       <code {...props}>{children}</code>
                     </pre>
-                    {filename && (
-                      <div className="absolute left-4 -top-3 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-blue-500 font-mono">
-                        {filename}
-                      </div>
-                    )}
                   </div>
                 );
               }
@@ -476,21 +481,26 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   )}
                 </div>
                 <div className={cn(
-                  "flex-1 min-w-0 max-w-[85%] md:max-w-[80%] p-3 md:p-4 rounded-2xl relative group/msg break-words overflow-hidden",
+                  "flex-1 min-w-0 max-w-[90%] md:max-w-[80%] p-3 md:p-4 rounded-2xl relative group/msg shadow-sm",
                   msg.role === 'user' 
                     ? "bg-blue-600 text-white rounded-tr-none" 
-                    : "bg-white border border-gray-200 rounded-tl-none shadow-sm"
+                    : "bg-white border border-gray-200 rounded-tl-none"
                 )}>
                   {msg.role === 'assistant' && (
-                    <button
-                      onClick={() => toggleSpeech(msg.content, i)}
-                      className="absolute -right-8 md:-right-10 top-1 md:top-2 p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover/msg:opacity-100"
-                      title={speakingMessageIndex === i ? "Dừng đọc" : "Đọc tin nhắn"}
-                    >
-                      {speakingMessageIndex === i ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                    </button>
+                    <div className="absolute -top-2 -right-2 flex gap-1">
+                      <button
+                        onClick={() => toggleSpeech(msg.content, i)}
+                        className={cn(
+                          "p-1.5 bg-white border border-gray-100 rounded-lg shadow-sm text-gray-400 hover:text-blue-600 transition-all md:opacity-0 md:group-hover/msg:opacity-100",
+                          speakingMessageIndex === i && "text-blue-600 opacity-100"
+                        )}
+                        title={speakingMessageIndex === i ? "Dừng đọc" : "Đọc tin nhắn"}
+                      >
+                        {speakingMessageIndex === i ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                      </button>
+                    </div>
                   )}
-                  <div className={cn("markdown-body text-xs md:text-sm break-words overflow-hidden", msg.role === 'user' ? "text-white" : "text-gray-800")}>
+                  <div className={cn("markdown-body text-xs md:text-sm break-words overflow-x-auto", msg.role === 'user' ? "text-white" : "text-gray-800")}>
                     {renderMessage(msg.content)}
                   </div>
                 </div>

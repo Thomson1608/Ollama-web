@@ -192,6 +192,15 @@ async function cleanupOldChats(username: string) {
   }
 }
 
+interface Chat {
+  id: string;
+  title: string;
+  messages: any[];
+  model: string;
+  createdAt: number;
+  systemPrompt?: string;
+}
+
 interface ActiveGeneration {
   chatId: string;
   model: string;
@@ -303,8 +312,29 @@ async function startServer() {
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const paths = getUserPaths(username);
-      const data = await fs.readFile(paths.chats, 'utf-8');
-      res.json(JSON.parse(data));
+      let chats: Chat[] = [];
+      try {
+        const data = await fs.readFile(paths.chats, 'utf-8');
+        chats = JSON.parse(data);
+      } catch (e) {
+        chats = [];
+      }
+
+      // Merge active generations that haven't been saved yet
+      const active = Array.from(activeGenerations.values()).filter(g => g.username === username);
+      for (const gen of active) {
+        if (!chats.find(c => c.id === gen.chatId)) {
+          chats.unshift({
+            id: gen.chatId,
+            title: gen.userMessage.content.slice(0, 30) + (gen.userMessage.content.length > 30 ? '...' : ''),
+            messages: [gen.userMessage, gen.assistantMessage],
+            model: gen.model,
+            createdAt: Date.now()
+          });
+        }
+      }
+
+      res.json(chats);
     } catch (error) {
       res.status(500).json({ error: 'Failed to read chats' });
     }

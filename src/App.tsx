@@ -202,18 +202,35 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     });
 
     socket.on(`chat:chunk:${username}`, ({ chatId, chunk }) => {
-      setChats(prev => prev.map(c => 
-        c.id === chatId 
-          ? { 
-              ...c, 
-              messages: c.messages.map((m, idx) => 
-                (m.role === 'assistant' && idx === c.messages.length - 1) 
-                  ? { ...m, content: m.content + chunk } 
-                  : m
-              ) 
-            }
-          : c
-      ));
+      setChats(prev => {
+        const chat = prev.find(c => c.id === chatId);
+        if (!chat) {
+          // If chat doesn't exist locally (e.g. connected after chat started),
+          // it should have been fetched in initial data or we'll get it in chat:end.
+          // But for better UX, let's create a placeholder if it's missing.
+          const newChat: Chat = {
+            id: chatId,
+            title: 'New Conversation...',
+            messages: [{ role: 'assistant', content: chunk, timestamp: Date.now() }],
+            model: selectedModel || 'unknown',
+            createdAt: Date.now(),
+          };
+          return [newChat, ...prev];
+        }
+
+        return prev.map(c => 
+          c.id === chatId 
+            ? { 
+                ...c, 
+                messages: c.messages.map((m, idx) => 
+                  (m.role === 'assistant' && idx === c.messages.length - 1) 
+                    ? { ...m, content: m.content + chunk } 
+                    : m
+                ) 
+              }
+            : c
+        );
+      });
     });
 
     socket.on(`chat:end:${username}`, ({ chatId, finalContent }) => {
@@ -225,18 +242,32 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       });
       
       if (finalContent) {
-        setChats(prev => prev.map(c => 
-          c.id === chatId 
-            ? { 
-                ...c, 
-                messages: c.messages.map((m, idx) => 
-                  (m.role === 'assistant' && idx === c.messages.length - 1) 
-                    ? { ...m, content: finalContent } 
-                    : m
-                ) 
-              }
-            : c
-        ));
+        setChats(prev => {
+          const chat = prev.find(c => c.id === chatId);
+          if (!chat) {
+            const newChat: Chat = {
+              id: chatId,
+              title: finalContent.slice(0, 30) + (finalContent.length > 30 ? '...' : ''),
+              messages: [{ role: 'assistant', content: finalContent, timestamp: Date.now() }],
+              model: selectedModel || 'unknown',
+              createdAt: Date.now(),
+            };
+            return [newChat, ...prev];
+          }
+
+          return prev.map(c => 
+            c.id === chatId 
+              ? { 
+                  ...c, 
+                  messages: c.messages.map((m, idx) => 
+                    (m.role === 'assistant' && idx === c.messages.length - 1) 
+                      ? { ...m, content: finalContent } 
+                      : m
+                  ) 
+                }
+              : c
+          );
+        });
       }
     });
 
