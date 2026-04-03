@@ -33,6 +33,7 @@ interface SettingsViewProps {
   clearMemory: () => void;
   saveSettings: () => void;
   connectionStatus: ConnectionStatus;
+  username?: string | null;
 }
 
 type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'stats';
@@ -45,7 +46,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   memory,
   clearMemory,
   saveSettings,
-  connectionStatus
+  connectionStatus,
+  username
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
@@ -240,7 +242,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                   <h3 className="text-lg font-bold text-gray-800">System Control & Monitoring</h3>
                 </div>
-                <SystemControl />
+                <SystemControl username={username} />
               </div>
             </div>
           )}

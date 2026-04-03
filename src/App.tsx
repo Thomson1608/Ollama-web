@@ -1033,6 +1033,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                 clearMemory={clearMemory}
                 saveSettings={saveSettings}
                 connectionStatus={connectionStatus}
+                username={username}
               />
             )}
           </div>

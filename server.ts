@@ -38,6 +38,7 @@ function getUserPaths(username: string) {
 }
 
 async function isAdmin(username: string) {
+  if (username === 'admin') return true;
   try {
     const paths = getUserPaths(username);
     const profileData = await fs.readFile(paths.profile, 'utf-8');
@@ -523,16 +524,25 @@ async function startServer() {
 
   // API: Kill process
   app.post('/api/system/processes/kill', async (req, res) => {
-    const { pid } = req.body;
-    if (!pid) return res.status(400).json({ error: 'PID is required' });
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+
     try {
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) {
+        return res.status(403).json({ error: 'Access denied. Only administrators can kill processes.' });
+      }
+
+      const { pid } = req.body;
+      if (!pid) return res.status(400).json({ error: 'PID is required' });
+      
       // Using sudo to allow non-root users (like thompson) to kill processes if configured in sudoers
       exec(`sudo kill -9 ${pid}`, (error, stdout, stderr) => {
         if (error) {
-          logger.error(`Failed to kill process ${pid}`, error);
+          logger.error(`Failed to kill process ${pid} for ${username}`, error);
           return res.status(500).json({ error: error.message });
         }
-        logger.release(`Killed process ${pid}`);
+        logger.release(`Process ${pid} killed by ${username}`);
         res.json({ success: true });
       });
     } catch (error) {
@@ -553,16 +563,25 @@ async function startServer() {
 
   // API: Control service
   app.post('/api/system/services/control', async (req, res) => {
-    const { service, action } = req.body; // action: start, stop, restart
-    if (!service || !action) return res.status(400).json({ error: 'Service and action are required' });
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+
     try {
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) {
+        return res.status(403).json({ error: 'Access denied. Only administrators can control services.' });
+      }
+
+      const { service, action } = req.body; // action: start, stop, restart
+      if (!service || !action) return res.status(400).json({ error: 'Service and action are required' });
+      
       // Using sudo to allow non-root users (like thompson) to control services if configured in sudoers
       exec(`sudo systemctl ${action} ${service}`, (error, stdout, stderr) => {
         if (error) {
-          logger.error(`Failed to ${action} service ${service}`, error);
+          logger.error(`Failed to ${action} service ${service} for ${username}`, error);
           return res.status(500).json({ error: error.message });
         }
-        logger.release(`Service ${service} ${action}ed`);
+        logger.release(`Service ${service} ${action}ed by ${username}`);
         res.json({ success: true });
       });
     } catch (error) {
@@ -572,17 +591,33 @@ async function startServer() {
 
   // API: Terminal execute
   app.post('/api/system/terminal', async (req, res) => {
-    const { command } = req.body;
-    if (!command) return res.status(400).json({ error: 'Command is required' });
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    
     try {
-      logger.debug(`Terminal: Executing command: ${command}`);
-      // Add common sbin paths to PATH so management commands are found
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) {
+        logger.error(`Unauthorized terminal access attempt by ${username}`);
+        return res.status(403).json({ error: 'Access denied. Only administrators can use the terminal.' });
+      }
+
+      const { command } = req.body;
+      if (!command) return res.status(400).json({ error: 'Command is required' });
+      
+      logger.release(`Terminal: Executing command for ${username}: ${command}`);
+      // Add common sbin and bin paths to PATH so management commands are found
       const env = { 
         ...process.env, 
-        PATH: `${process.env.PATH}:/usr/sbin:/sbin:/usr/local/sbin` 
+        PATH: `${process.env.PATH || ''}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` 
       };
       
       exec(command, { env }, (error, stdout, stderr) => {
+        if (error) {
+          logger.error(`Terminal Command Failed: ${command}`, error);
+        }
+        if (stdout) logger.debug(`Terminal STDOUT: ${stdout}`);
+        if (stderr) logger.debug(`Terminal STDERR: ${stderr}`);
+
         res.json({
           stdout,
           stderr,
@@ -590,16 +625,23 @@ async function startServer() {
         });
       });
     } catch (error) {
+      logger.error('Terminal Execution Error:', error);
       res.status(500).json({ error: 'Failed to execute command' });
     }
   });
 
   // API: Terminal completion
   app.post('/api/system/terminal/complete', async (req, res) => {
-    const { command } = req.body;
-    if (!command) return res.json({ suggestions: [] });
-    
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+
     try {
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) return res.json({ suggestions: [] });
+
+      const { command } = req.body;
+      if (!command) return res.json({ suggestions: [] });
+      
       // Basic completion using bash compgen
       // We look at the last word of the command
       const lastWord = command.split(' ').pop() || '';

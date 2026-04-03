@@ -38,7 +38,11 @@ interface Service {
   pids: number[];
 }
 
-export const SystemControl: React.FC = () => {
+interface SystemControlProps {
+  username?: string | null;
+}
+
+export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
   const [stats, setStats] = useState<SystemStats | null>(null);
   const [processes, setProcesses] = useState<any>(null);
   const [services, setServices] = useState<Service[]>([]);
@@ -102,10 +106,14 @@ export const SystemControl: React.FC = () => {
   };
 
   const fetchCurrentUser = async () => {
+    if (!username) return;
     try {
       const res = await fetch('/api/system/terminal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
         body: JSON.stringify({ command: 'whoami' })
       });
       const data = await res.json();
@@ -123,18 +131,22 @@ export const SystemControl: React.FC = () => {
 
     const interval = setInterval(fetchStats, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [username]);
 
   useEffect(() => {
     terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [terminalOutput]);
 
   const handleKillProcess = async (pid: number) => {
+    if (!username) return;
     if (!confirm(`Are you sure you want to end process ${pid}?`)) return;
     try {
       const res = await fetch('/api/system/processes/kill', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
         body: JSON.stringify({ pid })
       });
       if (res.ok) {
@@ -149,10 +161,14 @@ export const SystemControl: React.FC = () => {
   };
 
   const handleServiceControl = async (service: string, action: string) => {
+    if (!username) return;
     try {
       const res = await fetch('/api/system/services/control', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
         body: JSON.stringify({ service, action })
       });
       if (res.ok) {
@@ -169,7 +185,7 @@ export const SystemControl: React.FC = () => {
 
   const handleTerminalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!terminalInput.trim()) return;
+    if (!terminalInput.trim() || !username) return;
 
     const cmd = terminalInput;
     setTerminalInput('');
@@ -180,7 +196,10 @@ export const SystemControl: React.FC = () => {
     try {
       const res = await fetch('/api/system/terminal', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
         body: JSON.stringify({ command: cmd })
       });
       const data = await res.json();
@@ -217,12 +236,15 @@ export const SystemControl: React.FC = () => {
       }
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      if (!terminalInput.trim()) return;
+      if (!terminalInput.trim() || !username) return;
 
       try {
         const res = await fetch('/api/system/terminal/complete', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-username': username
+          },
           body: JSON.stringify({ command: terminalInput })
         });
         const data = await res.json();
