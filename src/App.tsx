@@ -29,9 +29,12 @@ CRITICAL DIRECTIVES:
 4. The user wants to see the code in the workspace on the right, NOT in the chat.
 5. For multiple files, use multiple tool calls.
 6. If building a web app, create a full project (package.json, etc.). The system auto-runs 'npm install' and 'npm run dev'.
+7. DO NOT use markdown code blocks ( \`\`\` ) unless they are part of a tool call argument.
+8. If the user asks for code, your response should ONLY contain a brief explanation of what you are doing and the necessary <tool_call> tags.
 
 TOOL USAGE RULES:
 - Use <tool_call> tags for all tool invocations.
+- Format: <tool_call>{"tool": "write_file", "args": {"name": "path/to/file.ts", "content": "..."}}</tool_call>
 - Briefly explain your plan, then execute the tool calls.
 - Do not repeat the code in the chat after writing it to a file.
 
@@ -468,11 +471,17 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       if (window.visualViewport) {
         const viewportHeight = window.visualViewport.height;
         const windowHeight = window.innerHeight;
+        
+        // On iOS, windowHeight stays same, viewportHeight shrinks.
+        // On Android, both shrink.
         const keyboardHeight = Math.max(0, windowHeight - viewportHeight);
         
         if (keyboardHeight > 100) {
           document.documentElement.style.setProperty('--keyboard-offset', `${keyboardHeight}px`);
-          setTimeout(scrollToBottom, 100);
+          // Use a small delay to ensure the DOM has updated before scrolling
+          requestAnimationFrame(() => {
+            scrollToBottom();
+          });
         } else {
           document.documentElement.style.setProperty('--keyboard-offset', '0px');
         }
@@ -838,7 +847,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
 
   if (!username) {
     return (
-      <div className="h-screen w-full bg-[#f5f5f5]">
+      <div className="h-[100dvh] w-full bg-[#f5f5f5] overflow-hidden">
         <Toaster position="top-center" />
         <LoginView onLogin={handleLogin} />
       </div>
@@ -900,6 +909,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
                     connectionStatus={connectionStatus}
                     messagesEndRef={messagesEndRef}
                     onUpdateSystemPrompt={(prompt) => activeChatId && updateChatSystemPrompt(activeChatId, prompt)}
+                    username={username}
                   />
                 </div>
               </div>

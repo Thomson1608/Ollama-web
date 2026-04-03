@@ -36,6 +36,7 @@ interface ChatViewProps {
   connectionStatus: ConnectionStatus;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onUpdateSystemPrompt: (prompt: string) => void;
+  username?: string | null;
 }
 
 const ToolCallRenderer = ({ toolCall }: { toolCall: any }) => {
@@ -90,7 +91,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   createNewChat,
   connectionStatus,
   messagesEndRef,
-  onUpdateSystemPrompt
+  onUpdateSystemPrompt,
+  username
 }) => {
   const [isListening, setIsListening] = useState(false);
   const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
@@ -262,23 +264,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   }
                 } catch (e) {}
 
-                // Try to extract filename from language-filename pattern
-                // e.g. language-javascript:App.tsx
+                // Try to extract filename from language-filename pattern or common patterns
                 const langPart = match ? match[1] : '';
                 const fullClassName = className || '';
                 const filenameMatch = fullClassName.match(/language-[\w.]+:(.+)/);
-                const filename = filenameMatch ? filenameMatch[1] : null;
+                let filename = filenameMatch ? filenameMatch[1] : null;
+
+                // Fallback: search for filename in the text immediately preceding the code block
+                if (!filename) {
+                  const messageContent = activeChat?.messages.find(m => m.content.includes(codeString))?.content || '';
+                  const beforeCode = messageContent.split(codeString)[0];
+                  const fileRegex = /(?:file|save to|create|update)\s+`?([\w./-]+\.[\w]+)`?/i;
+                  const fileMatch = beforeCode.match(fileRegex);
+                  if (fileMatch) {
+                    filename = fileMatch[1];
+                  }
+                }
 
                 return (
-                  <div className="relative group/code my-4">
-                    <div className="absolute right-2 top-2 flex gap-2 opacity-0 group-hover/code:opacity-100 transition-opacity z-10">
-                      {filename && (
+                  <div className="relative group/code my-6">
+                    <div className="absolute right-2 -top-8 flex gap-2 opacity-100 md:opacity-0 md:group-hover/code:opacity-100 transition-opacity z-10">
+                      {filename ? (
                         <button
                           onClick={async () => {
                             try {
                               const res = await fetch('/api/workspace/write', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 
+                                  'Content-Type': 'application/json',
+                                  'x-username': username || ''
+                                },
                                 body: JSON.stringify({ name: filename, content: codeString })
                               });
                               if (res.ok) {
@@ -288,10 +303,32 @@ export const ChatView: React.FC<ChatViewProps> = ({
                               toast.error('Failed to apply to workspace');
                             }
                           }}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-[10px] px-2 py-1 rounded shadow-sm flex items-center gap-1"
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95"
                         >
-                          <Plus size={10} />
-                          Apply to Workspace
+                          <Plus size={12} />
+                          Apply to {filename}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const name = prompt('Enter filename to save this code to (e.g., App.tsx):');
+                            if (name) {
+                              fetch('/api/workspace/write', {
+                                method: 'POST',
+                                headers: { 
+                                  'Content-Type': 'application/json',
+                                  'x-username': username || ''
+                                },
+                                body: JSON.stringify({ name, content: codeString })
+                              }).then(res => {
+                                if (res.ok) toast.success(`Saved to ${name}`);
+                              });
+                            }
+                          }}
+                          className="bg-gray-700 hover:bg-gray-800 text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95"
+                        >
+                          <Plus size={12} />
+                          Save to Workspace
                         </button>
                       )}
                       <button
@@ -299,16 +336,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
                           navigator.clipboard.writeText(codeString);
                           toast.success('Copied to clipboard');
                         }}
-                        className="bg-gray-800 hover:bg-black text-white text-[10px] px-2 py-1 rounded shadow-sm"
+                        className="bg-gray-800 hover:bg-black text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1.5 transition-all active:scale-95"
                       >
                         Copy
                       </button>
                     </div>
-                    <pre className={cn("rounded-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm max-w-full", className)}>
+                    <pre className={cn("rounded-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm max-w-full border border-gray-800 shadow-inner", className)}>
                       <code {...props}>{children}</code>
                     </pre>
                     {filename && (
-                      <div className="absolute left-4 -top-3 bg-gray-800 text-gray-300 text-[10px] px-2 py-0.5 rounded border border-gray-700 font-mono">
+                      <div className="absolute left-4 -top-3 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-blue-500 font-mono">
                         {filename}
                       </div>
                     )}
@@ -487,12 +524,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* Input Area */}
       <div 
-        className="p-2 md:p-6 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent shrink-0"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--keyboard-offset, 0px))' }}
+        className="shrink-0 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent"
+        style={{ 
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--keyboard-offset, 0px))',
+          transition: 'padding-bottom 0.2s ease-out'
+        }}
       >
         <form 
           onSubmit={handleSendMessage}
-          className="max-w-3xl mx-auto w-full"
+          className="max-w-3xl mx-auto w-full p-2 md:p-6"
         >
           <div className={cn(
             "flex items-end gap-1 md:gap-2 bg-white border border-gray-200 rounded-2xl p-1.5 md:p-3 shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 overflow-hidden",
