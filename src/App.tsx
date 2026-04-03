@@ -234,6 +234,11 @@ If the user asks you to write code, you should provide it in a markdown code blo
             model: selectedModel || 'unknown',
             createdAt: Date.now(),
           };
+          setGeneratingChatIds(prevIds => {
+            const next = new Set(prevIds);
+            next.add(chatId);
+            return next;
+          });
           return [newChat, ...prev];
         }
 
@@ -386,7 +391,11 @@ If the user asks you to write code, you should provide it in a markdown code blo
         const chatsRes = await fetch('/api/chats', { headers });
         if (chatsRes.ok) {
           const data = await chatsRes.json();
-          setChats(data || []);
+          isRemoteUpdate.current = true;
+          setChats(data.chats || data || []);
+          if (data.generatingChatIds) {
+            setGeneratingChatIds(new Set(data.generatingChatIds));
+          }
         }
         
         // Fetch config

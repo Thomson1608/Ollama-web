@@ -320,21 +320,36 @@ async function startServer() {
         chats = [];
       }
 
-      // Merge active generations that haven't been saved yet
+      // Merge active generations that haven't been saved yet or are currently generating
       const active = Array.from(activeGenerations.values()).filter(g => g.username === username);
       for (const gen of active) {
-        if (!chats.find(c => c.id === gen.chatId)) {
+        const chatIndex = chats.findIndex(c => c.id === gen.chatId);
+        if (chatIndex !== -1) {
+          // If chat exists, update the last message if it's an assistant message from this generation
+          const chat = chats[chatIndex];
+          const lastMsg = chat.messages[chat.messages.length - 1];
+          if (lastMsg && lastMsg.role === 'assistant' && lastMsg.timestamp === gen.assistantMessage.timestamp) {
+            lastMsg.content = gen.assistantMessage.content;
+          } else {
+            // If the assistant message isn't there yet, add it
+            chat.messages.push({ ...gen.assistantMessage });
+          }
+        } else {
+          // If it's a new chat, unshift it
           chats.unshift({
             id: gen.chatId,
             title: gen.userMessage.content.slice(0, 30) + (gen.userMessage.content.length > 30 ? '...' : ''),
-            messages: [gen.userMessage, gen.assistantMessage],
+            messages: [gen.userMessage, { ...gen.assistantMessage }],
             model: gen.model,
             createdAt: Date.now()
           });
         }
       }
 
-      res.json(chats);
+      res.json({
+        chats,
+        generatingChatIds: active.map(g => g.chatId)
+      });
     } catch (error) {
       res.status(500).json({ error: 'Failed to read chats' });
     }
@@ -1094,6 +1109,37 @@ async function startServer() {
     
     try {
       const paths = getUserPaths(username);
+      
+      // Save user message to file system immediately
+      try {
+        let chats: Chat[] = [];
+        try {
+          const data = await fs.readFile(paths.chats, 'utf-8');
+          chats = JSON.parse(data);
+        } catch (e) {}
+        
+        const userMsg = messages[messages.length - 1];
+        const chatIndex = chats.findIndex(c => c.id === chatId);
+        if (chatIndex !== -1) {
+          chats[chatIndex].messages.push(userMsg);
+          await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
+          io.emit(`chats:updated:${username}`, chats);
+        } else {
+          const newChat: Chat = {
+            id: chatId,
+            title: userMsg.content ? (userMsg.content.slice(0, 30) + (userMsg.content.length > 30 ? '...' : '')) : 'Image Chat',
+            messages: [userMsg],
+            model: model,
+            createdAt: Date.now()
+          };
+          chats.unshift(newChat);
+          await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
+          io.emit(`chats:updated:${username}`, chats);
+        }
+      } catch (e) {
+        logger.error(`Failed to pre-save user message for chat ${chatId}`, e);
+      }
+
       const configData = await fs.readFile(paths.config, 'utf-8');
       const config = JSON.parse(configData);
       const memoryData = await fs.readFile(paths.memory, 'utf-8');
@@ -1330,6 +1376,37 @@ async function startServer() {
       io.emit(`chat:end:${username}`, { chatId, finalContent: assistantContent });
       io.emit(`chat:status:${username}`, { loading: false, chatId });
       logger.release(`Ollama Proxy: Chat session complete for ${chatId} (${username})`);
+      
+      // Save chat to file system automatically on end
+      try {
+        const paths = getUserPaths(username);
+        let chats: Chat[] = [];
+        try {
+          const data = await fs.readFile(paths.chats, 'utf-8');
+          chats = JSON.parse(data);
+        } catch (e) {}
+        
+        const chatIndex = chats.findIndex(c => c.id === chatId);
+        if (chatIndex !== -1) {
+          chats[chatIndex].messages.push({ role: 'assistant', content: assistantContent, timestamp: Date.now() });
+          await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
+          io.emit(`chats:updated:${username}`, chats);
+        } else {
+          // If it's a new chat that wasn't saved yet
+          const newChat: Chat = {
+            id: chatId,
+            title: userMessage.content.slice(0, 30) + (userMessage.content.length > 30 ? '...' : ''),
+            messages: [userMessage, { role: 'assistant', content: assistantContent, timestamp: Date.now() }],
+            model: model,
+            createdAt: Date.now()
+          };
+          chats.unshift(newChat);
+          await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
+          io.emit(`chats:updated:${username}`, chats);
+        }
+      } catch (e) {
+        logger.error(`Failed to auto-save chat ${chatId} for ${username}`, e);
+      }
       
       res.end();
       await updateStats('success');
