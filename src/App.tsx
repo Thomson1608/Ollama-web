@@ -718,12 +718,12 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     ));
   };
 
-  const handleSendMessage = async (e?: React.FormEvent, isRetry = false) => {
+  const handleSendMessage = async (e?: React.FormEvent, isRetry = false, image?: string | null) => {
     e?.preventDefault();
     
     const messageContent = isRetry ? lastUserMessageRef.current : input.trim();
     const isGloballyTyping = generatingChatIds.size > 0;
-    if (!messageContent || ((isLoading || isGloballyTyping) && !isRetry) || !selectedModel) return;
+    if ((!messageContent && !image) || ((isLoading || isGloballyTyping) && !isRetry) || !selectedModel) return;
 
     if (!isRetry) {
       lastUserMessageRef.current = messageContent;
@@ -733,7 +733,7 @@ Your primary goal is to manage the workspace files efficiently while keeping the
     if (!currentChatId) {
       const newChat: Chat = {
         id: Date.now().toString(),
-        title: messageContent.slice(0, 30) + (messageContent.length > 30 ? '...' : ''),
+        title: messageContent ? (messageContent.slice(0, 30) + (messageContent.length > 30 ? '...' : '')) : 'Image Chat',
         messages: [],
         model: selectedModel,
         createdAt: Date.now(),
@@ -747,12 +747,13 @@ Your primary goal is to manage the workspace files efficiently while keeping the
       role: 'user',
       content: messageContent,
       timestamp: Date.now(),
+      images: image ? [image.split(',')[1]] : undefined
     };
 
     if (!isRetry) {
       setChats(prev => prev.map(c => 
         c.id === currentChatId 
-          ? { ...c, messages: [...c.messages, userMessage], title: c.messages.length === 0 ? messageContent.slice(0, 30) : c.title }
+          ? { ...c, messages: [...c.messages, userMessage], title: c.messages.length === 0 ? (messageContent ? messageContent.slice(0, 30) : 'Image Chat') : c.title }
           : c
       ));
       setInput('');
@@ -785,8 +786,8 @@ Your primary goal is to manage the workspace files efficiently while keeping the
           systemPrompt: currentChat?.systemPrompt || systemPrompt,
           parameters: currentChat?.parameters || globalParameters,
           messages: [
-            ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content })),
-            { role: 'user', content: messageContent }
+            ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content, images: m.images })),
+            { role: 'user', content: messageContent, images: image ? [image.split(',')[1]] : undefined }
           ],
         }),
         signal: chatAbortController.current.signal

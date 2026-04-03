@@ -15,7 +15,9 @@ import {
   Volume2,
   VolumeX,
   Settings2,
-  ChevronDown
+  ChevronDown,
+  Image as ImageIcon,
+  X
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -31,7 +33,7 @@ interface ChatViewProps {
   isGloballyBusy?: boolean;
   input: string;
   setInput: (input: string) => void;
-  handleSendMessage: (e?: React.FormEvent) => void;
+  handleSendMessage: (e?: React.FormEvent, isRetry?: boolean, image?: string | null) => void;
   createNewChat: () => void;
   connectionStatus: ConnectionStatus;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -97,7 +99,35 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
   const [isSystemPromptExpanded, setIsSystemPromptExpanded] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Image is too large. Max 5MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const onSendMessage = (e?: React.FormEvent) => {
+    handleSendMessage(e, false, selectedImage);
+    setSelectedImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
   const inputRef = useRef(input);
 
   useEffect(() => {
@@ -500,6 +530,19 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       </button>
                     </div>
                   )}
+                  {msg.images && msg.images.length > 0 && (
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      {msg.images.map((img, idx) => (
+                        <img 
+                          key={idx} 
+                          src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`} 
+                          alt="Uploaded" 
+                          className="max-w-full rounded-lg border border-gray-200 shadow-sm max-h-64 object-contain"
+                          referrerPolicy="no-referrer"
+                        />
+                      ))}
+                    </div>
+                  )}
                   <div className={cn("markdown-body text-xs md:text-sm break-words overflow-x-auto", msg.role === 'user' ? "text-white" : "text-gray-800")}>
                     {renderMessage(msg.content)}
                   </div>
@@ -541,13 +584,46 @@ export const ChatView: React.FC<ChatViewProps> = ({
         }}
       >
         <form 
-          onSubmit={handleSendMessage}
+          onSubmit={onSendMessage}
           className="max-w-3xl mx-auto w-full p-2 md:p-6"
         >
+          {selectedImage && (
+            <div className="mb-2 relative inline-block">
+              <img 
+                src={selectedImage} 
+                alt="Selected" 
+                className="h-20 w-20 object-cover rounded-lg border-2 border-blue-500 shadow-md"
+                referrerPolicy="no-referrer"
+              />
+              <button
+                type="button"
+                onClick={removeImage}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
           <div className={cn(
             "flex items-end gap-1 md:gap-2 bg-white border border-gray-200 rounded-2xl p-1.5 md:p-3 shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 overflow-hidden",
             (!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy) && "bg-gray-50 opacity-80"
           )}>
+            <input 
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImageSelect}
+              accept="image/*"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
+              className="p-1.5 md:p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shrink-0 disabled:opacity-50"
+              title="Tải ảnh lên"
+            >
+              <ImageIcon size={20} />
+            </button>
             <textarea
               value={input}
               onChange={(e) => {
@@ -559,7 +635,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage();
+                  onSendMessage();
                 }
               }}
               placeholder={
