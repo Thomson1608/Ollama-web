@@ -225,6 +225,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
         if (projectId === id) {
           setProjectId(null);
           localStorage.removeItem('ollama_project_id');
+          setActiveChatId(null);
+          setChats([]);
           setCurrentView('project-list');
         }
         toast.success('Project deleted');
@@ -891,20 +893,52 @@ If the user asks you to write code, you should provide it in a markdown code blo
     }
   };
 
-  const deleteChat = (id: string, e: React.MouseEvent) => {
+  const deleteChat = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setChats(chats.filter(c => c.id !== id));
-    if (activeChatId === id) {
-      setActiveChatId(null);
+    if (!username || !projectId) return;
+    
+    try {
+      const response = await fetch(`/api/chats/${id}?projectId=${projectId}`, {
+        method: 'DELETE',
+        headers: { 'x-username': username }
+      });
+      
+      if (response.ok) {
+        setChats(chats.filter(c => c.id !== id));
+        if (activeChatId === id) {
+          setActiveChatId(null);
+        }
+        toast.success('Chat deleted');
+      } else {
+        toast.error('Failed to delete chat');
+      }
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      toast.error('Failed to delete chat');
     }
-    toast.success('Chat deleted');
   };
 
-  const clearAllChats = () => {
+  const clearAllChats = async () => {
     if (confirm('Are you sure you want to clear all chats? This cannot be undone.')) {
-      setChats([]);
-      setActiveChatId(null);
-      toast.success('All chats cleared');
+      if (!username || !projectId) return;
+      
+      try {
+        const response = await fetch(`/api/chats?projectId=${projectId}`, {
+          method: 'DELETE',
+          headers: { 'x-username': username }
+        });
+        
+        if (response.ok) {
+          setChats([]);
+          setActiveChatId(null);
+          toast.success('All chats cleared');
+        } else {
+          toast.error('Failed to clear chats');
+        }
+      } catch (error) {
+        console.error('Error clearing chats:', error);
+        toast.error('Failed to clear chats');
+      }
     }
   };
 

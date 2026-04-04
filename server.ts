@@ -218,6 +218,21 @@ const dbService = {
   },
   deleteProject: async (id: string) => {
     try {
+      // Delete all chats and their messages
+      const chatsQ = query(collection(db, 'projects', id, 'chats'));
+      const chatsSnapshot = await getDocs(chatsQ);
+      for (const chatDoc of chatsSnapshot.docs) {
+        await dbService.deleteChat(id, chatDoc.id);
+      }
+
+      // Delete all memories
+      const memoriesQ = query(collection(db, 'projects', id, 'memories'));
+      const memoriesSnapshot = await getDocs(memoriesQ);
+      for (const memoryDoc of memoriesSnapshot.docs) {
+        await deleteDoc(doc(db, 'projects', id, 'memories', memoryDoc.id));
+      }
+
+      // Delete project document
       await deleteDoc(doc(db, 'projects', id));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
@@ -263,9 +278,14 @@ const dbService = {
   },
   deleteChat: async (projectId: string, id: string) => {
     try {
+      // Delete messages
+      const messagesQ = query(collection(db, 'projects', projectId, 'chats', id, 'messages'));
+      const messagesSnapshot = await getDocs(messagesQ);
+      for (const msgDoc of messagesSnapshot.docs) {
+        await deleteDoc(doc(db, 'projects', projectId, 'chats', id, 'messages', msgDoc.id));
+      }
+      
       await deleteDoc(doc(db, 'projects', projectId, 'chats', id));
-      // Note: Subcollections messages should also be deleted, but Firestore doesn't delete them automatically.
-      // For simplicity in this refactor, we leave them or delete them in a loop if needed.
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `projects/${projectId}/chats/${id}`);
     }
@@ -664,6 +684,39 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to close chat' });
+    }
+  });
+
+  // API: Delete a chat
+  app.delete('/api/chats/:id', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
+    const { id } = req.params;
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
+    if (!projectId) return res.status(400).json({ error: 'Yêu cầu ProjectId' });
+    try {
+      await dbService.deleteChat(projectId, id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Không thể xóa chat' });
+    }
+  });
+
+  // API: Delete all chats for a project
+  app.delete('/api/chats', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
+    if (!projectId) return res.status(400).json({ error: 'Yêu cầu ProjectId' });
+    try {
+      const chatsQ = query(collection(db, 'projects', projectId, 'chats'));
+      const chatsSnapshot = await getDocs(chatsQ);
+      for (const chatDoc of chatsSnapshot.docs) {
+        await dbService.deleteChat(projectId, chatDoc.id);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Không thể xóa tất cả chat' });
     }
   });
 
