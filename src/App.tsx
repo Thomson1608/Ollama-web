@@ -1210,6 +1210,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
           checkConnection={checkConnection}
           setShowSettings={() => setCurrentView('settings')}
           isBusy={isLoading || generatingChatIds.size > 0}
+          username={username}
+          onLogout={handleLogout}
         />
 
         <div className="flex-1 flex overflow-hidden">

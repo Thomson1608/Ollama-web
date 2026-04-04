@@ -3,9 +3,14 @@ import {
   ChevronLeft, 
   ChevronRight, 
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  User,
+  LogOut,
+  Settings,
+  ChevronDown
 } from 'lucide-react';
 import { OllamaModel, RunningModel, ViewType, ConnectionStatus } from '../types';
+import { cn } from '../lib/utils';
 
 interface HeaderProps {
   isSidebarOpen: boolean;
@@ -19,6 +24,8 @@ interface HeaderProps {
   checkConnection: () => void;
   setShowSettings: (show: boolean) => void;
   isBusy: boolean;
+  username?: string | null;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,9 +39,12 @@ export const Header: React.FC<HeaderProps> = ({
   connectionStatus,
   checkConnection,
   setShowSettings,
-  isBusy
+  isBusy,
+  username,
+  onLogout
 }) => {
   const [now, setNow] = React.useState(new Date());
+  const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
 
   React.useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -61,8 +71,6 @@ export const Header: React.FC<HeaderProps> = ({
       return expiresAt;
     }
   };
-
-
 
   return (
     <header className="h-16 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-2 md:px-4 sticky top-0 z-10">
@@ -118,6 +126,8 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Pull</span>
         ) : currentView === 'workspace' ? (
           <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Workspace</span>
+        ) : currentView === 'project-list' ? (
+          <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Projects</span>
         ) : (
           <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Settings</span>
         )}
@@ -137,6 +147,63 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <RefreshCw size={18} className={connectionStatus === 'checking' ? "animate-spin" : ""} />
         </button>
+
+        {username && (
+          <div className="relative ml-2">
+            <button 
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-xl transition-all border border-transparent hover:border-gray-200"
+            >
+              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
+                <User size={16} className="text-blue-600" />
+              </div>
+              <div className="hidden md:flex flex-col items-start">
+                <span className="text-xs font-bold text-gray-700 truncate max-w-[100px]">{username}</span>
+                <span className="text-[10px] text-gray-400 capitalize">{username === 'admin' ? 'Administrator' : 'User'}</span>
+              </div>
+              <ChevronDown size={14} className={cn("text-gray-400 transition-transform", isUserMenuOpen && "rotate-180")} />
+            </button>
+
+            {isUserMenuOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-20" 
+                  onClick={() => setIsUserMenuOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-30 animate-in fade-in zoom-in duration-200 origin-top-right">
+                  <div className="px-4 py-2 border-b border-gray-50 mb-1">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Account</p>
+                    <p className="text-sm font-bold text-gray-800 truncate">{username}</p>
+                  </div>
+                  
+                  <button 
+                    onClick={() => {
+                      setShowSettings(true);
+                      setIsUserMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors"
+                  >
+                    <Settings size={16} />
+                    <span>Common Settings</span>
+                  </button>
+
+                  <div className="h-[1px] bg-gray-50 my-1" />
+                  
+                  <button 
+                    onClick={() => {
+                      onLogout?.();
+                      setIsUserMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut size={16} />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {connectionStatus === 'disconnected' && (
