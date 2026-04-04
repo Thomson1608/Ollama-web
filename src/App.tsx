@@ -1089,6 +1089,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const handleInitProject = async (name: string, details: string) => {
     if (!username) return;
     setIsLoading(true);
+    console.log(`[ProjectInit] Starting initialization for project: ${name}`);
     try {
       const response = await fetch('/api/projects', {
         method: 'POST',
@@ -1099,8 +1100,14 @@ If the user asks you to write code, you should provide it in a markdown code blo
         body: JSON.stringify({ name, details }),
       });
 
-      if (!response.ok) throw new Error('Failed to create project');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[ProjectInit] Server error:', response.status, errorData);
+        throw new Error(errorData.error || 'Failed to create project');
+      }
+      
       const project = await response.json();
+      console.log('[ProjectInit] Project created successfully:', project.id);
       setProjects(prev => [project, ...prev]);
       setProjectId(project.id);
       localStorage.setItem('ollama_project_id', project.id);
@@ -1115,6 +1122,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       setCurrentView('chat');
       setActiveChatId(newChatId);
 
+      console.log('[ProjectInit] Sending initialization chat message...');
       // Send the initialization message
       const chatResponse = await fetch('/api/ollama/chat', {
         method: 'POST',
@@ -1132,11 +1140,15 @@ If the user asks you to write code, you should provide it in a markdown code blo
         }),
       });
 
-      if (!chatResponse.ok) throw new Error('Failed to send init message');
+      if (!chatResponse.ok) {
+        console.error('[ProjectInit] Failed to send init message:', chatResponse.status);
+        throw new Error('Failed to send init message');
+      }
+      console.log('[ProjectInit] Initialization complete.');
       await chatResponse.text();
     } catch (error) {
-      console.error(error);
-      toast.error('Failed to initialize project');
+      console.error('[ProjectInit] Error during initialization:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to initialize project');
     } finally {
       setIsLoading(false);
     }
@@ -1151,51 +1163,30 @@ If the user asks you to write code, you should provide it in a markdown code blo
     );
   }
 
-  if (currentView === 'project-list') {
-    return (
-      <div className="h-[100dvh] w-full bg-[#f5f5f5] overflow-hidden">
-        <Toaster position="top-center" />
-        <ProjectListView 
-          projects={projects} 
-          onSelectProject={handleSelectProject} 
-          onCreateProject={() => setCurrentView('project-init')}
-          onDeleteProject={(id) => handleDeleteProject(id)}
-        />
-      </div>
-    );
-  }
-
-  if (currentView === 'project-init') {
-    return (
-      <div className="h-[100dvh] w-full bg-[#f5f5f5] overflow-hidden">
-        <Toaster position="top-center" />
-        <ProjectInitView onInit={handleInitProject} isLoading={isLoading} />
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-[#f5f5f5]">
       <Toaster position="top-center" />
       
-      <Sidebar 
-        isSidebarOpen={isSidebarOpen}
-        setIsSidebarOpen={setIsSidebarOpen}
-        isMobile={isMobile}
-        chats={chats}
-        activeChatId={activeChatId}
-        currentView={currentView}
-        connectionStatus={connectionStatus}
-        setActiveChatId={setActiveChatId}
-        setCurrentView={setCurrentView}
-        createNewChat={createNewChat}
-        deleteChat={deleteChat}
-        onRenameChat={handleRenameChat}
-        clearAllChats={clearAllChats}
-        isSyncing={isSyncing}
-        username={username}
-        onLogout={handleLogout}
-      />
+      {currentView !== 'project-list' && currentView !== 'project-init' && (
+        <Sidebar 
+          isSidebarOpen={isSidebarOpen}
+          setIsSidebarOpen={setIsSidebarOpen}
+          isMobile={isMobile}
+          chats={chats}
+          activeChatId={activeChatId}
+          currentView={currentView}
+          connectionStatus={connectionStatus}
+          setActiveChatId={setActiveChatId}
+          setCurrentView={setCurrentView}
+          createNewChat={createNewChat}
+          deleteChat={deleteChat}
+          onRenameChat={handleRenameChat}
+          clearAllChats={clearAllChats}
+          isSyncing={isSyncing}
+          username={username}
+          onLogout={handleLogout}
+        />
+      )}
 
       <main className="flex-1 flex flex-col relative min-w-0">
         <Header 
@@ -1216,6 +1207,19 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden">
+            {currentView === 'project-list' && (
+              <ProjectListView 
+                projects={projects} 
+                onSelectProject={handleSelectProject} 
+                onCreateProject={() => setCurrentView('project-init')}
+                onDeleteProject={(id) => handleDeleteProject(id)}
+              />
+            )}
+
+            {currentView === 'project-init' && (
+              <ProjectInitView onInit={handleInitProject} isLoading={isLoading} />
+            )}
+
             {currentView === 'chat' && (
               <div className="flex h-full overflow-hidden">
                 <div className="flex-1">

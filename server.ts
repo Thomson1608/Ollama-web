@@ -546,20 +546,28 @@ async function startServer() {
     if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
     const { name, details } = req.body;
     try {
+      logger.release(`Project: Creating new project "${name}" for ${username}`);
       const user = await dbService.getUser(username);
-      if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+      if (!user) {
+        logger.error(`Project: User ${username} not found in DB`);
+        return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+      }
       const projectId = await dbService.createProject(user.id, name, details);
+      logger.release(`Project: Created project ID ${projectId} in DB`);
       
       // Ensure project workspace exists
       const paths = getUserPaths(username, projectId);
+      logger.debug(`Project: Creating workspace directory at ${paths.workspace}`);
       await fs.mkdir(paths.workspace, { recursive: true });
       
       // Init git for project
+      logger.debug(`Project: Initializing git in ${paths.workspace}`);
       const git = simpleGit(paths.workspace);
       await git.init();
       await fs.writeFile(path.join(paths.workspace, '.gitkeep'), '');
       await git.add('.');
       await git.commit('Initial project commit');
+      logger.release(`Project: Successfully initialized workspace and git for ${projectId}`);
 
       res.json({ id: projectId, name, details, createdAt: Date.now() });
     } catch (error) {
@@ -665,10 +673,12 @@ async function startServer() {
     
     try {
       const paths = getUserPaths(username, projectId);
+      logger.release(`Workspace: Manual npm install triggered by ${username} for ${projectId}`);
       
-      logger.release(`Workspace: Installing dependencies for ${username} in ${projectId}...`);
+      logger.release(`Workspace: Installing dependencies in ${paths.workspace}...`);
       const { stdout, stderr } = await execAsync('npm install', { cwd: paths.workspace });
       
+      if (stderr) logger.debug(`Workspace: npm install stderr: ${stderr}`);
       logger.release(`Workspace: npm install complete for ${username}`);
       res.json({ success: true, stdout, stderr });
     } catch (error) {
@@ -687,7 +697,9 @@ async function startServer() {
       const paths = getUserPaths(username, projectId);
       const packageJsonPath = path.join(paths.workspace, 'package.json');
       
+      logger.debug(`Workspace: Checking package.json at ${packageJsonPath}`);
       if (!fsSync.existsSync(packageJsonPath)) {
+        logger.debug(`Workspace: package.json not found for ${projectId}`);
         return res.json({ success: true, changed: false, message: 'package.json not found' });
       }
       
@@ -696,20 +708,26 @@ async function startServer() {
       const currentHash = crypto.createHash('md5').update(packageJsonContent).digest('hex');
       
       const project = await dbService.getProject(projectId);
-      if (!project) return res.status(404).json({ error: 'Project not found' });
+      if (!project) {
+        logger.error(`Workspace: Project ${projectId} not found in DB`);
+        return res.status(404).json({ error: 'Project not found' });
+      }
       
       if (project.lastPackageJsonHash !== currentHash) {
         logger.release(`Workspace: package.json changed for ${username} in ${projectId}. Auto-installing...`);
+        logger.debug(`Workspace: Old hash: ${project.lastPackageJsonHash}, New hash: ${currentHash}`);
         
         // Update hash FIRST to prevent concurrent installs if possible
         await dbService.updateProject(projectId, { lastPackageJsonHash: currentHash });
         
         const { stdout, stderr } = await execAsync('npm install', { cwd: paths.workspace });
         
+        if (stderr) logger.debug(`Workspace: Auto npm install stderr: ${stderr}`);
         logger.release(`Workspace: Auto npm install complete for ${username}`);
         return res.json({ success: true, changed: true, stdout, stderr });
       }
       
+      logger.debug(`Workspace: package.json hash matches for ${projectId}`);
       res.json({ success: true, changed: false });
     } catch (error) {
       logger.error(`Workspace: package.json check failed for ${username}`, error);
