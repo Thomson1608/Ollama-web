@@ -56,13 +56,14 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [systemPrompt, setSystemPrompt] = useState(() => {
     const saved = localStorage.getItem('ollama_system_prompt');
     if (saved) return saved;
-    return username === 'admin' ? ADMIN_SYSTEM_PROMPT : USER_SYSTEM_PROMPT;
+    // Default to ADMIN_SYSTEM_PROMPT for all users to enable IDE-like features
+    return ADMIN_SYSTEM_PROMPT;
   });
 
   // Update system prompt when username changes
   useEffect(() => {
     if (!localStorage.getItem('ollama_system_prompt')) {
-      setSystemPrompt(username === 'admin' ? ADMIN_SYSTEM_PROMPT : USER_SYSTEM_PROMPT);
+      setSystemPrompt(ADMIN_SYSTEM_PROMPT);
     }
   }, [username]);
   const [globalParameters, setGlobalParameters] = useState<ModelParameters>({

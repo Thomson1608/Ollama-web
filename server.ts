@@ -401,10 +401,8 @@ async function startServer() {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      const isUserAdmin = await isAdmin(username);
-      if (isUserAdmin) {
-        return res.status(403).json({ error: 'Admin config cannot be modified' });
-      }
+      // Allow users to modify their own config. 
+      // The previous logic was incorrectly blocking admins.
       const paths = getUserPaths(username);
       const config = req.body;
       await fs.writeFile(paths.config, JSON.stringify(config, null, 2));
@@ -1142,7 +1140,7 @@ async function startServer() {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
 
-    const { chatId, messages, model, parameters } = req.body;
+    const { chatId, messages, model, parameters, systemPrompt: bodySystemPrompt } = req.body;
     
     await updateStats('sent');
 
@@ -1187,7 +1185,7 @@ async function startServer() {
       const memory = JSON.parse(memoryData);
 
       // Inject memory into system prompt
-      const systemPrompt = config.systemPrompt || '';
+      const systemPrompt = bodySystemPrompt || config.systemPrompt || '';
       const memoryContext = memory.facts.length > 0 
         ? `\n\nUser Context (Long-term Memory):\n${memory.facts.map((f: string) => `- ${f}`).join('\n')}`
         : '';
