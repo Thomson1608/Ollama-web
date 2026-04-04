@@ -11,7 +11,8 @@ import {
   Folder,
   BarChart,
   LogOut,
-  User
+  User,
+  Edit2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -29,6 +30,7 @@ interface SidebarProps {
   setCurrentView: (view: ViewType) => void;
   createNewChat: () => void;
   deleteChat: (id: string, e: React.MouseEvent) => void;
+  onRenameChat: (id: string, newTitle: string) => void;
   clearAllChats: () => void;
   isSyncing?: boolean;
   username?: string | null;
@@ -47,11 +49,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setCurrentView,
   createNewChat,
   deleteChat,
+  onRenameChat,
   clearAllChats,
   isSyncing,
   username,
   onLogout
 }) => {
+  const [editingChatId, setEditingChatId] = React.useState<string | null>(null);
+  const [editTitle, setEditTitle] = React.useState('');
+
+  const handleStartRename = (chat: Chat, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingChatId(chat.id);
+    setEditTitle(chat.title);
+  };
+
+  const handleFinishRename = (id: string) => {
+    if (editTitle.trim()) {
+      onRenameChat(id, editTitle.trim());
+    }
+    setEditingChatId(null);
+  };
+
   return (
     <>
       {/* Mobile Backdrop */}
@@ -96,7 +115,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         ) : (
           chats.map(chat => (
-            <button
+            <div
               key={chat.id}
               onClick={() => {
                 setActiveChatId(chat.id);
@@ -104,21 +123,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 if (isMobile) setIsSidebarOpen(false);
               }}
               className={cn(
-                "w-full flex items-center gap-3 p-3 rounded-xl text-left text-sm transition-all group",
+                "w-full flex items-center gap-3 p-3 rounded-xl text-left text-sm transition-all group cursor-pointer",
                 activeChatId === chat.id && currentView === 'chat'
                   ? "bg-blue-50 text-blue-700 font-medium" 
                   : "hover:bg-gray-50 text-gray-600"
               )}
             >
               <MessageSquare size={16} className={activeChatId === chat.id && currentView === 'chat' ? "text-blue-500" : "text-gray-400"} />
-              <span className="flex-1 truncate">{chat.title}</span>
-              <button 
-                onClick={(e) => deleteChat(chat.id, e)}
-                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded transition-all text-gray-400 hover:text-red-500"
-              >
-                <Trash2 size={14} />
-              </button>
-            </button>
+              {editingChatId === chat.id ? (
+                <input
+                  autoFocus
+                  className="flex-1 bg-white border border-blue-300 rounded px-1 py-0.5 outline-none text-sm"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  onBlur={() => handleFinishRename(chat.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleFinishRename(chat.id);
+                    if (e.key === 'Escape') setEditingChatId(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <>
+                  <span className="flex-1 truncate">{chat.title}</span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button 
+                      onClick={(e) => handleStartRename(chat, e)}
+                      className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400 hover:text-blue-500"
+                      title="Rename"
+                    >
+                      <Edit2 size={14} />
+                    </button>
+                    <button 
+                      onClick={(e) => deleteChat(chat.id, e)}
+                      className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400 hover:text-red-500"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           ))
         )}
       </div>

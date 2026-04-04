@@ -14,6 +14,7 @@ import { PullView } from './components/PullView';
 import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
 import { LoginView } from './components/LoginView';
+import { ProjectInitView } from './components/ProjectInitView';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters } from './types';
 
 export default function App() {
@@ -740,6 +741,13 @@ If the user asks you to write code, you should provide it in a markdown code blo
     ));
   };
 
+  const handleRenameChat = (id: string, newTitle: string) => {
+    setChats(prev => prev.map(chat => 
+      chat.id === id ? { ...chat, title: newTitle } : chat
+    ));
+    toast.success('Chat renamed');
+  };
+
   const handleSendMessage = async (e?: React.FormEvent, isRetry = false, image?: string | null) => {
     e?.preventDefault();
     
@@ -888,6 +896,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const handleLogin = (user: string) => {
     setUsername(user);
     localStorage.setItem('ollama_username', user);
+    setCurrentView('project-init');
     toast.success(`Welcome, ${user}!`);
   };
 
@@ -897,6 +906,53 @@ If the user asks you to write code, you should provide it in a markdown code blo
     setChats([]);
     setActiveChatId(null);
     toast.info('Logged out');
+  };
+
+  const handleInitProject = async (name: string, details: string) => {
+    setIsLoading(true);
+    try {
+      const newChat: Chat = {
+        id: Date.now().toString(),
+        title: name,
+        messages: [],
+        model: selectedModel,
+        createdAt: Date.now(),
+      };
+      
+      const userMessage: Message = {
+        role: 'user',
+        content: `Khởi tạo project: ${name}\nChi tiết: ${details}\n\nHãy giúp tôi thiết lập cấu trúc cơ bản cho project này.`,
+        timestamp: Date.now()
+      };
+
+      setChats([newChat, ...chats]);
+      setActiveChatId(newChat.id);
+      setCurrentView('chat');
+
+      // Send the initialization message
+      const response = await fetch('/api/ollama/chat', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username || ''
+        },
+        body: JSON.stringify({
+          chatId: newChat.id,
+          model: selectedModel,
+          systemPrompt: systemPrompt,
+          parameters: globalParameters,
+          messages: [userMessage],
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to init project');
+      await response.text();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to initialize project');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!username) {
@@ -924,6 +980,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
         setCurrentView={setCurrentView}
         createNewChat={createNewChat}
         deleteChat={deleteChat}
+        onRenameChat={handleRenameChat}
         clearAllChats={clearAllChats}
         isSyncing={isSyncing}
         username={username}
@@ -947,6 +1004,10 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden">
+            {currentView === 'project-init' && (
+              <ProjectInitView onInit={handleInitProject} isLoading={isLoading} />
+            )}
+            
             {currentView === 'chat' && (
               <div className="flex h-full overflow-hidden">
                 <div className="flex-1">

@@ -53,7 +53,7 @@ export interface RunningModel {
   size_vram: number;
 }
 
-export type ViewType = 'chat' | 'models' | 'pull' | 'workspace' | 'settings';
+export type ViewType = 'chat' | 'models' | 'pull' | 'workspace' | 'settings' | 'project-init';
 export type ConnectionStatus = 'connected' | 'disconnected' | 'checking';
 
 export interface Memory {
