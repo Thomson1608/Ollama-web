@@ -83,8 +83,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const isRemoteUpdate = useRef(false);
   const isRemoteConfigUpdate = useRef(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<ViewType>('chat');
+  const [activeChatId, setActiveChatId] = useState<string | null>(() => localStorage.getItem('ollama_active_chat_id'));
+  const [currentView, setCurrentView] = useState<ViewType>(() => (localStorage.getItem('ollama_current_view') as ViewType) || 'chat');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [generatingChatIds, setGeneratingChatIds] = useState<Set<string>>(new Set());
@@ -134,6 +134,20 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
+  // Sync activeChatId to localStorage
+  useEffect(() => {
+    if (activeChatId) {
+      localStorage.setItem('ollama_active_chat_id', activeChatId);
+    } else {
+      localStorage.removeItem('ollama_active_chat_id');
+    }
+  }, [activeChatId]);
+
+  // Sync currentView to localStorage
+  useEffect(() => {
+    localStorage.setItem('ollama_current_view', currentView);
+  }, [currentView]);
+
   // Redirect to project list if no project is selected
   useEffect(() => {
     if (isInitialized && username && !projectId && (currentView === 'chat' || currentView === 'workspace')) {
@@ -141,6 +155,14 @@ If the user asks you to write code, you should provide it in a markdown code blo
       toast.error('Please select a project first');
     }
   }, [currentView, projectId, isInitialized, username]);
+
+  // Fetch chats and memory when projectId changes
+  useEffect(() => {
+    if (projectId && username) {
+      fetchChats(projectId);
+      fetchMemory(projectId);
+    }
+  }, [projectId, username]);
 
   // Handle window resize for mobile detection
   useEffect(() => {
@@ -186,8 +208,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
     setCurrentView('chat');
     setActiveChatId(null);
     setChats([]);
-    fetchChats(project.id);
-    fetchMemory(project.id);
     toast.success(`Project ${project.name} selected`);
   };
 
@@ -222,6 +242,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       });
       if (response.ok) {
         const data = await response.json();
+        isRemoteUpdate.current = true;
         setChats(data.chats);
         setGeneratingChatIds(new Set(data.generatingChatIds));
       }
@@ -480,17 +501,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
       try {
         const headers = { 'x-username': username };
         
-        // Fetch chats
-        const chatsRes = await fetch('/api/chats', { headers });
-        if (chatsRes.ok) {
-          const data = await chatsRes.json();
-          isRemoteUpdate.current = true;
-          setChats(data.chats || data || []);
-          if (data.generatingChatIds) {
-            setGeneratingChatIds(new Set(data.generatingChatIds));
-          }
-        }
-        
         // Fetch config
         const configRes = await fetch('/api/config', { headers });
         if (configRes.ok) {
@@ -501,13 +511,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
           if (data.parameters) {
             setGlobalParameters(data.parameters);
           }
-        }
-
-        // Fetch memory
-        const memoryRes = await fetch('/api/memory', { headers });
-        if (memoryRes.ok) {
-          const data = await memoryRes.json();
-          setMemory(data);
         }
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
@@ -528,9 +531,10 @@ If the user asks you to write code, you should provide it in a markdown code blo
     }
 
     const syncChats = async () => {
+      if (!projectId) return;
       setIsSyncing(true);
       try {
-        await fetch('/api/chats', {
+        await fetch(`/api/chats?projectId=${projectId}`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
