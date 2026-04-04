@@ -160,6 +160,7 @@ const FileCodeBlock = ({ filename, code, username, isFinished }: { filename: str
   const lastCodeRef = useRef(code);
 
   useEffect(() => {
+    // Reset if code changes significantly
     if (code !== lastCodeRef.current) {
       lastCodeRef.current = code;
       if (status === 'saved') {
@@ -168,6 +169,7 @@ const FileCodeBlock = ({ filename, code, username, isFinished }: { filename: str
       }
     }
 
+    // Auto-save when finished
     if (isFinished && !writtenRef.current && status === 'idle' && code.trim()) {
       const writeFile = async () => {
         setStatus('writing');
@@ -184,9 +186,11 @@ const FileCodeBlock = ({ filename, code, username, isFinished }: { filename: str
             setStatus('saved');
             writtenRef.current = true;
           } else {
+            console.error('Failed to save file:', filename);
             setStatus('error');
           }
         } catch (err) {
+          console.error('Error saving file:', err);
           setStatus('error');
         }
       };
@@ -204,9 +208,13 @@ const FileCodeBlock = ({ filename, code, username, isFinished }: { filename: str
         )}>
           {status === 'writing' ? <Loader2 size={20} className="animate-spin" /> : <FileEdit size={20} />}
         </div>
-        <div className="flex flex-col overflow-hidden">
+        <div className="flex flex-col overflow-hidden text-left">
           <span className="text-sm font-bold text-gray-800 truncate">{filename}</span>
-          <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+          <span className={cn(
+            "text-[10px] font-bold uppercase tracking-widest",
+            status === 'saved' ? "text-green-500" : 
+            status === 'error' ? "text-red-500" : "text-gray-400"
+          )}>
             {status === 'writing' ? 'Đang lưu vào workspace...' : 
              status === 'saved' ? 'Đã lưu vào workspace' : 
              status === 'error' ? 'Lỗi khi lưu file' : 'Chờ hoàn tất...'}
@@ -466,10 +474,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   const messageContent = activeChat?.messages.find(m => m.content.includes(codeString))?.content || '';
                   if (messageContent) {
                     const beforeCode = messageContent.split(codeString)[0];
-                    const fileRegex = /(?:file|save to|create|update|1\.|2\.|3\.|4\.|5\.)\s+`?([\w./-]+\.[\w]+)`?/i;
-                    const fileMatch = beforeCode.match(fileRegex);
-                    if (fileMatch) {
-                      filename = fileMatch[1];
+                    const fileRegex = /(?:file|save to|create|update|1\.|2\.|3\.|4\.|5\.)\s+`?([\w./-]+\.[\w]+)`?/gi;
+                    const matches = Array.from(beforeCode.matchAll(fileRegex));
+                    if (matches.length > 0) {
+                      // Take the LAST match before this code block
+                      filename = matches[matches.length - 1][1];
                     }
                   }
                 }
