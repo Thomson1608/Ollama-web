@@ -463,36 +463,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   }
                 } catch (e) {}
 
-                // Try to extract filename from language-filename pattern or common patterns
                 const langPart = match ? match[1] : '';
-                const fullClassName = className || '';
-                const filenameMatch = fullClassName.match(/language-[\w.]+:(.+)/);
-                let filename = filenameMatch ? filenameMatch[1] : null;
-
-                // Fallback: search for filename in the text immediately preceding the code block
-                if (!filename) {
-                  const messageContent = activeChat?.messages.find(m => m.content.includes(codeString))?.content || '';
-                  if (messageContent) {
-                    const beforeCode = messageContent.split(codeString)[0];
-                    const fileRegex = /(?:file|save to|create|update|1\.|2\.|3\.|4\.|5\.)\s+`?([\w./-]+\.[\w]+)`?/gi;
-                    const matches = Array.from(beforeCode.matchAll(fileRegex));
-                    if (matches.length > 0) {
-                      // Take the LAST match before this code block
-                      filename = matches[matches.length - 1][1];
-                    }
-                  }
-                }
-
-                if (filename) {
-                  return (
-                    <FileCodeBlock 
-                      filename={filename} 
-                      code={codeString} 
-                      username={username} 
-                      isFinished={!isStreaming} 
-                    />
-                  );
-                }
 
                 return (
                   <div className="relative group/code my-8">
@@ -508,7 +479,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       <div className="flex gap-2">
                         <button
                           onClick={() => {
-                            const name = prompt('Enter filename to save this code to (e.g., App.tsx):');
+                            const name = prompt('Nhập tên file để lưu (vị dụ: App.tsx):');
                             if (name) {
                               fetch('/api/workspace/write', {
                                 method: 'POST',
@@ -518,23 +489,24 @@ export const ChatView: React.FC<ChatViewProps> = ({
                                 },
                                 body: JSON.stringify({ name, content: codeString })
                               }).then(res => {
-                                if (res.ok) toast.success(`Saved to ${name}`);
+                                if (res.ok) toast.success(`Đã lưu vào ${name}`);
+                                else toast.error('Lỗi khi lưu file');
                               });
                             }
                           }}
                           className="bg-gray-700 hover:bg-gray-800 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95"
                         >
                           <Plus size={10} />
-                          Save
+                          Lưu file
                         </button>
                         <button
                           onClick={() => {
                             navigator.clipboard.writeText(codeString);
-                            toast.success('Copied to clipboard');
+                            toast.success('Đã sao chép vào bộ nhớ tạm');
                           }}
                           className="bg-gray-700 hover:bg-gray-600 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95"
                         >
-                          Copy
+                          Sao chép
                         </button>
                       </div>
                     </div>
