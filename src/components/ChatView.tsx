@@ -763,7 +763,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
+              disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy || activeChat?.isClosed}
               className="p-1.5 md:p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shrink-0 disabled:opacity-50"
               title="Tải ảnh lên"
             >
@@ -788,11 +788,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   ? "AI is busy in another tab..." 
                   : isGloballyBusy
                     ? "AI is busy in another chat..."
-                    : activeChatId 
-                      ? "Ask anything..." 
-                      : "Start a new chat first"
+                    : activeChat?.isClosed
+                      ? "This chat is closed (Read-only)"
+                      : activeChatId 
+                        ? "Ask anything..." 
+                        : "Start a new chat first"
               }
-              disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
+              disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy || activeChat?.isClosed}
               rows={1}
               style={{ height: 'auto' }}
               className="flex-1 min-w-0 bg-transparent border-none focus:ring-0 p-1 md:p-2 text-sm resize-none disabled:cursor-not-allowed min-h-[36px] max-h-[200px]"
@@ -801,7 +803,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               <button
                 type="button"
                 onClick={toggleListening}
-                disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy}
+                disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy || activeChat?.isClosed}
                 className={cn(
                   "p-1.5 md:p-2 rounded-xl transition-all shadow-sm disabled:shadow-none disabled:bg-transparent disabled:text-gray-400 shrink-0",
                   isListening 
@@ -814,7 +816,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={!input.trim() || isLoading || isAiTypingGlobally || isGloballyBusy || !activeChatId}
+                disabled={!input.trim() || isLoading || isAiTypingGlobally || isGloballyBusy || !activeChatId || activeChat?.isClosed}
                 className="p-1.5 md:p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl transition-all shadow-lg shadow-blue-200 disabled:shadow-none shrink-0"
               >
                 <Send size={16} />

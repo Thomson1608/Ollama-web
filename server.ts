@@ -198,6 +198,13 @@ const dbService = {
       handleFirestoreError(error, OperationType.GET, `projects/${id}`);
     }
   },
+  updateProject: async (id: string, data: any) => {
+    try {
+      await updateDoc(doc(db, 'projects', id), data);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `projects/${id}`);
+    }
+  },
   createProject: async (userId: string, name: string, details: string) => {
     try {
       const id = 'proj_' + Date.now().toString();
@@ -633,6 +640,80 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Không thể lưu danh sách chat' });
+    }
+  });
+
+  app.post('/api/chats/:id/close', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const { projectId } = req.body;
+    const { id } = req.params;
+    if (!username || !projectId) return res.status(400).json({ error: 'Username and ProjectId required' });
+    try {
+      const chatRef = doc(db, 'projects', projectId, 'chats', id);
+      await updateDoc(chatRef, { isClosed: true });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to close chat' });
+    }
+  });
+
+  // API: Install dependencies
+  app.post('/api/workspace/install', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const { projectId } = req.body;
+    if (!username || !projectId) return res.status(400).json({ error: 'Username and ProjectId required' });
+    
+    try {
+      const paths = getUserPaths(username, projectId);
+      
+      logger.release(`Workspace: Installing dependencies for ${username} in ${projectId}...`);
+      const { stdout, stderr } = await execAsync('npm install', { cwd: paths.workspace });
+      
+      logger.release(`Workspace: npm install complete for ${username}`);
+      res.json({ success: true, stdout, stderr });
+    } catch (error) {
+      logger.error(`Workspace: npm install failed for ${username}`, error);
+      res.status(500).json({ error: 'Failed to install dependencies', details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // API: Check package.json and install if changed
+  app.post('/api/workspace/check-package-json', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const { projectId } = req.body;
+    if (!username || !projectId) return res.status(400).json({ error: 'Username and ProjectId required' });
+    
+    try {
+      const paths = getUserPaths(username, projectId);
+      const packageJsonPath = path.join(paths.workspace, 'package.json');
+      
+      if (!fsSync.existsSync(packageJsonPath)) {
+        return res.json({ success: true, changed: false, message: 'package.json not found' });
+      }
+      
+      const packageJsonContent = fsSync.readFileSync(packageJsonPath, 'utf-8');
+      const crypto = await import('crypto');
+      const currentHash = crypto.createHash('md5').update(packageJsonContent).digest('hex');
+      
+      const project = await dbService.getProject(projectId);
+      if (!project) return res.status(404).json({ error: 'Project not found' });
+      
+      if (project.lastPackageJsonHash !== currentHash) {
+        logger.release(`Workspace: package.json changed for ${username} in ${projectId}. Auto-installing...`);
+        
+        // Update hash FIRST to prevent concurrent installs if possible
+        await dbService.updateProject(projectId, { lastPackageJsonHash: currentHash });
+        
+        const { stdout, stderr } = await execAsync('npm install', { cwd: paths.workspace });
+        
+        logger.release(`Workspace: Auto npm install complete for ${username}`);
+        return res.json({ success: true, changed: true, stdout, stderr });
+      }
+      
+      res.json({ success: true, changed: false });
+    } catch (error) {
+      logger.error(`Workspace: package.json check failed for ${username}`, error);
+      res.status(500).json({ error: 'Failed to check package.json', details: error instanceof Error ? error.message : String(error) });
     }
   });
 

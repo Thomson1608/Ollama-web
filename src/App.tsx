@@ -134,6 +134,14 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   const activeChat = chats.find(c => c.id === activeChatId);
 
+  // Redirect to project list if no project is selected
+  useEffect(() => {
+    if (isInitialized && username && !projectId && (currentView === 'chat' || currentView === 'workspace')) {
+      setCurrentView('project-list');
+      toast.error('Please select a project first');
+    }
+  }, [currentView, projectId, isInitialized, username]);
+
   // Handle window resize for mobile detection
   useEffect(() => {
     const handleResize = () => {
@@ -790,17 +798,93 @@ If the user asks you to write code, you should provide it in a markdown code blo
     }
   };
 
-  const createNewChat = () => {
+  const handleInstallDependencies = async () => {
+    if (!username || !projectId) return;
+    setIsSyncing(true);
+    try {
+      const response = await fetch('/api/workspace/install', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({ projectId })
+      });
+      if (response.ok) {
+        toast.success('Dependencies installed successfully');
+      } else {
+        const data = await response.json();
+        toast.error(`Failed to install: ${data.error}`);
+      }
+    } catch (error) {
+      toast.error('Failed to install dependencies');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const createNewChat = async () => {
+    if (!username || !projectId) return;
+    
+    // Inherit prompt from last chat if exists
+    let inheritedPrompt = systemPrompt;
+    if (chats.length > 0) {
+      const lastChat = chats[0]; // Assuming chats are sorted by date desc
+      const lastMessages = lastChat.messages.slice(-4);
+      if (lastMessages.length > 0) {
+        inheritedPrompt = `${systemPrompt}\n\nContext from previous conversation:\n${lastMessages.map(m => `${m.role}: ${m.content.slice(0, 200)}`).join('\n')}`;
+      }
+    }
+
+    const id = Date.now().toString();
     const newChat: Chat = {
-      id: Date.now().toString(),
+      id,
       title: 'New Chat',
       messages: [],
-      model: selectedModel,
+      model: selectedModel || 'llama3.2',
       createdAt: Date.now(),
+      systemPrompt: inheritedPrompt,
+      parameters: globalParameters,
+      isClosed: false
     };
-    setChats([newChat, ...chats]);
-    setActiveChatId(newChat.id);
+    
+    setChats(prev => [newChat, ...prev]);
+    setActiveChatId(id);
     setCurrentView('chat');
+    if (isMobile) setIsSidebarOpen(false);
+
+    try {
+      await fetch('/api/chats', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({ projectId, chat: newChat })
+      });
+    } catch (error) {
+      console.error('Failed to create chat', error);
+    }
+  };
+
+  const closeChat = async (id: string) => {
+    if (!username || !projectId) return;
+    try {
+      const response = await fetch(`/api/chats/${id}/close`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({ projectId })
+      });
+      if (response.ok) {
+        setChats(prev => prev.map(c => c.id === id ? { ...c, isClosed: true } : c));
+        toast.success('Chat closed. It is now read-only.');
+      }
+    } catch (error) {
+      toast.error('Failed to close chat');
+    }
   };
 
   const deleteChat = (id: string, e: React.MouseEvent) => {
@@ -1199,6 +1283,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                 isMobile={isMobile}
                 username={username}
                 projectId={projectId || undefined}
+                onInstallDependencies={handleInstallDependencies}
               />
             )}
 

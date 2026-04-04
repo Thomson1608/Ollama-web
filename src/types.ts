@@ -27,6 +27,7 @@ export interface Chat {
   createdAt: number;
   systemPrompt?: string;
   parameters?: ModelParameters;
+  isClosed?: boolean;
 }
 
 export interface OllamaModel {
@@ -58,6 +59,7 @@ export interface Project {
   name: string;
   details: string;
   createdAt: number;
+  lastPackageJsonHash?: string;
 }
 
 export type ViewType = 'chat' | 'models' | 'pull' | 'workspace' | 'settings' | 'project-init' | 'project-list';

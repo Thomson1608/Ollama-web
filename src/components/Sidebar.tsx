@@ -36,6 +36,7 @@ interface SidebarProps {
   isSyncing?: boolean;
   username?: string | null;
   onLogout?: () => void;
+  onCloseChat?: (id: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -54,7 +55,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   clearAllChats,
   isSyncing,
   username,
-  onLogout
+  onLogout,
+  onCloseChat
 }) => {
   const [editingChatId, setEditingChatId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState('');
@@ -155,8 +157,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 />
               ) : (
                 <>
-                  <span className="flex-1 truncate">{chat.title}</span>
+                  <div className="flex-1 flex flex-col min-w-0">
+                    <span className="truncate">{chat.title}</span>
+                    {chat.isClosed && (
+                      <span className="text-[10px] text-gray-400 font-medium">Closed (Read-only)</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    {!chat.isClosed && onCloseChat && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCloseChat(chat.id);
+                        }}
+                        className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400 hover:text-orange-500"
+                        title="Close Chat"
+                      >
+                        <RefreshCw size={14} />
+                      </button>
+                    )}
                     <button 
                       onClick={(e) => handleStartRename(chat, e)}
                       className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400 hover:text-blue-500"

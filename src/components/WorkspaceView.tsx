@@ -14,11 +14,13 @@ interface WorkspaceViewProps {
   isMobile?: boolean;
   username?: string | null;
   projectId?: string;
+  onInstallDependencies?: () => Promise<void>;
 }
 
-export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, socket, isMobile, username, projectId }) => {
+export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, socket, isMobile, username, projectId, onInstallDependencies }) => {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [selectedIsDirectory, setSelectedIsDirectory] = useState<boolean>(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
@@ -39,6 +41,34 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
   const [commitDetails, setCommitDetails] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Auto-check package.json
+  useEffect(() => {
+    if (!username || !projectId) return;
+    
+    const checkPackageJson = async () => {
+      try {
+        const res = await fetch('/api/workspace/check-package-json', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-username': username
+          },
+          body: JSON.stringify({ projectId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.changed) {
+            toast.success('Detected package.json changes. Dependencies updated.');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to check package.json', e);
+      }
+    };
+
+    checkPackageJson();
+  }, [projectId, username]);
 
   useEffect(() => {
     if (!socket || !username) return;
@@ -346,6 +376,23 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                   Workspace
                 </h2>
                 <div className="flex items-center gap-1">
+                  <button 
+                    onClick={async () => {
+                      if (onInstallDependencies) {
+                        setIsInstalling(true);
+                        try {
+                          await onInstallDependencies();
+                        } finally {
+                          setIsInstalling(false);
+                        }
+                      }
+                    }}
+                    disabled={isInstalling || !onInstallDependencies}
+                    className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-400 disabled:opacity-50"
+                    title="Install Dependencies"
+                  >
+                    <RefreshCw size={14} className={isInstalling ? "animate-spin" : ""} />
+                  </button>
                   <button 
                     onClick={createNewFile}
                     className="p-1 hover:bg-gray-200 rounded transition-colors text-gray-400"
