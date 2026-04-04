@@ -1,0 +1,135 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId
+    // Fields:
+    //   - id: string (required)
+    //   - username: string (required)
+    //   - role: string (required, 'admin' | 'user')
+    //
+    // Collection: stats
+    // Document ID: statKey
+    // Fields:
+    //   - key: string (required)
+    //   - value: number (required)
+    //
+    // Collection: projects
+    // Document ID: projectId
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - name: string (required)
+    //   - description: string (optional)
+    //   - createdAt: number (required)
+    //
+    // [And other collections as defined in firebase-blueprint.json]
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "thompsoninfo.1608@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['id', 'username', 'role']) &&
+             data.id is string && data.username is string &&
+             data.role in ['admin', 'user'];
+    }
+
+    function isValidProject(data) {
+      return hasRequiredFields(['id', 'userId', 'name', 'createdAt']) &&
+             data.id is string && data.userId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.createdAt is number;
+    }
+
+    function isValidChat(data) {
+      return hasRequiredFields(['id', 'projectId', 'title', 'model', 'createdAt']) &&
+             data.id is string && data.projectId is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 100 &&
+             data.model is string && data.createdAt is number;
+    }
+
+    function isValidMessage(data) {
+      return hasRequiredFields(['id', 'chatId', 'role', 'content', 'timestamp']) &&
+             data.id is string && data.chatId is string &&
+             data.role in ['user', 'assistant', 'system'] &&
+             data.content is string && data.content.size() < 10000 &&
+             data.timestamp is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
+      
+      match /configs/{configId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    match /stats/{statKey} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidProject(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && isValidProject(request.resource.data) && (resource.data.userId == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      match /chats/{chatId} {
+        allow read, write: if isAuthenticated() && (get(/databases/$(database)/documents/projects/$(projectId)).data.userId == request.auth.uid || isAdmin());
+        
+        match /messages/{messageId} {
+          allow read, write: if isAuthenticated() && (get(/databases/$(database)/documents/projects/$(projectId)).data.userId == request.auth.uid || isAdmin());
+        }
+      }
+
+      match /memories/{memoryId} {
+        allow read, write: if isAuthenticated() && (get(/databases/$(database)/documents/projects/$(projectId)).data.userId == request.auth.uid || isAdmin());
+      }
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

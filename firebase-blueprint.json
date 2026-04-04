@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Thông tin người dùng hệ thống",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
+      },
+      "required": ["id", "username", "role"]
+    },
+    "Config": {
+      "title": "Config",
+      "description": "Cấu hình AI của người dùng",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "systemPrompt": { "type": "string" },
+        "parameters": { "type": "object" }
+      },
+      "required": ["userId"]
+    },
+    "Stat": {
+      "title": "Stat",
+      "description": "Thống kê hệ thống",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "value": { "type": "number" }
+      },
+      "required": ["key", "value"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Dự án của người dùng",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "name", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Phiên thảo luận trong dự án",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "title": { "type": "string" },
+        "model": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "systemPrompt": { "type": "string" }
+      },
+      "required": ["id", "projectId", "title", "model", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Tin nhắn trong chat",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "chatId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "assistant", "system"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "chatId", "role", "content", "timestamp"]
+    },
+    "Memory": {
+      "title": "Memory",
+      "description": "Bộ nhớ dài hạn của người dùng",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "userId", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Danh sách người dùng"
+    },
+    "/users/{userId}/configs/default": {
+      "schema": "Config",
+      "description": "Cấu hình mặc định của người dùng"
+    },
+    "/stats/{statKey}": {
+      "schema": "Stat",
+      "description": "Thống kê hệ thống"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Danh sách dự án"
+    },
+    "/projects/{projectId}/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Danh sách chat trong dự án"
+    },
+    "/projects/{projectId}/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Danh sách tin nhắn trong chat"
+    },
+    "/projects/{projectId}/memories/{memoryId}": {
+      "schema": "Memory",
+      "description": "Bộ nhớ dài hạn của dự án"
+    }
+  }
+}

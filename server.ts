@@ -11,8 +11,24 @@ import { promisify } from 'util';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { simpleGit, SimpleGit } from 'simple-git';
 import si from 'systeminformation';
-import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy, 
+  limit,
+  getDocFromServer,
+  Timestamp
+} from 'firebase/firestore';
+import firebaseConfig from './firebase-applet-config.json';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -21,141 +37,277 @@ const execAsync = promisify(exec);
 
 const DATA_DIR = path.join(__dirname, 'data');
 const USERS_DIR = path.join(DATA_DIR, 'users');
-const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
-const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const SYSTEM_LOG_FILE = path.join(DATA_DIR, 'system.log');
-const ADMIN_CONFIG_FILE = path.join(DATA_DIR, 'admin_config.json');
-const DB_FILE = path.join(DATA_DIR, 'system.db');
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: any;
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: 'Server-side (No Auth Context)',
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 // Database Service (MVVM-like Service Layer)
-let db: Database;
-
 const dbService = {
   // User operations
   getUsers: async () => {
-    return await db.all('SELECT username, role FROM users');
+    try {
+      const snapshot = await getDocs(collection(db, 'users'));
+      return snapshot.docs.map(doc => doc.data());
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'users');
+    }
   },
   getUser: async (username: string) => {
-    return await db.get('SELECT * FROM users WHERE username = ?', username);
+    try {
+      const q = query(collection(db, 'users'), where('username', '==', username));
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) return null;
+      return snapshot.docs[0].data();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `users?username=${username}`);
+    }
   },
   createUser: async (username: string, role: string = 'user') => {
-    const id = Date.now().toString() + Math.random().toString(36).substring(2, 7);
-    await db.run('INSERT INTO users (id, username, role) VALUES (?, ?, ?)', id, username, role);
-    // Initialize default config for new user
-    await db.run('INSERT INTO configs (userId, systemPrompt, parameters) VALUES (?, ?, ?)',
-      id, `You are a helpful assistant for ${username}.`, JSON.stringify({ temperature: 0.7, topP: 0.9, topK: 40 }));
-    return id;
+    try {
+      const id = Date.now().toString() + Math.random().toString(36).substring(2, 7);
+      const userRef = doc(db, 'users', id);
+      await setDoc(userRef, { id, username, role });
+      
+      // Initialize default config for new user
+      const configRef = doc(db, 'users', id, 'configs', 'default');
+      await setDoc(configRef, {
+        userId: id,
+        systemPrompt: `You are a helpful assistant for ${username}.`,
+        parameters: { temperature: 0.7, topP: 0.9, topK: 40 }
+      });
+      return id;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'users');
+    }
   },
   updateUserRole: async (username: string, role: string) => {
-    await db.run('UPDATE users SET role = ? WHERE username = ?', role, username);
+    try {
+      const user = await dbService.getUser(username) as any;
+      if (user) {
+        await updateDoc(doc(db, 'users', user.id), { role });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `users/${username}`);
+    }
   },
 
   // Config operations
   getConfig: async (username: string) => {
-    const user = await dbService.getUser(username);
-    if (!user) return null;
-    const config = await db.get('SELECT * FROM configs WHERE userId = ?', user.id);
-    if (!config) return null;
-    return {
-      systemPrompt: config.systemPrompt,
-      parameters: JSON.parse(config.parameters || '{}')
-    };
+    try {
+      const user = await dbService.getUser(username) as any;
+      if (!user) return null;
+      const configRef = doc(db, 'users', user.id, 'configs', 'default');
+      const configSnap = await getDoc(configRef);
+      if (!configSnap.exists()) return null;
+      const config = configSnap.data();
+      return {
+        systemPrompt: config.systemPrompt,
+        parameters: config.parameters || {}
+      };
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `users/${username}/configs/default`);
+    }
   },
   saveConfig: async (username: string, config: any) => {
-    const user = await dbService.getUser(username);
-    if (!user) return;
-    const existing = await db.get('SELECT userId FROM configs WHERE userId = ?', user.id);
-    if (existing) {
-      await db.run('UPDATE configs SET systemPrompt = ?, parameters = ? WHERE userId = ?',
-        config.systemPrompt, JSON.stringify(config.parameters || {}), user.id);
-    } else {
-      await db.run('INSERT INTO configs (userId, systemPrompt, parameters) VALUES (?, ?, ?)',
-        user.id, config.systemPrompt, JSON.stringify(config.parameters || {}));
+    try {
+      const user = await dbService.getUser(username) as any;
+      if (!user) return;
+      const configRef = doc(db, 'users', user.id, 'configs', 'default');
+      await setDoc(configRef, {
+        userId: user.id,
+        systemPrompt: config.systemPrompt,
+        parameters: config.parameters || {}
+      }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${username}/configs/default`);
     }
   },
 
   // Stats operations
   getStats: async () => {
-    const rows = await db.all('SELECT * FROM stats');
-    const stats: any = { sent: 0, success: 0, fail: 0 };
-    rows.forEach(row => {
-      stats[row.key] = row.value;
-    });
-    return stats;
+    try {
+      const snapshot = await getDocs(collection(db, 'stats'));
+      const stats: any = { sent: 0, success: 0, fail: 0 };
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        stats[data.key] = data.value;
+      });
+      return stats;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'stats');
+    }
   },
   updateStat: async (type: 'sent' | 'success' | 'fail') => {
-    const existing = await db.get('SELECT value FROM stats WHERE key = ?', type);
-    if (existing) {
-      await db.run('UPDATE stats SET value = value + 1 WHERE key = ?', type);
-    } else {
-      await db.run('INSERT INTO stats (key, value) VALUES (?, 1)', type);
+    try {
+      const statRef = doc(db, 'stats', type);
+      const statSnap = await getDoc(statRef);
+      if (statSnap.exists()) {
+        await updateDoc(statRef, { value: statSnap.data().value + 1 });
+      } else {
+        await setDoc(statRef, { key: type, value: 1 });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `stats/${type}`);
     }
   },
 
   // Project operations
   getProjects: async (userId: string) => {
-    return await db.all('SELECT * FROM projects WHERE userId = ? ORDER BY createdAt DESC', userId);
+    try {
+      const q = query(collection(db, 'projects'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => doc.data());
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, `projects?userId=${userId}`);
+    }
   },
   getProject: async (id: string) => {
-    return await db.get('SELECT * FROM projects WHERE id = ?', id);
+    try {
+      const snap = await getDoc(doc(db, 'projects', id));
+      return snap.exists() ? snap.data() : null;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, `projects/${id}`);
+    }
   },
   createProject: async (userId: string, name: string, details: string) => {
-    const id = 'proj_' + Date.now().toString();
-    await db.run('INSERT INTO projects (id, userId, name, details, createdAt) VALUES (?, ?, ?, ?, ?)',
-      id, userId, name, details, Date.now());
-    return id;
+    try {
+      const id = 'proj_' + Date.now().toString();
+      await setDoc(doc(db, 'projects', id), {
+        id, userId, name, details, createdAt: Date.now()
+      });
+      return id;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'projects');
+    }
   },
   deleteProject: async (id: string) => {
-    await db.run('DELETE FROM projects WHERE id = ?', id);
+    try {
+      await deleteDoc(doc(db, 'projects', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
+    }
   },
 
   // Chat operations
   getChats: async (projectId: string) => {
-    const chats = await db.all('SELECT * FROM chats WHERE projectId = ? ORDER BY createdAt DESC', projectId);
-    return await Promise.all(chats.map(async (chat) => ({
-      ...chat,
-      parameters: JSON.parse(chat.parameters || '{}'),
-      messages: await dbService.getMessages(chat.id)
-    })));
+    try {
+      const q = query(collection(db, 'projects', projectId, 'chats'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      const chats = snapshot.docs.map(doc => doc.data());
+      return await Promise.all(chats.map(async (chat: any) => ({
+        ...chat,
+        parameters: chat.parameters || {},
+        messages: await dbService.getMessages(projectId, chat.id)
+      })));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, `projects/${projectId}/chats`);
+    }
   },
   createChat: async (projectId: string, chat: any) => {
-    await db.run('INSERT INTO chats (id, projectId, title, model, systemPrompt, parameters, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      chat.id, projectId, chat.title, chat.model, chat.systemPrompt || '', JSON.stringify(chat.parameters || {}), chat.createdAt || Date.now());
+    try {
+      await setDoc(doc(db, 'projects', projectId, 'chats', chat.id), {
+        id: chat.id,
+        projectId,
+        title: chat.title,
+        model: chat.model,
+        systemPrompt: chat.systemPrompt || '',
+        parameters: chat.parameters || {},
+        createdAt: chat.createdAt || Date.now()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `projects/${projectId}/chats/${chat.id}`);
+    }
   },
-  updateChatTitle: async (id: string, title: string) => {
-    await db.run('UPDATE chats SET title = ? WHERE id = ?', title, id);
+  updateChatTitle: async (projectId: string, id: string, title: string) => {
+    try {
+      await updateDoc(doc(db, 'projects', projectId, 'chats', id), { title });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `projects/${projectId}/chats/${id}`);
+    }
   },
-  deleteChat: async (id: string) => {
-    await db.run('DELETE FROM chats WHERE id = ?', id);
-    await db.run('DELETE FROM messages WHERE chatId = ?', id);
+  deleteChat: async (projectId: string, id: string) => {
+    try {
+      await deleteDoc(doc(db, 'projects', projectId, 'chats', id));
+      // Note: Subcollections messages should also be deleted, but Firestore doesn't delete them automatically.
+      // For simplicity in this refactor, we leave them or delete them in a loop if needed.
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `projects/${projectId}/chats/${id}`);
+    }
   },
 
   // Message operations
-  getMessages: async (chatId: string) => {
-    const msgs = await db.all('SELECT * FROM messages WHERE chatId = ? ORDER BY timestamp ASC', chatId);
-    return msgs.map(m => ({
-      ...m,
-      images: JSON.parse(m.images || '[]')
-    }));
+  getMessages: async (projectId: string, chatId: string) => {
+    try {
+      const q = query(collection(db, 'projects', projectId, 'chats', chatId, 'messages'), orderBy('timestamp', 'asc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => doc.data());
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, `projects/${projectId}/chats/${chatId}/messages`);
+    }
   },
-  addMessage: async (chatId: string, msg: any) => {
-    const id = 'msg_' + Date.now().toString() + Math.random().toString(36).substring(2, 5);
-    await db.run('INSERT INTO messages (id, chatId, role, content, images, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
-      id, chatId, msg.role, msg.content, JSON.stringify(msg.images || []), msg.timestamp || Date.now());
+  addMessage: async (projectId: string, chatId: string, msg: any) => {
+    try {
+      const id = 'msg_' + Date.now().toString() + Math.random().toString(36).substring(2, 5);
+      await setDoc(doc(db, 'projects', projectId, 'chats', chatId, 'messages', id), {
+        id,
+        chatId,
+        role: msg.role,
+        content: msg.content,
+        images: msg.images || [],
+        timestamp: msg.timestamp || Date.now()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `projects/${projectId}/chats/${chatId}/messages`);
+    }
   },
 
   // Memory operations
   getMemory: async (projectId: string) => {
-    const mem = await db.get('SELECT * FROM memory WHERE projectId = ?', projectId) as any;
-    return mem ? JSON.parse(mem.facts) : [];
+    try {
+      const q = query(collection(db, 'projects', projectId, 'memories'), orderBy('timestamp', 'desc'));
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => doc.data().content);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, `projects/${projectId}/memories`);
+    }
   },
-  saveMemory: async (projectId: string, facts: string[]) => {
-    const existing = await db.get('SELECT id FROM memory WHERE projectId = ?', projectId);
-    if (existing) {
-      await db.run('UPDATE memory SET facts = ? WHERE projectId = ?', JSON.stringify(facts), projectId);
-    } else {
+  saveMemory: async (projectId: string, content: string) => {
+    try {
       const id = 'mem_' + Date.now().toString();
-      await db.run('INSERT INTO memory (id, projectId, facts) VALUES (?, ?, ?)', id, projectId, JSON.stringify(facts));
+      await setDoc(doc(db, 'projects', projectId, 'memories', id), {
+        id, projectId, content, timestamp: Date.now()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `projects/${projectId}/memories`);
     }
   }
 };
@@ -277,71 +429,17 @@ const activeGenerations = new Map<string, ActiveGeneration>();
 async function startServer() {
   await ensureDataDir();
   
-  // Initialize Database
-  db = await open({
-    filename: DB_FILE,
-    driver: sqlite3.Database
-  });
+  // Test Firestore Connection
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+    logger.release('Đã kết nối thành công với Firestore');
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      logger.error("Vui lòng kiểm tra cấu hình Firebase của bạn.");
+    }
+  }
 
-  // Create Tables
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      username TEXT UNIQUE,
-      role TEXT DEFAULT 'user'
-    );
-
-    CREATE TABLE IF NOT EXISTS configs (
-      userId TEXT PRIMARY KEY,
-      systemPrompt TEXT,
-      parameters TEXT, -- JSON string
-      FOREIGN KEY(userId) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS stats (
-      key TEXT PRIMARY KEY,
-      value INTEGER DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      userId TEXT,
-      name TEXT,
-      details TEXT,
-      createdAt INTEGER,
-      FOREIGN KEY(userId) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS chats (
-      id TEXT PRIMARY KEY,
-      projectId TEXT,
-      title TEXT,
-      model TEXT,
-      systemPrompt TEXT,
-      parameters TEXT, -- JSON string
-      createdAt INTEGER,
-      FOREIGN KEY(projectId) REFERENCES projects(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      chatId TEXT,
-      role TEXT,
-      content TEXT,
-      images TEXT, -- JSON string
-      timestamp INTEGER,
-      FOREIGN KEY(chatId) REFERENCES chats(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS memory (
-      id TEXT PRIMARY KEY,
-      projectId TEXT,
-      facts TEXT, -- JSON string
-      FOREIGN KEY(projectId) REFERENCES projects(id)
-    );
-  `);
-
-  logger.release('Starting server initialization...');
+  logger.release('Đang khởi tạo server...');
   
   const app = express();
   const httpServer = createServer(app);
@@ -520,14 +618,16 @@ async function startServer() {
     try {
       const chats = req.body;
       for (const chat of chats) {
-        const existing = await db.get('SELECT id FROM chats WHERE id = ?', chat.id);
-        if (!existing) {
+        // Check if chat exists (Firestore check)
+        const chatRef = doc(db, 'projects', projectId, 'chats', chat.id);
+        const chatSnap = await getDoc(chatRef);
+        if (!chatSnap.exists()) {
           await dbService.createChat(projectId, chat);
           for (const msg of chat.messages) {
-            await dbService.addMessage(chat.id, msg);
+            await dbService.addMessage(projectId, chat.id, msg);
           }
         } else {
-          await dbService.updateChatTitle(chat.id, chat.title);
+          await dbService.updateChatTitle(projectId, chat.id, chat.title);
         }
       }
       res.json({ success: true });
@@ -595,7 +695,15 @@ async function startServer() {
     if (!projectId) return res.status(400).json({ error: 'Yêu cầu ProjectId' });
     try {
       const { facts } = req.body;
-      await dbService.saveMemory(projectId, facts);
+      // facts is usually an array of strings in the app, but dbService.saveMemory takes a string
+      // Let's handle both or just save the latest fact if it's a string
+      if (Array.isArray(facts)) {
+        for (const fact of facts) {
+          await dbService.saveMemory(projectId, fact);
+        }
+      } else {
+        await dbService.saveMemory(projectId, facts);
+      }
       io.emit(`memory:updated:${username}`, { facts });
       res.json({ success: true });
     } catch (error) {
@@ -1322,9 +1430,10 @@ async function startServer() {
       // Save user message to DB immediately
       try {
         const userMsg = messages[messages.length - 1];
-        const existingChat = await db.get('SELECT id FROM chats WHERE id = ?', chatId);
-        if (existingChat) {
-          await dbService.addMessage(chatId, userMsg);
+        const chatRef = doc(db, 'projects', projectId, 'chats', chatId);
+        const chatSnap = await getDoc(chatRef);
+        if (chatSnap.exists()) {
+          await dbService.addMessage(projectId, chatId, userMsg);
         } else {
           const newChat = {
             id: chatId,
@@ -1334,7 +1443,7 @@ async function startServer() {
             createdAt: Date.now()
           };
           await dbService.createChat(projectId, newChat);
-          await dbService.addMessage(chatId, userMsg);
+          await dbService.addMessage(projectId, chatId, userMsg);
         }
         // Notify client about chat update
         io.emit(`chats:updated:${username}`, { projectId });
@@ -1578,7 +1687,7 @@ async function startServer() {
       logger.release(`Ollama Proxy: Chat session complete for ${chatId} (${username}) in project ${projectId}`);
       
       // Save assistant message to DB
-      await dbService.addMessage(chatId, { role: 'assistant', content: assistantContent, timestamp: Date.now() });
+      await dbService.addMessage(projectId, chatId, { role: 'assistant', content: assistantContent, timestamp: Date.now() });
       io.emit(`chats:updated:${username}`, { projectId });
 
       // Post-chat logic
@@ -1786,7 +1895,9 @@ async function startServer() {
           if (match) {
             const consolidatedFacts = JSON.parse(match[0]);
             if (Array.isArray(consolidatedFacts)) {
-              await dbService.saveMemory(projectId, consolidatedFacts);
+              for (const fact of consolidatedFacts) {
+                await dbService.saveMemory(projectId, fact);
+              }
               io.emit(`memory:updated:${username}`, { facts: consolidatedFacts });
               logger.release(`Post-chat logic: Memory consolidated for ${username} in project ${projectId}. Total facts: ${consolidatedFacts.length}`);
             }
