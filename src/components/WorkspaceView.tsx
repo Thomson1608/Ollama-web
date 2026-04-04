@@ -13,9 +13,10 @@ interface WorkspaceViewProps {
   socket?: Socket | null;
   isMobile?: boolean;
   username?: string | null;
+  projectId?: string;
 }
 
-export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, socket, isMobile, username }) => {
+export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, socket, isMobile, username, projectId }) => {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -67,10 +68,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   }, [logs]);
 
   const fetchFiles = async () => {
-    if (!username) return;
+    if (!username || !projectId) return;
     setIsLoading(true);
     try {
-      const res = await fetch('/api/workspace', {
+      const res = await fetch(`/api/workspace?projectId=${projectId}`, {
         headers: { 'x-username': username }
       });
       if (res.ok) {
@@ -85,10 +86,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const fetchHistory = async () => {
-    if (!username) return;
+    if (!username || !projectId) return;
     setIsLoadingHistory(true);
     try {
-      const res = await fetch('/api/workspace/history', {
+      const res = await fetch(`/api/workspace/history?projectId=${projectId}`, {
         headers: { 'x-username': username }
       });
       if (res.ok) {
@@ -103,10 +104,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const fetchCommitDetails = async (hash: string) => {
-    if (!username) return;
+    if (!username || !projectId) return;
     setIsLoadingHistory(true);
     try {
-      const res = await fetch(`/api/workspace/commit-details?hash=${hash}`, {
+      const res = await fetch(`/api/workspace/commit-details?hash=${hash}&projectId=${projectId}`, {
         headers: { 'x-username': username }
       });
       if (res.ok) {
@@ -129,9 +130,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
 
   useEffect(() => {
     fetchFiles();
-    if (selectedFile && !isEditing && !selectedIsDirectory && username) {
+    if (selectedFile && !isEditing && !selectedIsDirectory && username && projectId) {
       // Fetch content without resetting preview mode
-      fetch(`/api/workspace/read?name=${encodeURIComponent(selectedFile)}`, {
+      fetch(`/api/workspace/read?name=${encodeURIComponent(selectedFile)}&projectId=${projectId}`, {
         headers: { 'x-username': username }
       })
         .then(res => res.ok ? res.json() : Promise.reject())
@@ -141,15 +142,15 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
         })
         .catch(() => {});
     }
-  }, [refreshTrigger, username]);
+  }, [refreshTrigger, username, projectId]);
 
   const readFile = async (name: string) => {
-    if (!username) return;
+    if (!username || !projectId) return;
     setSelectedFile(name);
     setSelectedIsDirectory(false);
     setIsEditing(false);
     try {
-      const res = await fetch(`/api/workspace/read?name=${encodeURIComponent(name)}`, {
+      const res = await fetch(`/api/workspace/read?name=${encodeURIComponent(name)}&projectId=${projectId}`, {
         headers: { 'x-username': username }
       });
       if (res.ok) {
@@ -162,11 +163,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const runWorkspace = async () => {
-    if (!username) return;
+    if (!username || !projectId) return;
     setIsLoading(true);
     setViewMode('web'); // Switch immediately for better UX
     try {
-      const res = await fetch('/api/workspace/run', { 
+      const res = await fetch(`/api/workspace/run?projectId=${projectId}`, { 
         method: 'POST',
         headers: { 'x-username': username }
       });
@@ -183,9 +184,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const stopWorkspace = async () => {
-    if (!username) return;
+    if (!username || !projectId) return;
     try {
-      await fetch('/api/workspace/stop', { 
+      await fetch(`/api/workspace/stop?projectId=${projectId}`, { 
         method: 'POST',
         headers: { 'x-username': username }
       });
@@ -201,10 +202,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   }, []);
 
   const saveFile = async () => {
-    if (!selectedFile || !username) return;
+    if (!selectedFile || !username || !projectId) return;
     setIsSaving(true);
     try {
-      const res = await fetch('/api/workspace/write', {
+      const res = await fetch(`/api/workspace/write?projectId=${projectId}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -236,9 +237,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   };
 
   const deleteFile = async (name: string, isDirectory: boolean) => {
-    if (!confirm(`Delete ${isDirectory ? 'folder' : 'file'} ${name}?`) || !username) return;
+    if (!confirm(`Delete ${isDirectory ? 'folder' : 'file'} ${name}?`) || !username || !projectId) return;
     try {
-      const res = await fetch(`/api/workspace/delete?name=${encodeURIComponent(name)}`, {
+      const res = await fetch(`/api/workspace/delete?name=${encodeURIComponent(name)}&projectId=${projectId}`, {
         method: 'DELETE',
         headers: { 'x-username': username }
       });

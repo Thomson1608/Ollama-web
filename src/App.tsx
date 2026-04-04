@@ -15,10 +15,13 @@ import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
 import { LoginView } from './components/LoginView';
 import { ProjectInitView } from './components/ProjectInitView';
-import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters } from './types';
+import { ProjectListView } from './components/ProjectListView';
+import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
 
 export default function App() {
   const [username, setUsername] = useState<string | null>(() => localStorage.getItem('ollama_username'));
+  const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem('ollama_project_id'));
+  const [projects, setProjects] = useState<Project[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const ADMIN_SYSTEM_PROMPT = `You are a world-class Senior Software Engineer and Local Developer Agent.
 You have FULL authority over the workspace and can manage files and execute commands as if you were working on your own local machine.
@@ -146,6 +149,93 @@ If the user asks you to write code, you should provide it in a markdown code blo
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Fetch projects when username changes
+  useEffect(() => {
+    if (username) {
+      fetchProjects();
+    }
+  }, [username]);
+
+  const fetchProjects = async () => {
+    if (!username) return;
+    try {
+      const response = await fetch('/api/projects', {
+        headers: { 'x-username': username }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setProjects(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch projects', error);
+    }
+  };
+
+  const handleSelectProject = (project: Project) => {
+    setProjectId(project.id);
+    localStorage.setItem('ollama_project_id', project.id);
+    setCurrentView('chat');
+    setActiveChatId(null);
+    setChats([]);
+    fetchChats(project.id);
+    fetchMemory(project.id);
+    toast.success(`Project ${project.name} selected`);
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    if (!username) return;
+    if (!confirm('Are you sure you want to delete this project? All code and chats will be lost.')) return;
+    
+    try {
+      const response = await fetch(`/api/projects/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-username': username }
+      });
+      if (response.ok) {
+        setProjects(prev => prev.filter(p => p.id !== id));
+        if (projectId === id) {
+          setProjectId(null);
+          localStorage.removeItem('ollama_project_id');
+          setCurrentView('project-list');
+        }
+        toast.success('Project deleted');
+      }
+    } catch (error) {
+      toast.error('Failed to delete project');
+    }
+  };
+
+  const fetchChats = async (pId: string) => {
+    if (!username) return;
+    try {
+      const response = await fetch(`/api/chats?projectId=${pId}`, {
+        headers: { 'x-username': username }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setChats(data.chats);
+        setGeneratingChatIds(new Set(data.generatingChatIds));
+      }
+    } catch (error) {
+      console.error('Failed to fetch chats', error);
+    }
+  };
+
+  const fetchMemory = async (pId: string) => {
+    if (!username) return;
+    try {
+      const response = await fetch(`/api/memory?projectId=${pId}`, {
+        headers: { 'x-username': username }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setMemory(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch memory', error);
+    }
+  };
 
   // Socket.io initialization
   useEffect(() => {
@@ -812,6 +902,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
         },
         body: JSON.stringify({
           chatId: currentChatId,
+          projectId: projectId,
           model: selectedModel,
           systemPrompt: currentChat?.systemPrompt || systemPrompt,
           parameters: currentChat?.parameters || globalParameters,
@@ -896,48 +987,60 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const handleLogin = (user: string) => {
     setUsername(user);
     localStorage.setItem('ollama_username', user);
-    setCurrentView('project-init');
+    setCurrentView('project-list');
     toast.success(`Welcome, ${user}!`);
   };
 
   const handleLogout = () => {
     setUsername(null);
+    setProjectId(null);
     localStorage.removeItem('ollama_username');
+    localStorage.removeItem('ollama_project_id');
     setChats([]);
+    setProjects([]);
     setActiveChatId(null);
     toast.info('Logged out');
   };
 
   const handleInitProject = async (name: string, details: string) => {
+    if (!username) return;
     setIsLoading(true);
     try {
-      const newChat: Chat = {
-        id: Date.now().toString(),
-        title: name,
-        messages: [],
-        model: selectedModel,
-        createdAt: Date.now(),
-      };
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({ name, details }),
+      });
+
+      if (!response.ok) throw new Error('Failed to create project');
+      const project = await response.json();
+      setProjects(prev => [project, ...prev]);
+      setProjectId(project.id);
+      localStorage.setItem('ollama_project_id', project.id);
       
+      const newChatId = Date.now().toString();
       const userMessage: Message = {
         role: 'user',
         content: `Khởi tạo project: ${name}\nChi tiết: ${details}\n\nHãy giúp tôi thiết lập cấu trúc cơ bản cho project này.`,
         timestamp: Date.now()
       };
 
-      setChats([newChat, ...chats]);
-      setActiveChatId(newChat.id);
       setCurrentView('chat');
+      setActiveChatId(newChatId);
 
       // Send the initialization message
-      const response = await fetch('/api/ollama/chat', {
+      const chatResponse = await fetch('/api/ollama/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'x-username': username || ''
+          'x-username': username
         },
         body: JSON.stringify({
-          chatId: newChat.id,
+          chatId: newChatId,
+          projectId: project.id,
           model: selectedModel,
           systemPrompt: systemPrompt,
           parameters: globalParameters,
@@ -945,8 +1048,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to init project');
-      await response.text();
+      if (!chatResponse.ok) throw new Error('Failed to send init message');
+      await chatResponse.text();
     } catch (error) {
       console.error(error);
       toast.error('Failed to initialize project');
@@ -960,6 +1063,20 @@ If the user asks you to write code, you should provide it in a markdown code blo
       <div className="h-[100dvh] w-full bg-[#f5f5f5] overflow-hidden">
         <Toaster position="top-center" />
         <LoginView onLogin={handleLogin} />
+      </div>
+    );
+  }
+
+  if (currentView === 'project-list') {
+    return (
+      <div className="h-[100dvh] w-full bg-[#f5f5f5] overflow-hidden">
+        <Toaster position="top-center" />
+        <ProjectListView 
+          projects={projects} 
+          onSelectProject={handleSelectProject} 
+          onCreateProject={() => setCurrentView('project-init')}
+          onDeleteProject={(id) => handleDeleteProject(id)}
+        />
       </div>
     );
   }
@@ -1030,6 +1147,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     messagesEndRef={messagesEndRef}
                     onUpdateSystemPrompt={(prompt) => activeChatId && updateChatSystemPrompt(activeChatId, prompt)}
                     username={username}
+                    projectId={projectId}
                   />
                 </div>
               </div>
@@ -1080,6 +1198,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                 socket={socketRef.current} 
                 isMobile={isMobile}
                 username={username}
+                projectId={projectId || undefined}
               />
             )}
 

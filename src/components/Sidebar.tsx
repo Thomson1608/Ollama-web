@@ -12,7 +12,8 @@ import {
   BarChart,
   LogOut,
   User,
-  Edit2
+  Edit2,
+  LayoutGrid
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -99,13 +100,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Terminal size={20} className="text-blue-600" />
           <span>Ollama UI</span>
         </div>
-        <button 
-          onClick={createNewChat}
-          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
-          title="New Chat"
-        >
-          <Plus size={20} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button 
+            onClick={() => setCurrentView('project-list')}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
+            title="Projects"
+          >
+            <LayoutGrid size={18} />
+          </button>
+          <button 
+            onClick={createNewChat}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
+            title="New Chat"
+          >
+            <Plus size={20} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1">

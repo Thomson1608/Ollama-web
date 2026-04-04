@@ -11,6 +11,7 @@ import { promisify } from 'util';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { simpleGit, SimpleGit } from 'simple-git';
 import si from 'systeminformation';
+import Database from 'better-sqlite3';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,18 +24,162 @@ const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
 const STATS_FILE = path.join(DATA_DIR, 'stats.json');
 const SYSTEM_LOG_FILE = path.join(DATA_DIR, 'system.log');
 const ADMIN_CONFIG_FILE = path.join(DATA_DIR, 'admin_config.json');
+const DB_FILE = path.join(DATA_DIR, 'system.db');
+
+// Initialize Database
+const db_sqlite = new Database(DB_FILE);
+db_sqlite.pragma('journal_mode = WAL');
+
+// Create Tables
+db_sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE,
+    role TEXT DEFAULT 'user'
+  );
+
+  CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    userId TEXT,
+    name TEXT,
+    details TEXT,
+    createdAt INTEGER,
+    FOREIGN KEY(userId) REFERENCES users(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS chats (
+    id TEXT PRIMARY KEY,
+    projectId TEXT,
+    title TEXT,
+    model TEXT,
+    systemPrompt TEXT,
+    parameters TEXT, -- JSON string
+    createdAt INTEGER,
+    FOREIGN KEY(projectId) REFERENCES projects(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    chatId TEXT,
+    role TEXT,
+    content TEXT,
+    images TEXT, -- JSON string
+    timestamp INTEGER,
+    FOREIGN KEY(chatId) REFERENCES chats(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS memory (
+    id TEXT PRIMARY KEY,
+    projectId TEXT,
+    facts TEXT, -- JSON string
+    FOREIGN KEY(projectId) REFERENCES projects(id)
+  );
+`);
+
+// Database Service (MVVM-like Service Layer)
+const dbService = {
+  // User operations
+  getUser: (username: string) => {
+    return db_sqlite.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+  },
+  createUser: (username: string, role: string = 'user') => {
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 7);
+    db_sqlite.prepare('INSERT INTO users (id, username, role) VALUES (?, ?, ?)').run(id, username, role);
+    return id;
+  },
+
+  // Project operations
+  getProjects: (userId: string) => {
+    return db_sqlite.prepare('SELECT * FROM projects WHERE userId = ? ORDER BY createdAt DESC').all(userId) as any[];
+  },
+  getProject: (id: string) => {
+    return db_sqlite.prepare('SELECT * FROM projects WHERE id = ?').get(id) as any;
+  },
+  createProject: (userId: string, name: string, details: string) => {
+    const id = 'proj_' + Date.now().toString();
+    db_sqlite.prepare('INSERT INTO projects (id, userId, name, details, createdAt) VALUES (?, ?, ?, ?, ?)')
+      .run(id, userId, name, details, Date.now());
+    return id;
+  },
+  deleteProject: (id: string) => {
+    db_sqlite.prepare('DELETE FROM projects WHERE id = ?').run(id);
+    // Cascading deletes would be handled by foreign keys if enabled, but let's be explicit or use PRAGMA foreign_keys = ON
+  },
+
+  // Chat operations
+  getChats: (projectId: string) => {
+    const chats = db_sqlite.prepare('SELECT * FROM chats WHERE projectId = ? ORDER BY createdAt DESC').all(projectId) as any[];
+    return chats.map(chat => ({
+      ...chat,
+      parameters: JSON.parse(chat.parameters || '{}'),
+      messages: dbService.getMessages(chat.id)
+    }));
+  },
+  createChat: (projectId: string, chat: any) => {
+    db_sqlite.prepare('INSERT INTO chats (id, projectId, title, model, systemPrompt, parameters, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(chat.id, projectId, chat.title, chat.model, chat.systemPrompt || '', JSON.stringify(chat.parameters || {}), chat.createdAt || Date.now());
+  },
+  updateChatTitle: (id: string, title: string) => {
+    db_sqlite.prepare('UPDATE chats SET title = ? WHERE id = ?').run(title, id);
+  },
+  deleteChat: (id: string) => {
+    db_sqlite.prepare('DELETE FROM chats WHERE id = ?').run(id);
+    db_sqlite.prepare('DELETE FROM messages WHERE chatId = ?').run(id);
+  },
+
+  // Message operations
+  getMessages: (chatId: string) => {
+    const msgs = db_sqlite.prepare('SELECT * FROM messages WHERE chatId = ? ORDER BY timestamp ASC').all(chatId) as any[];
+    return msgs.map(m => ({
+      ...m,
+      images: JSON.parse(m.images || '[]')
+    }));
+  },
+  addMessage: (chatId: string, msg: any) => {
+    const id = 'msg_' + Date.now().toString() + Math.random().toString(36).substring(2, 5);
+    db_sqlite.prepare('INSERT INTO messages (id, chatId, role, content, images, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, chatId, msg.role, msg.content, JSON.stringify(msg.images || []), msg.timestamp || Date.now());
+  },
+
+  // Memory operations
+  getMemory: (projectId: string) => {
+    const mem = db_sqlite.prepare('SELECT * FROM memory WHERE projectId = ?').get(projectId) as any;
+    return mem ? JSON.parse(mem.facts) : [];
+  },
+  saveMemory: (projectId: string, facts: string[]) => {
+    const existing = db_sqlite.prepare('SELECT id FROM memory WHERE projectId = ?').get(projectId);
+    if (existing) {
+      db_sqlite.prepare('UPDATE memory SET facts = ? WHERE projectId = ?').run(JSON.stringify(facts), projectId);
+    } else {
+      const id = 'mem_' + Date.now().toString();
+      db_sqlite.prepare('INSERT INTO memory (id, projectId, facts) VALUES (?, ?, ?)').run(id, projectId, JSON.stringify(facts));
+    }
+  }
+};
 
 // Helper to get user-specific paths
-function getUserPaths(username: string) {
+function getUserPaths(username: string, projectId?: string) {
   const userDir = path.join(USERS_DIR, username);
-  return {
+  const basePaths = {
     dir: userDir,
     chats: path.join(userDir, 'chats.json'),
     config: path.join(userDir, 'config.json'),
     memory: path.join(userDir, 'memory.json'),
     workspace: path.join(userDir, 'workspace'),
-    profile: path.join(userDir, 'profile.json')
+    profile: path.join(userDir, 'profile.json'),
+    projectDir: undefined as string | undefined
   };
+
+  if (projectId) {
+    const projectDir = path.join(userDir, 'projects', projectId);
+    return {
+      ...basePaths,
+      projectDir,
+      workspace: path.join(projectDir, 'workspace')
+    };
+  }
+
+  return basePaths;
 }
 
 async function isAdmin(username: string) {
@@ -97,16 +242,19 @@ async function ensureUserDir(username: string) {
   const paths = getUserPaths(username);
   try {
     await fs.mkdir(paths.dir, { recursive: true });
-    await fs.mkdir(paths.workspace, { recursive: true });
+    
+    // Ensure user exists in DB
+    let user = dbService.getUser(username);
+    if (!user) {
+      dbService.createUser(username, username === 'admin' ? 'admin' : 'user');
+    }
 
-    // Initialize files if they don't exist
+    // Initialize files if they don't exist (config and profile still use files for now, but could be moved)
     const files = [
-      { path: paths.chats, default: [] },
       { path: paths.config, default: { 
         systemPrompt: `You are a helpful assistant for ${username}.`,
         parameters: { temperature: 0.7, topP: 0.9, topK: 40 }
       } },
-      { path: paths.memory, default: { profile: `User: ${username}`, facts: [] } },
       { path: paths.profile, default: { role: username === 'admin' ? 'admin' : 'user' } }
     ];
 
@@ -116,22 +264,6 @@ async function ensureUserDir(username: string) {
       } catch {
         await fs.writeFile(file.path, JSON.stringify(file.default, null, 2));
       }
-    }
-
-    // Initialize Git in user workspace
-    const git = simpleGit(paths.workspace);
-    try {
-      const isRepo = await git.checkIsRepo();
-      if (!isRepo) {
-        await git.init();
-        await git.addConfig('user.name', username);
-        await git.addConfig('user.email', `${username}@family.local`);
-        await fs.writeFile(path.join(paths.workspace, '.gitkeep'), '');
-        await git.add('.');
-        await git.commit('Initial commit');
-      }
-    } catch (e) {
-      logger.error(`Git init failed for ${username}`, e);
     }
   } catch (error) {
     logger.error(`Failed to ensure user dir for ${username}`, error);
@@ -227,9 +359,9 @@ async function startServer() {
   const PORT = 3000;
   logger.release(`Server configuration: PORT=${PORT}, LOG_LEVEL=${LOG_LEVEL}`);
 
-  async function autoCommit(username: string, message: string) {
+  async function autoCommit(username: string, message: string, projectId?: string) {
     try {
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       const git: SimpleGit = simpleGit(paths.workspace);
       await git.add('.');
       const status = await git.status();
@@ -307,43 +439,83 @@ async function startServer() {
     }
   });
 
-  // API: Get all chats
-  app.get('/api/chats', async (req, res) => {
+  // --- Project API ---
+  app.get('/api/projects', async (req, res) => {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      const paths = getUserPaths(username);
-      let chats: Chat[] = [];
-      try {
-        const data = await fs.readFile(paths.chats, 'utf-8');
-        chats = JSON.parse(data);
-      } catch (e) {
-        chats = [];
-      }
+      const user = dbService.getUser(username);
+      if (!user) return res.json([]);
+      const projects = dbService.getProjects(user.id);
+      res.json(projects);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch projects' });
+    }
+  });
 
-      // Merge active generations that haven't been saved yet or are currently generating
+  app.post('/api/projects', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    const { name, details } = req.body;
+    try {
+      const user = dbService.getUser(username);
+      if (!user) return res.status(404).json({ error: 'User not found' });
+      const projectId = dbService.createProject(user.id, name, details);
+      
+      // Ensure project workspace exists
+      const paths = getUserPaths(username, projectId);
+      await fs.mkdir(paths.workspace, { recursive: true });
+      
+      // Init git for project
+      const git = simpleGit(paths.workspace);
+      await git.init();
+      await fs.writeFile(path.join(paths.workspace, '.gitkeep'), '');
+      await git.add('.');
+      await git.commit('Initial project commit');
+
+      res.json({ id: projectId, name, details, createdAt: Date.now() });
+    } catch (error) {
+      logger.error('Failed to create project', error);
+      res.status(500).json({ error: 'Failed to create project' });
+    }
+  });
+
+  app.delete('/api/projects/:id', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    const { id } = req.params;
+    try {
+      dbService.deleteProject(id);
+      // Optionally delete project directory
+      const paths = getUserPaths(username, id);
+      await fs.rm(paths.projectDir, { recursive: true, force: true }).catch(() => {});
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete project' });
+    }
+  });
+
+  // API: Get all chats
+  app.get('/api/chats', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!projectId) return res.status(400).json({ error: 'ProjectId query required' });
+    try {
+      const chats = dbService.getChats(projectId);
+      
+      // Merge active generations
       const active = Array.from(activeGenerations.values()).filter(g => g.username === username);
       for (const gen of active) {
         const chatIndex = chats.findIndex(c => c.id === gen.chatId);
         if (chatIndex !== -1) {
-          // If chat exists, update the last message if it's an assistant message from this generation
           const chat = chats[chatIndex];
           const lastMsg = chat.messages[chat.messages.length - 1];
           if (lastMsg && lastMsg.role === 'assistant' && lastMsg.timestamp === gen.assistantMessage.timestamp) {
             lastMsg.content = gen.assistantMessage.content;
           } else {
-            // If the assistant message isn't there yet, add it
             chat.messages.push({ ...gen.assistantMessage });
           }
-        } else {
-          // If it's a new chat, unshift it
-          chats.unshift({
-            id: gen.chatId,
-            title: gen.userMessage.content.slice(0, 30) + (gen.userMessage.content.length > 30 ? '...' : ''),
-            messages: [gen.userMessage, { ...gen.assistantMessage }],
-            model: gen.model,
-            createdAt: Date.now()
-          });
         }
       }
 
@@ -356,15 +528,25 @@ async function startServer() {
     }
   });
 
-  // API: Save all chats
+  // API: Save all chats (Legacy/Sync)
   app.post('/api/chats', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!projectId) return res.status(400).json({ error: 'ProjectId query required' });
     try {
-      const paths = getUserPaths(username);
       const chats = req.body;
-      await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
-      io.emit(`chats:updated:${username}`, chats);
+      for (const chat of chats) {
+        const existing = db_sqlite.prepare('SELECT id FROM chats WHERE id = ?').get(chat.id);
+        if (!existing) {
+          dbService.createChat(projectId, chat);
+          for (const msg of chat.messages) {
+            dbService.addMessage(chat.id, msg);
+          }
+        } else {
+          dbService.updateChatTitle(chat.id, chat.title);
+        }
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save chats' });
@@ -416,11 +598,12 @@ async function startServer() {
   // API: Get memory
   app.get('/api/memory', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!projectId) return res.status(400).json({ error: 'ProjectId query required' });
     try {
-      const paths = getUserPaths(username);
-      const data = await fs.readFile(paths.memory, 'utf-8');
-      res.json(JSON.parse(data));
+      const facts = dbService.getMemory(projectId);
+      res.json({ facts });
     } catch (error) {
       res.status(500).json({ error: 'Failed to read memory' });
     }
@@ -429,12 +612,13 @@ async function startServer() {
   // API: Save memory
   app.post('/api/memory', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!projectId) return res.status(400).json({ error: 'ProjectId query required' });
     try {
-      const paths = getUserPaths(username);
-      const memory = req.body;
-      await fs.writeFile(paths.memory, JSON.stringify(memory, null, 2));
-      io.emit(`memory:updated:${username}`, memory);
+      const { facts } = req.body;
+      dbService.saveMemory(projectId, facts);
+      io.emit(`memory:updated:${username}`, { facts });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save memory' });
@@ -703,9 +887,10 @@ async function startServer() {
   // API: List workspace files
   app.get('/api/workspace', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       if (!fsSync.existsSync(paths.workspace)) {
         await fs.mkdir(paths.workspace, { recursive: true });
       }
@@ -720,11 +905,12 @@ async function startServer() {
   // API: Read workspace file
   app.get('/api/workspace/read', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const fileName = req.query.name as string;
       if (!fileName) return res.status(400).json({ error: 'Missing filename' });
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
       const filePath = path.join(paths.workspace, safeName);
       const content = await fs.readFile(filePath, 'utf-8');
@@ -738,11 +924,12 @@ async function startServer() {
   // API: Write workspace file
   app.post('/api/workspace/write', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const { name, content } = req.body;
       if (!name) return res.status(400).json({ error: 'Missing filename' });
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       const safeName = path.normalize(name).replace(/^(\.\.[\/\\])+/, '');
       const filePath = path.join(paths.workspace, safeName);
       const dirPath = path.dirname(filePath);
@@ -775,11 +962,12 @@ async function startServer() {
   // API: Delete workspace file
   app.delete('/api/workspace/delete', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const fileName = req.query.name as string;
       if (!fileName) return res.status(400).json({ error: 'Missing filename' });
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
       const filePath = path.join(paths.workspace, safeName);
       await fs.rm(filePath, { recursive: true, force: true });
@@ -807,9 +995,10 @@ async function startServer() {
   // API: Get workspace history
   app.get('/api/workspace/history', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       const git = simpleGit(paths.workspace);
       const log = await git.log();
       res.json({ history: log.all });
@@ -821,13 +1010,14 @@ async function startServer() {
   // API: Execute arbitrary command in workspace
   app.post('/api/workspace/exec', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const { command } = req.body;
       if (!command) return res.status(400).json({ error: 'Missing command' });
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       
-      logger.debug(`API: Executing command for ${username}: ${command}`);
+      logger.debug(`API: Executing command for ${username} in project ${projectId}: ${command}`);
       
       // Execute command in workspace directory
       const { stdout, stderr } = await execAsync(command, { cwd: paths.workspace });
@@ -847,11 +1037,12 @@ async function startServer() {
   // API: Get commit details
   app.get('/api/workspace/commit-details', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const hash = req.query.hash as string;
       if (!hash) return res.status(400).json({ error: 'Missing hash' });
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       const git = simpleGit(paths.workspace);
       
       let files = [];
@@ -1140,54 +1331,47 @@ async function startServer() {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
 
-    const { chatId, messages, model, parameters, systemPrompt: bodySystemPrompt } = req.body;
+    const { chatId, projectId, messages, model, parameters, systemPrompt: bodySystemPrompt } = req.body;
+    if (!projectId) return res.status(400).json({ error: 'ProjectId required' });
     
     await updateStats('sent');
 
-    logger.release(`Proxy: Starting chat session for ${chatId} (${username}) using ${model}`);
+    logger.release(`Proxy: Starting chat session for ${chatId} (${username}) in project ${projectId} using ${model}`);
     
     try {
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       
-      // Save user message to file system immediately
+      // Save user message to DB immediately
       try {
-        let chats: Chat[] = [];
-        try {
-          const data = await fs.readFile(paths.chats, 'utf-8');
-          chats = JSON.parse(data);
-        } catch (e) {}
-        
         const userMsg = messages[messages.length - 1];
-        const chatIndex = chats.findIndex(c => c.id === chatId);
-        if (chatIndex !== -1) {
-          chats[chatIndex].messages.push(userMsg);
-          await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
-          io.emit(`chats:updated:${username}`, chats);
+        const existingChat = db_sqlite.prepare('SELECT id FROM chats WHERE id = ?').get(chatId);
+        if (existingChat) {
+          dbService.addMessage(chatId, userMsg);
         } else {
-          const newChat: Chat = {
+          const newChat = {
             id: chatId,
             title: userMsg.content ? (userMsg.content.slice(0, 30) + (userMsg.content.length > 30 ? '...' : '')) : 'Image Chat',
             messages: [userMsg],
             model: model,
             createdAt: Date.now()
           };
-          chats.unshift(newChat);
-          await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
-          io.emit(`chats:updated:${username}`, chats);
+          dbService.createChat(projectId, newChat);
+          dbService.addMessage(chatId, userMsg);
         }
+        // Notify client about chat update
+        io.emit(`chats:updated:${username}`, { projectId });
       } catch (e) {
         logger.error(`Failed to pre-save user message for chat ${chatId}`, e);
       }
 
-      const configData = await fs.readFile(paths.config, 'utf-8');
+      const configData = await fs.readFile(getUserPaths(username).config, 'utf-8');
       const config = JSON.parse(configData);
-      const memoryData = await fs.readFile(paths.memory, 'utf-8');
-      const memory = JSON.parse(memoryData);
+      const facts = dbService.getMemory(projectId);
 
       // Inject memory into system prompt
       const systemPrompt = bodySystemPrompt || config.systemPrompt || '';
-      const memoryContext = memory.facts.length > 0 
-        ? `\n\nUser Context (Long-term Memory):\n${memory.facts.map((f: string) => `- ${f}`).join('\n')}`
+      const memoryContext = facts.length > 0 
+        ? `\n\nUser Context (Long-term Memory):\n${facts.map((f: string) => `- ${f}`).join('\n')}`
         : '';
       
       const enrichedMessages = [...messages];
@@ -1292,7 +1476,7 @@ async function startServer() {
               }
               const call = JSON.parse(jsonString);
               if (call.tool && call.args) {
-                executeToolCall(chatId, call, username);
+                executeToolCall(chatId, call, username, projectId);
               }
             } catch (e) {
               logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
@@ -1323,7 +1507,7 @@ async function startServer() {
                   executeToolCall(chatId, {
                     tool: 'write_file',
                     args: { name: filename, content: jsonString }
-                  }, username);
+                  }, username, projectId);
                 }
                 continue;
               }
@@ -1332,7 +1516,7 @@ async function startServer() {
                 if (call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
                   const isInsideXml = newContent.substring(0, match.index).lastIndexOf('<tool_call>') > newContent.substring(0, match.index).lastIndexOf('</tool_call>');
                   if (!isInsideXml) {
-                    executeToolCall(chatId, call, username);
+                    executeToolCall(chatId, call, username, projectId);
                   }
                 }
               }
@@ -1374,7 +1558,7 @@ async function startServer() {
                   }
                   const call = JSON.parse(jsonString);
                   if (call.tool && call.args) {
-                    executeToolCall(chatId, call, username);
+                    executeToolCall(chatId, call, username, projectId);
                   }
                 } catch (e) {
                   logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
@@ -1391,14 +1575,14 @@ async function startServer() {
                     calls = [calls];
                   }
                   
-                  for (const call of calls) {
-                    if (call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
-                      const isInsideXml = newContent.substring(0, match.index).lastIndexOf('<tool_call>') > newContent.substring(0, match.index).lastIndexOf('</tool_call>');
-                      if (!isInsideXml) {
-                        executeToolCall(chatId, call, username);
+                      for (const call of calls) {
+                        if (call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
+                          const isInsideXml = newContent.substring(0, match.index).lastIndexOf('<tool_call>') > newContent.substring(0, match.index).lastIndexOf('</tool_call>');
+                          if (!isInsideXml) {
+                            executeToolCall(chatId, call, username, projectId);
+                          }
+                        }
                       }
-                    }
-                  }
                 } catch (e) {}
                 latestIndex = Math.max(latestIndex, lastProcessedToolCallIndex + match.index + match[0].length);
               }
@@ -1414,43 +1598,18 @@ async function startServer() {
       activeGenerations.delete(chatId);
       io.emit(`chat:end:${username}`, { chatId, finalContent: assistantContent });
       io.emit(`chat:status:${username}`, { loading: false, chatId });
-      logger.release(`Ollama Proxy: Chat session complete for ${chatId} (${username})`);
+      logger.release(`Ollama Proxy: Chat session complete for ${chatId} (${username}) in project ${projectId}`);
       
-      // Save chat to file system automatically on end
-      try {
-        const paths = getUserPaths(username);
-        let chats: Chat[] = [];
-        try {
-          const data = await fs.readFile(paths.chats, 'utf-8');
-          chats = JSON.parse(data);
-        } catch (e) {}
-        
-        const chatIndex = chats.findIndex(c => c.id === chatId);
-        if (chatIndex !== -1) {
-          chats[chatIndex].messages.push({ role: 'assistant', content: assistantContent, timestamp: Date.now() });
-          await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
-          io.emit(`chats:updated:${username}`, chats);
-        } else {
-          // If it's a new chat that wasn't saved yet
-          const newChat: Chat = {
-            id: chatId,
-            title: userMessage.content.slice(0, 30) + (userMessage.content.length > 30 ? '...' : ''),
-            messages: [userMessage, { role: 'assistant', content: assistantContent, timestamp: Date.now() }],
-            model: model,
-            createdAt: Date.now()
-          };
-          chats.unshift(newChat);
-          await fs.writeFile(paths.chats, JSON.stringify(chats, null, 2));
-          io.emit(`chats:updated:${username}`, chats);
-        }
-      } catch (e) {
-        logger.error(`Failed to auto-save chat ${chatId} for ${username}`, e);
-      }
+      // Save assistant message to DB
+      dbService.addMessage(chatId, { role: 'assistant', content: assistantContent, timestamp: Date.now() });
+      io.emit(`chats:updated:${username}`, { projectId });
+
+      // Post-chat logic
+      extractMemory(chatId, model, [...messages, { role: 'assistant', content: assistantContent, timestamp: Date.now() }], username, projectId);
+      autoCommit(username, `AI update in chat ${chatId}`, projectId);
       
       res.end();
       await updateStats('success');
-
-      extractMemory(chatId, model, messages, username);
       
     } catch (error) {
       activeGenerations.delete(chatId);
@@ -1527,9 +1686,9 @@ async function startServer() {
 
   // --- End Ollama Proxy Endpoints ---
 
-  async function executeToolCall(chatId: string, call: any, username: string) {
+  async function executeToolCall(chatId: string, call: any, username: string, projectId: string) {
     try {
-      const paths = getUserPaths(username);
+      const paths = getUserPaths(username, projectId);
       
       // Check if user is admin for workspace tools
       if (username !== 'admin' && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
@@ -1608,14 +1767,12 @@ async function startServer() {
     }
   }
 
-  async function extractMemory(chatId: string, model: string, messages: any[], username: string) {
+  async function extractMemory(chatId: string, model: string, messages: any[], username: string, projectId: string) {
     // Memory Extraction
     if (chatId !== 'memory-extraction') {
       try {
-        const paths = getUserPaths(username);
-        logger.debug(`Post-chat logic: Starting memory extraction for ${chatId} (${username})`);
-        const currentMemoryData = await fs.readFile(paths.memory, 'utf-8');
-        const currentMemory = JSON.parse(currentMemoryData);
+        logger.debug(`Post-chat logic: Starting memory extraction for ${chatId} (${username}) in project ${projectId}`);
+        const currentFacts = dbService.getMemory(projectId);
         
         const context = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
         
@@ -1630,7 +1787,7 @@ async function startServer() {
                 content: `You are a memory consolidation module. Your task is to maintain a concise, deduplicated list of facts, preferences, and project goals about the user.
                 
                 Current Memory:
-                ${JSON.stringify(currentMemory.facts)}
+                ${JSON.stringify(currentFacts)}
                 
                 Instructions:
                 1. Extract any NEW facts from the conversation snippet.
@@ -1647,22 +1804,21 @@ async function startServer() {
         if (memoryResponse.ok) {
           const json = await memoryResponse.json();
           const memoryContent = json.message?.content || '[]';
-          logger.debug(`Post-chat logic: Raw memory extraction response for ${chatId} (${username})`, memoryContent);
+          logger.debug(`Post-chat logic: Raw memory extraction response for ${chatId} (${username}) in project ${projectId}`, memoryContent);
           const match = memoryContent.match(/\[.*\]/s);
           if (match) {
             const consolidatedFacts = JSON.parse(match[0]);
             if (Array.isArray(consolidatedFacts)) {
-              const updatedMemory = { facts: consolidatedFacts };
-              await fs.writeFile(paths.memory, JSON.stringify(updatedMemory, null, 2));
-              io.emit(`memory:updated:${username}`, updatedMemory);
-              logger.release(`Post-chat logic: Memory consolidated for ${username}. Total facts: ${consolidatedFacts.length}`);
+              dbService.saveMemory(projectId, consolidatedFacts);
+              io.emit(`memory:updated:${username}`, { facts: consolidatedFacts });
+              logger.release(`Post-chat logic: Memory consolidated for ${username} in project ${projectId}. Total facts: ${consolidatedFacts.length}`);
             }
           }
         } else {
-          logger.error(`Post-chat logic Error: Memory extraction request failed for ${chatId} (${username})`);
+          logger.error(`Post-chat logic Error: Memory extraction request failed for ${chatId} (${username}) in project ${projectId}`);
         }
       } catch (error) {
-        logger.error(`Post-chat logic Error: Memory extraction failed for ${chatId} (${username})`, error);
+        logger.error(`Post-chat logic Error: Memory extraction failed for ${chatId} (${username}) in project ${projectId}`, error);
       }
     }
   }

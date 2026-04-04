@@ -42,6 +42,7 @@ interface ChatViewProps {
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onUpdateSystemPrompt: (prompt: string) => void;
   username?: string | null;
+  projectId?: string | null;
 }
 
 const ThoughtBlock = ({ children }: { children: React.ReactNode }) => {
@@ -72,12 +73,12 @@ const ThoughtBlock = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-const ToolCallRenderer = ({ toolCall, username, isFinished }: { toolCall: any, username?: string | null, isFinished: boolean }) => {
+const ToolCallRenderer = ({ toolCall, username, projectId, isFinished }: { toolCall: any, username?: string | null, projectId?: string | null, isFinished: boolean }) => {
   const [status, setStatus] = useState<'idle' | 'working' | 'completed' | 'error'>('idle');
   const executedRef = useRef(false);
 
   useEffect(() => {
-    if (isFinished && !executedRef.current && (toolCall.tool === 'write_file' || toolCall.tool === 'delete_file' || toolCall.tool === 'run_command')) {
+    if (isFinished && !executedRef.current && projectId && (toolCall.tool === 'write_file' || toolCall.tool === 'delete_file' || toolCall.tool === 'run_command')) {
       const execute = async () => {
         setStatus('working');
         try {
@@ -86,13 +87,13 @@ const ToolCallRenderer = ({ toolCall, username, isFinished }: { toolCall: any, u
           let body = undefined;
 
           if (toolCall.tool === 'write_file') {
-            endpoint = '/api/workspace/write';
+            endpoint = `/api/workspace/write?projectId=${projectId}`;
             body = JSON.stringify({ name: toolCall.args.name, content: toolCall.args.content });
           } else if (toolCall.tool === 'delete_file') {
-            endpoint = `/api/workspace/delete?name=${encodeURIComponent(toolCall.args.name)}`;
+            endpoint = `/api/workspace/delete?name=${encodeURIComponent(toolCall.args.name)}&projectId=${projectId}`;
             method = 'DELETE';
           } else if (toolCall.tool === 'run_command') {
-            endpoint = '/api/workspace/exec';
+            endpoint = `/api/workspace/exec?projectId=${projectId}`;
             body = JSON.stringify({ command: toolCall.args.command });
           }
 
@@ -265,7 +266,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   connectionStatus,
   messagesEndRef,
   onUpdateSystemPrompt,
-  username
+  username,
+  projectId
 }) => {
   const [isListening, setIsListening] = useState(false);
   const [speakingMessageIndex, setSpeakingMessageIndex] = useState<number | null>(null);
@@ -411,7 +413,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
           }
           const toolCall = JSON.parse(jsonString);
-          return <ToolCallRenderer key={i} toolCall={toolCall} username={username} isFinished={!isStreaming} />;
+          return <ToolCallRenderer key={i} toolCall={toolCall} username={username} projectId={projectId} isFinished={!isStreaming} />;
         } catch (e) {
           return null;
         }
@@ -470,7 +472,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     return (
                       <div className="flex flex-col gap-2">
                         {validCalls.map((call: any, idx: number) => (
-                          <ToolCallRenderer key={idx} toolCall={call} username={username} isFinished={!isStreaming} />
+                          <ToolCallRenderer key={idx} toolCall={call} username={username} projectId={projectId} isFinished={!isStreaming} />
                         ))}
                       </div>
                     );
@@ -494,8 +496,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         <button
                           onClick={() => {
                             const name = prompt('Nhập tên file để lưu (vị dụ: App.tsx):');
-                            if (name) {
-                              fetch('/api/workspace/write', {
+                            if (name && projectId) {
+                              fetch(`/api/workspace/write?projectId=${projectId}`, {
                                 method: 'POST',
                                 headers: { 
                                   'Content-Type': 'application/json',
