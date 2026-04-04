@@ -820,6 +820,32 @@ async function startServer() {
     }
   });
 
+  // API: Execute arbitrary command in workspace
+  app.post('/api/workspace/exec', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    try {
+      const { command } = req.body;
+      if (!command) return res.status(400).json({ error: 'Missing command' });
+      const paths = getUserPaths(username);
+      
+      logger.debug(`API: Executing command for ${username}: ${command}`);
+      
+      // Execute command in workspace directory
+      const { stdout, stderr } = await execAsync(command, { cwd: paths.workspace });
+      
+      res.json({ stdout, stderr });
+      io.emit(`workspace:updated:${username}`);
+    } catch (error: any) {
+      logger.error('Failed to execute command', error);
+      res.status(500).json({ 
+        error: 'Failed to execute command', 
+        stdout: error.stdout || '', 
+        stderr: error.stderr || error.message 
+      });
+    }
+  });
+
   // API: Get commit details
   app.get('/api/workspace/commit-details', async (req, res) => {
     const username = req.headers['x-username'] as string;

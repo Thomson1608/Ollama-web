@@ -77,14 +77,24 @@ const ToolCallRenderer = ({ toolCall, username, isFinished }: { toolCall: any, u
   const executedRef = useRef(false);
 
   useEffect(() => {
-    if (isFinished && !executedRef.current && (toolCall.tool === 'write_file' || toolCall.tool === 'delete_file')) {
+    if (isFinished && !executedRef.current && (toolCall.tool === 'write_file' || toolCall.tool === 'delete_file' || toolCall.tool === 'run_command')) {
       const execute = async () => {
         setStatus('working');
         try {
-          const isWrite = toolCall.tool === 'write_file';
-          const endpoint = isWrite ? '/api/workspace/write' : `/api/workspace/delete?name=${encodeURIComponent(toolCall.args.name)}`;
-          const method = isWrite ? 'POST' : 'DELETE';
-          const body = isWrite ? JSON.stringify({ name: toolCall.args.name, content: toolCall.args.content }) : undefined;
+          let endpoint = '';
+          let method = 'POST';
+          let body = undefined;
+
+          if (toolCall.tool === 'write_file') {
+            endpoint = '/api/workspace/write';
+            body = JSON.stringify({ name: toolCall.args.name, content: toolCall.args.content });
+          } else if (toolCall.tool === 'delete_file') {
+            endpoint = `/api/workspace/delete?name=${encodeURIComponent(toolCall.args.name)}`;
+            method = 'DELETE';
+          } else if (toolCall.tool === 'run_command') {
+            endpoint = '/api/workspace/exec';
+            body = JSON.stringify({ command: toolCall.args.command });
+          }
 
           const res = await fetch(endpoint, {
             method,
@@ -132,6 +142,10 @@ const ToolCallRenderer = ({ toolCall, username, isFinished }: { toolCall: any, u
       case 'list_files':
         icon = <FolderSearch size={16} className="text-purple-500" />;
         text = `Listed workspace files`;
+        break;
+      case 'run_command':
+        icon = <Cpu size={16} className={cn(status === 'completed' ? "text-green-500" : "text-orange-500")} />;
+        text = status === 'completed' ? `Executed: ${args.command}` : `Executing: ${args.command}...`;
         break;
       default:
         text = `Using tool: ${tool}`;
@@ -450,7 +464,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     calls = [calls];
                   }
                   
-                  const validCalls = calls.filter((call: any) => call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool));
+                  const validCalls = calls.filter((call: any) => call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file', 'run_command'].includes(call.tool));
                   
                   if (validCalls.length > 0) {
                     return (
