@@ -964,6 +964,15 @@ If the user asks you to write code, you should provide it in a markdown code blo
     );
   }
 
+  if (currentView === 'project-init') {
+    return (
+      <div className="h-[100dvh] w-full bg-[#f5f5f5] overflow-hidden">
+        <Toaster position="top-center" />
+        <ProjectInitView onInit={handleInitProject} isLoading={isLoading} />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-[#f5f5f5]">
       <Toaster position="top-center" />
@@ -1004,10 +1013,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
         <div className="flex-1 flex overflow-hidden">
           <div className="flex-1 flex flex-col overflow-hidden">
-            {currentView === 'project-init' && (
-              <ProjectInitView onInit={handleInitProject} isLoading={isLoading} />
-            )}
-            
             {currentView === 'chat' && (
               <div className="flex h-full overflow-hidden">
                 <div className="flex-1">
