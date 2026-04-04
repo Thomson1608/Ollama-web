@@ -11,7 +11,8 @@ import { promisify } from 'util';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { simpleGit, SimpleGit } from 'simple-git';
 import si from 'systeminformation';
-import Database from 'better-sqlite3';
+import sqlite3 from 'sqlite3';
+import { open, Database } from 'sqlite';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,133 +27,135 @@ const SYSTEM_LOG_FILE = path.join(DATA_DIR, 'system.log');
 const ADMIN_CONFIG_FILE = path.join(DATA_DIR, 'admin_config.json');
 const DB_FILE = path.join(DATA_DIR, 'system.db');
 
-// Initialize Database
-const db_sqlite = new Database(DB_FILE);
-db_sqlite.pragma('journal_mode = WAL');
-
-// Create Tables
-db_sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT UNIQUE,
-    role TEXT DEFAULT 'user'
-  );
-
-  CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
-    userId TEXT,
-    name TEXT,
-    details TEXT,
-    createdAt INTEGER,
-    FOREIGN KEY(userId) REFERENCES users(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS chats (
-    id TEXT PRIMARY KEY,
-    projectId TEXT,
-    title TEXT,
-    model TEXT,
-    systemPrompt TEXT,
-    parameters TEXT, -- JSON string
-    createdAt INTEGER,
-    FOREIGN KEY(projectId) REFERENCES projects(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS messages (
-    id TEXT PRIMARY KEY,
-    chatId TEXT,
-    role TEXT,
-    content TEXT,
-    images TEXT, -- JSON string
-    timestamp INTEGER,
-    FOREIGN KEY(chatId) REFERENCES chats(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS memory (
-    id TEXT PRIMARY KEY,
-    projectId TEXT,
-    facts TEXT, -- JSON string
-    FOREIGN KEY(projectId) REFERENCES projects(id)
-  );
-`);
-
 // Database Service (MVVM-like Service Layer)
+let db: Database;
+
 const dbService = {
   // User operations
-  getUser: (username: string) => {
-    return db_sqlite.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+  getUsers: async () => {
+    return await db.all('SELECT username, role FROM users');
   },
-  createUser: (username: string, role: string = 'user') => {
+  getUser: async (username: string) => {
+    return await db.get('SELECT * FROM users WHERE username = ?', username);
+  },
+  createUser: async (username: string, role: string = 'user') => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 7);
-    db_sqlite.prepare('INSERT INTO users (id, username, role) VALUES (?, ?, ?)').run(id, username, role);
+    await db.run('INSERT INTO users (id, username, role) VALUES (?, ?, ?)', id, username, role);
+    // Initialize default config for new user
+    await db.run('INSERT INTO configs (userId, systemPrompt, parameters) VALUES (?, ?, ?)',
+      id, `You are a helpful assistant for ${username}.`, JSON.stringify({ temperature: 0.7, topP: 0.9, topK: 40 }));
     return id;
+  },
+  updateUserRole: async (username: string, role: string) => {
+    await db.run('UPDATE users SET role = ? WHERE username = ?', role, username);
+  },
+
+  // Config operations
+  getConfig: async (username: string) => {
+    const user = await dbService.getUser(username);
+    if (!user) return null;
+    const config = await db.get('SELECT * FROM configs WHERE userId = ?', user.id);
+    if (!config) return null;
+    return {
+      systemPrompt: config.systemPrompt,
+      parameters: JSON.parse(config.parameters || '{}')
+    };
+  },
+  saveConfig: async (username: string, config: any) => {
+    const user = await dbService.getUser(username);
+    if (!user) return;
+    const existing = await db.get('SELECT userId FROM configs WHERE userId = ?', user.id);
+    if (existing) {
+      await db.run('UPDATE configs SET systemPrompt = ?, parameters = ? WHERE userId = ?',
+        config.systemPrompt, JSON.stringify(config.parameters || {}), user.id);
+    } else {
+      await db.run('INSERT INTO configs (userId, systemPrompt, parameters) VALUES (?, ?, ?)',
+        user.id, config.systemPrompt, JSON.stringify(config.parameters || {}));
+    }
+  },
+
+  // Stats operations
+  getStats: async () => {
+    const rows = await db.all('SELECT * FROM stats');
+    const stats: any = { sent: 0, success: 0, fail: 0 };
+    rows.forEach(row => {
+      stats[row.key] = row.value;
+    });
+    return stats;
+  },
+  updateStat: async (type: 'sent' | 'success' | 'fail') => {
+    const existing = await db.get('SELECT value FROM stats WHERE key = ?', type);
+    if (existing) {
+      await db.run('UPDATE stats SET value = value + 1 WHERE key = ?', type);
+    } else {
+      await db.run('INSERT INTO stats (key, value) VALUES (?, 1)', type);
+    }
   },
 
   // Project operations
-  getProjects: (userId: string) => {
-    return db_sqlite.prepare('SELECT * FROM projects WHERE userId = ? ORDER BY createdAt DESC').all(userId) as any[];
+  getProjects: async (userId: string) => {
+    return await db.all('SELECT * FROM projects WHERE userId = ? ORDER BY createdAt DESC', userId);
   },
-  getProject: (id: string) => {
-    return db_sqlite.prepare('SELECT * FROM projects WHERE id = ?').get(id) as any;
+  getProject: async (id: string) => {
+    return await db.get('SELECT * FROM projects WHERE id = ?', id);
   },
-  createProject: (userId: string, name: string, details: string) => {
+  createProject: async (userId: string, name: string, details: string) => {
     const id = 'proj_' + Date.now().toString();
-    db_sqlite.prepare('INSERT INTO projects (id, userId, name, details, createdAt) VALUES (?, ?, ?, ?, ?)')
-      .run(id, userId, name, details, Date.now());
+    await db.run('INSERT INTO projects (id, userId, name, details, createdAt) VALUES (?, ?, ?, ?, ?)',
+      id, userId, name, details, Date.now());
     return id;
   },
-  deleteProject: (id: string) => {
-    db_sqlite.prepare('DELETE FROM projects WHERE id = ?').run(id);
-    // Cascading deletes would be handled by foreign keys if enabled, but let's be explicit or use PRAGMA foreign_keys = ON
+  deleteProject: async (id: string) => {
+    await db.run('DELETE FROM projects WHERE id = ?', id);
   },
 
   // Chat operations
-  getChats: (projectId: string) => {
-    const chats = db_sqlite.prepare('SELECT * FROM chats WHERE projectId = ? ORDER BY createdAt DESC').all(projectId) as any[];
-    return chats.map(chat => ({
+  getChats: async (projectId: string) => {
+    const chats = await db.all('SELECT * FROM chats WHERE projectId = ? ORDER BY createdAt DESC', projectId);
+    return await Promise.all(chats.map(async (chat) => ({
       ...chat,
       parameters: JSON.parse(chat.parameters || '{}'),
-      messages: dbService.getMessages(chat.id)
-    }));
+      messages: await dbService.getMessages(chat.id)
+    })));
   },
-  createChat: (projectId: string, chat: any) => {
-    db_sqlite.prepare('INSERT INTO chats (id, projectId, title, model, systemPrompt, parameters, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(chat.id, projectId, chat.title, chat.model, chat.systemPrompt || '', JSON.stringify(chat.parameters || {}), chat.createdAt || Date.now());
+  createChat: async (projectId: string, chat: any) => {
+    await db.run('INSERT INTO chats (id, projectId, title, model, systemPrompt, parameters, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      chat.id, projectId, chat.title, chat.model, chat.systemPrompt || '', JSON.stringify(chat.parameters || {}), chat.createdAt || Date.now());
   },
-  updateChatTitle: (id: string, title: string) => {
-    db_sqlite.prepare('UPDATE chats SET title = ? WHERE id = ?').run(title, id);
+  updateChatTitle: async (id: string, title: string) => {
+    await db.run('UPDATE chats SET title = ? WHERE id = ?', title, id);
   },
-  deleteChat: (id: string) => {
-    db_sqlite.prepare('DELETE FROM chats WHERE id = ?').run(id);
-    db_sqlite.prepare('DELETE FROM messages WHERE chatId = ?').run(id);
+  deleteChat: async (id: string) => {
+    await db.run('DELETE FROM chats WHERE id = ?', id);
+    await db.run('DELETE FROM messages WHERE chatId = ?', id);
   },
 
   // Message operations
-  getMessages: (chatId: string) => {
-    const msgs = db_sqlite.prepare('SELECT * FROM messages WHERE chatId = ? ORDER BY timestamp ASC').all(chatId) as any[];
+  getMessages: async (chatId: string) => {
+    const msgs = await db.all('SELECT * FROM messages WHERE chatId = ? ORDER BY timestamp ASC', chatId);
     return msgs.map(m => ({
       ...m,
       images: JSON.parse(m.images || '[]')
     }));
   },
-  addMessage: (chatId: string, msg: any) => {
+  addMessage: async (chatId: string, msg: any) => {
     const id = 'msg_' + Date.now().toString() + Math.random().toString(36).substring(2, 5);
-    db_sqlite.prepare('INSERT INTO messages (id, chatId, role, content, images, timestamp) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, chatId, msg.role, msg.content, JSON.stringify(msg.images || []), msg.timestamp || Date.now());
+    await db.run('INSERT INTO messages (id, chatId, role, content, images, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+      id, chatId, msg.role, msg.content, JSON.stringify(msg.images || []), msg.timestamp || Date.now());
   },
 
   // Memory operations
-  getMemory: (projectId: string) => {
-    const mem = db_sqlite.prepare('SELECT * FROM memory WHERE projectId = ?').get(projectId) as any;
+  getMemory: async (projectId: string) => {
+    const mem = await db.get('SELECT * FROM memory WHERE projectId = ?', projectId) as any;
     return mem ? JSON.parse(mem.facts) : [];
   },
-  saveMemory: (projectId: string, facts: string[]) => {
-    const existing = db_sqlite.prepare('SELECT id FROM memory WHERE projectId = ?').get(projectId);
+  saveMemory: async (projectId: string, facts: string[]) => {
+    const existing = await db.get('SELECT id FROM memory WHERE projectId = ?', projectId);
     if (existing) {
-      db_sqlite.prepare('UPDATE memory SET facts = ? WHERE projectId = ?').run(JSON.stringify(facts), projectId);
+      await db.run('UPDATE memory SET facts = ? WHERE projectId = ?', JSON.stringify(facts), projectId);
     } else {
       const id = 'mem_' + Date.now().toString();
-      db_sqlite.prepare('INSERT INTO memory (id, projectId, facts) VALUES (?, ?, ?)').run(id, projectId, JSON.stringify(facts));
+      await db.run('INSERT INTO memory (id, projectId, facts) VALUES (?, ?, ?)', id, projectId, JSON.stringify(facts));
     }
   }
 };
@@ -160,34 +163,19 @@ const dbService = {
 // Helper to get user-specific paths
 function getUserPaths(username: string, projectId?: string) {
   const userDir = path.join(USERS_DIR, username);
-  const basePaths = {
+  const projectDir = projectId ? path.join(userDir, 'projects', projectId) : userDir;
+  return {
     dir: userDir,
-    chats: path.join(userDir, 'chats.json'),
-    config: path.join(userDir, 'config.json'),
-    memory: path.join(userDir, 'memory.json'),
-    workspace: path.join(userDir, 'workspace'),
-    profile: path.join(userDir, 'profile.json'),
-    projectDir: undefined as string | undefined
+    projectDir: projectDir,
+    workspace: path.join(projectDir, 'workspace')
   };
-
-  if (projectId) {
-    const projectDir = path.join(userDir, 'projects', projectId);
-    return {
-      ...basePaths,
-      projectDir,
-      workspace: path.join(projectDir, 'workspace')
-    };
-  }
-
-  return basePaths;
 }
 
 async function isAdmin(username: string) {
   if (username === 'admin') return true;
   try {
-    const paths = getUserPaths(username);
-    const profileData = await fs.readFile(paths.profile, 'utf-8');
-    return JSON.parse(profileData).role === 'admin';
+    const user = await dbService.getUser(username);
+    return user?.role === 'admin';
   } catch (e) {
     return false;
   }
@@ -244,26 +232,9 @@ async function ensureUserDir(username: string) {
     await fs.mkdir(paths.dir, { recursive: true });
     
     // Ensure user exists in DB
-    let user = dbService.getUser(username);
+    let user = await dbService.getUser(username);
     if (!user) {
-      dbService.createUser(username, username === 'admin' ? 'admin' : 'user');
-    }
-
-    // Initialize files if they don't exist (config and profile still use files for now, but could be moved)
-    const files = [
-      { path: paths.config, default: { 
-        systemPrompt: `You are a helpful assistant for ${username}.`,
-        parameters: { temperature: 0.7, topP: 0.9, topK: 40 }
-      } },
-      { path: paths.profile, default: { role: username === 'admin' ? 'admin' : 'user' } }
-    ];
-
-    for (const file of files) {
-      try {
-        await fs.access(file.path);
-      } catch {
-        await fs.writeFile(file.path, JSON.stringify(file.default, null, 2));
-      }
+      await dbService.createUser(username, username === 'admin' ? 'admin' : 'user');
     }
   } catch (error) {
     logger.error(`Failed to ensure user dir for ${username}`, error);
@@ -283,46 +254,6 @@ async function ensureDataDir() {
     await fs.mkdir(USERS_DIR, { recursive: true });
     await initializeDefaultUsers();
   } catch (e) {}
-
-  try {
-    await fs.access(USAGE_FILE);
-  } catch {
-    await fs.writeFile(USAGE_FILE, JSON.stringify({ used: 0, total: 1000000 }, null, 2));
-  }
-
-  try {
-    await fs.access(STATS_FILE);
-  } catch {
-    await fs.writeFile(STATS_FILE, JSON.stringify({ sent: 0, success: 0, fail: 0 }, null, 2));
-  }
-}
-
-async function cleanupOldChats(username: string) {
-  try {
-    const paths = getUserPaths(username);
-    logger.release(`Cleanup: Checking for chats older than 30 days for ${username}`);
-    const data = await fs.readFile(paths.chats, 'utf-8');
-    const chats = JSON.parse(data);
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    
-    const initialCount = chats.length;
-    const filteredChats = chats.filter((chat: any) => {
-      const lastMessageTime = chat.messages?.length > 0 
-        ? chat.messages[chat.messages.length - 1].timestamp 
-        : chat.createdAt;
-      
-      return lastMessageTime > thirtyDaysAgo;
-    });
-
-    if (filteredChats.length < initialCount) {
-      await fs.writeFile(paths.chats, JSON.stringify(filteredChats, null, 2));
-      logger.release(`Cleanup: Removed ${initialCount - filteredChats.length} old chats for ${username}`);
-    } else {
-      logger.debug(`Cleanup: No old chats to remove for ${username}`);
-    }
-  } catch (error) {
-    logger.error(`Cleanup Error: Failed to cleanup old chats for ${username}`, error);
-  }
 }
 
 interface Chat {
@@ -345,6 +276,71 @@ const activeGenerations = new Map<string, ActiveGeneration>();
 
 async function startServer() {
   await ensureDataDir();
+  
+  // Initialize Database
+  db = await open({
+    filename: DB_FILE,
+    driver: sqlite3.Database
+  });
+
+  // Create Tables
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE,
+      role TEXT DEFAULT 'user'
+    );
+
+    CREATE TABLE IF NOT EXISTS configs (
+      userId TEXT PRIMARY KEY,
+      systemPrompt TEXT,
+      parameters TEXT, -- JSON string
+      FOREIGN KEY(userId) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS stats (
+      key TEXT PRIMARY KEY,
+      value INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      userId TEXT,
+      name TEXT,
+      details TEXT,
+      createdAt INTEGER,
+      FOREIGN KEY(userId) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS chats (
+      id TEXT PRIMARY KEY,
+      projectId TEXT,
+      title TEXT,
+      model TEXT,
+      systemPrompt TEXT,
+      parameters TEXT, -- JSON string
+      createdAt INTEGER,
+      FOREIGN KEY(projectId) REFERENCES projects(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      chatId TEXT,
+      role TEXT,
+      content TEXT,
+      images TEXT, -- JSON string
+      timestamp INTEGER,
+      FOREIGN KEY(chatId) REFERENCES chats(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS memory (
+      id TEXT PRIMARY KEY,
+      projectId TEXT,
+      facts TEXT, -- JSON string
+      FOREIGN KEY(projectId) REFERENCES projects(id)
+    );
+  `);
+
   logger.release('Starting server initialization...');
   
   const app = express();
@@ -397,70 +393,57 @@ async function startServer() {
 
   async function updateStats(type: 'sent' | 'success' | 'fail') {
     try {
-      const data = await fs.readFile(STATS_FILE, 'utf-8');
-      const stats = JSON.parse(data);
-      stats[type]++;
-      await fs.writeFile(STATS_FILE, JSON.stringify(stats, null, 2));
+      await dbService.updateStat(type);
     } catch (error) {
-      logger.error('Failed to update stats', error);
+      logger.error('Không thể cập nhật thống kê:', error);
     }
   }
 
   // API: Get all users
   app.get('/api/users', async (req, res) => {
     try {
-      const users = await fs.readdir(USERS_DIR);
-      const usersWithRoles = await Promise.all(users.map(async (username) => {
-        const paths = getUserPaths(username);
-        let role = 'user';
-        try {
-          const profileData = await fs.readFile(paths.profile, 'utf-8');
-          role = JSON.parse(profileData).role || 'user';
-        } catch (e) {
-          // Ignore if profile doesn't exist yet
-        }
-        return { username, role };
-      }));
-      res.json(usersWithRoles);
+      const users = await dbService.getUsers();
+      res.json(users);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to list users' });
+      logger.error('Không thể liệt kê người dùng:', error);
+      res.status(500).json({ error: 'Không thể liệt kê người dùng' });
     }
   });
 
   // API: Create/Login user
   app.post('/api/users', async (req, res) => {
     const { username } = req.body;
-    if (!username) return res.status(400).json({ error: 'Username is required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu tên đăng nhập' });
     try {
       await ensureUserDir(username);
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to create user' });
+      res.status(500).json({ error: 'Không thể tạo người dùng' });
     }
   });
 
   // --- Project API ---
   app.get('/api/projects', async (req, res) => {
     const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
     try {
-      const user = dbService.getUser(username);
+      const user = await dbService.getUser(username);
       if (!user) return res.json([]);
-      const projects = dbService.getProjects(user.id);
+      const projects = await dbService.getProjects(user.id);
       res.json(projects);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch projects' });
+      res.status(500).json({ error: 'Không thể lấy danh sách dự án' });
     }
   });
 
   app.post('/api/projects', async (req, res) => {
     const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
     const { name, details } = req.body;
     try {
-      const user = dbService.getUser(username);
-      if (!user) return res.status(404).json({ error: 'User not found' });
-      const projectId = dbService.createProject(user.id, name, details);
+      const user = await dbService.getUser(username);
+      if (!user) return res.status(404).json({ error: 'Không tìm thấy người dùng' });
+      const projectId = await dbService.createProject(user.id, name, details);
       
       // Ensure project workspace exists
       const paths = getUserPaths(username, projectId);
@@ -475,23 +458,23 @@ async function startServer() {
 
       res.json({ id: projectId, name, details, createdAt: Date.now() });
     } catch (error) {
-      logger.error('Failed to create project', error);
-      res.status(500).json({ error: 'Failed to create project' });
+      logger.error('Không thể tạo dự án:', error);
+      res.status(500).json({ error: 'Không thể tạo dự án' });
     }
   });
 
   app.delete('/api/projects/:id', async (req, res) => {
     const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
     const { id } = req.params;
     try {
-      dbService.deleteProject(id);
+      await dbService.deleteProject(id);
       // Optionally delete project directory
       const paths = getUserPaths(username, id);
       await fs.rm(paths.projectDir, { recursive: true, force: true }).catch(() => {});
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to delete project' });
+      res.status(500).json({ error: 'Không thể xóa dự án' });
     }
   });
 
@@ -499,10 +482,10 @@ async function startServer() {
   app.get('/api/chats', async (req, res) => {
     const username = req.headers['x-username'] as string;
     const projectId = req.query.projectId as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    if (!projectId) return res.status(400).json({ error: 'ProjectId query required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
+    if (!projectId) return res.status(400).json({ error: 'Yêu cầu ProjectId' });
     try {
-      const chats = dbService.getChats(projectId);
+      const chats = await dbService.getChats(projectId);
       
       // Merge active generations
       const active = Array.from(activeGenerations.values()).filter(g => g.username === username);
@@ -524,7 +507,7 @@ async function startServer() {
         generatingChatIds: active.map(g => g.chatId)
       });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to read chats' });
+      res.status(500).json({ error: 'Không thể đọc danh sách chat' });
     }
   });
 
@@ -532,66 +515,61 @@ async function startServer() {
   app.post('/api/chats', async (req, res) => {
     const username = req.headers['x-username'] as string;
     const projectId = req.query.projectId as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    if (!projectId) return res.status(400).json({ error: 'ProjectId query required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
+    if (!projectId) return res.status(400).json({ error: 'Yêu cầu ProjectId' });
     try {
       const chats = req.body;
       for (const chat of chats) {
-        const existing = db_sqlite.prepare('SELECT id FROM chats WHERE id = ?').get(chat.id);
+        const existing = await db.get('SELECT id FROM chats WHERE id = ?', chat.id);
         if (!existing) {
-          dbService.createChat(projectId, chat);
+          await dbService.createChat(projectId, chat);
           for (const msg of chat.messages) {
-            dbService.addMessage(chat.id, msg);
+            await dbService.addMessage(chat.id, msg);
           }
         } else {
-          dbService.updateChatTitle(chat.id, chat.title);
+          await dbService.updateChatTitle(chat.id, chat.title);
         }
       }
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to save chats' });
+      res.status(500).json({ error: 'Không thể lưu danh sách chat' });
     }
   });
 
   // API: Get config
   app.get('/api/config', async (req, res) => {
     const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
+
     try {
-      const isUserAdmin = await isAdmin(username);
-      const paths = getUserPaths(username);
-      const configFile = isUserAdmin ? ADMIN_CONFIG_FILE : paths.config;
-      
-      let data;
-      try {
-        data = await fs.readFile(configFile, 'utf-8');
-      } catch (e) {
-        // If config doesn't exist, return default config
-        data = JSON.stringify({
-          systemPrompt: "You are a helpful assistant.",
+      const config = await dbService.getConfig(username);
+      if (!config) {
+        return res.json({
+          systemPrompt: `Bạn là một trợ lý hữu ích cho ${username}.`,
           parameters: { temperature: 0.7, topP: 0.9, topK: 40, maxTokens: null, stop: [], jsonMode: false }
         });
       }
-      res.json(JSON.parse(data));
+      res.json(config);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to read config' });
+      logger.error('Không thể đọc cấu hình:', error);
+      res.status(500).json({ error: 'Không thể đọc cấu hình' });
     }
   });
 
   // API: Save config
   app.post('/api/config', async (req, res) => {
     const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
+
     try {
-      // Allow users to modify their own config. 
-      // The previous logic was incorrectly blocking admins.
-      const paths = getUserPaths(username);
       const config = req.body;
-      await fs.writeFile(paths.config, JSON.stringify(config, null, 2));
+      await dbService.saveConfig(username, config);
+      
       io.emit(`config:updated:${username}`, config);
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to save config' });
+      logger.error('Không thể lưu cấu hình:', error);
+      res.status(500).json({ error: 'Không thể lưu cấu hình' });
     }
   });
 
@@ -599,13 +577,13 @@ async function startServer() {
   app.get('/api/memory', async (req, res) => {
     const username = req.headers['x-username'] as string;
     const projectId = req.query.projectId as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    if (!projectId) return res.status(400).json({ error: 'ProjectId query required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
+    if (!projectId) return res.status(400).json({ error: 'Yêu cầu ProjectId' });
     try {
-      const facts = dbService.getMemory(projectId);
+      const facts = await dbService.getMemory(projectId);
       res.json({ facts });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to read memory' });
+      res.status(500).json({ error: 'Không thể đọc bộ nhớ' });
     }
   });
 
@@ -613,25 +591,25 @@ async function startServer() {
   app.post('/api/memory', async (req, res) => {
     const username = req.headers['x-username'] as string;
     const projectId = req.query.projectId as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    if (!projectId) return res.status(400).json({ error: 'ProjectId query required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
+    if (!projectId) return res.status(400).json({ error: 'Yêu cầu ProjectId' });
     try {
       const { facts } = req.body;
-      dbService.saveMemory(projectId, facts);
+      await dbService.saveMemory(projectId, facts);
       io.emit(`memory:updated:${username}`, { facts });
       res.json({ success: true });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to save memory' });
+      res.status(500).json({ error: 'Không thể lưu bộ nhớ' });
     }
   });
 
   // API: Get stats
   app.get('/api/stats', async (req, res) => {
     try {
-      const data = await fs.readFile(STATS_FILE, 'utf-8');
-      res.json(JSON.parse(data));
+      const stats = await dbService.getStats();
+      res.json(stats);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to read stats' });
+      res.status(500).json({ error: 'Không thể đọc thống kê' });
     }
   });
 
@@ -650,7 +628,7 @@ async function startServer() {
       
       res.json({ logs: filteredLogs.slice(-100) }); // Get last 100 entries
     } catch (error) {
-      res.status(500).json({ error: 'Failed to read logs' });
+      res.status(500).json({ error: 'Không thể đọc nhật ký' });
     }
   });
 
@@ -662,7 +640,7 @@ async function startServer() {
       const errorLogs = entries.filter(entry => entry.includes('[ERROR]')).slice(-50);
       res.json({ logs: errorLogs });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to read error logs' });
+      res.status(500).json({ error: 'Không thể đọc nhật ký lỗi' });
     }
   });
 
@@ -674,7 +652,7 @@ async function startServer() {
       const debugLogs = entries.filter(entry => entry.includes('[CHAT_DEBUG]')).slice(-50);
       res.json({ logs: debugLogs });
     } catch (error) {
-      res.status(500).json({ error: 'Failed to read chat debug logs' });
+      res.status(500).json({ error: 'Không thể đọc nhật ký gỡ lỗi chat' });
     }
   });
 
@@ -798,19 +776,19 @@ async function startServer() {
   // API: Terminal execute
   app.post('/api/system/terminal', async (req, res) => {
     const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
     
     try {
       const isUserAdmin = await isAdmin(username);
       if (!isUserAdmin) {
-        logger.error(`Unauthorized terminal access attempt by ${username}`);
-        return res.status(403).json({ error: 'Access denied. Only administrators can use the terminal.' });
+        logger.error(`Truy cập terminal trái phép bởi ${username}`);
+        return res.status(403).json({ error: 'Truy cập bị từ chối. Chỉ quản trị viên mới có thể sử dụng terminal.' });
       }
 
       const { command } = req.body;
-      if (!command) return res.status(400).json({ error: 'Command is required' });
+      if (!command) return res.status(400).json({ error: 'Yêu cầu lệnh thực thi' });
       
-      logger.release(`Terminal: Executing command for ${username}: ${command}`);
+      logger.release(`Terminal: Thực thi lệnh cho ${username}: ${command}`);
       // Add common sbin and bin paths to PATH so management commands are found
       const env = { 
         ...process.env, 
@@ -819,7 +797,7 @@ async function startServer() {
       
       exec(command, { env }, (error, stdout, stderr) => {
         if (error) {
-          logger.error(`Terminal Command Failed: ${command}`, error);
+          logger.error(`Lệnh terminal thất bại: ${command}`, error);
         }
         if (stdout) logger.debug(`Terminal STDOUT: ${stdout}`);
         if (stderr) logger.debug(`Terminal STDERR: ${stderr}`);
@@ -831,8 +809,8 @@ async function startServer() {
         });
       });
     } catch (error) {
-      logger.error('Terminal Execution Error:', error);
-      res.status(500).json({ error: 'Failed to execute command' });
+      logger.error('Lỗi thực thi terminal:', error);
+      res.status(500).json({ error: 'Không thể thực thi lệnh' });
     }
   });
 
@@ -1344,9 +1322,9 @@ async function startServer() {
       // Save user message to DB immediately
       try {
         const userMsg = messages[messages.length - 1];
-        const existingChat = db_sqlite.prepare('SELECT id FROM chats WHERE id = ?').get(chatId);
+        const existingChat = await db.get('SELECT id FROM chats WHERE id = ?', chatId);
         if (existingChat) {
-          dbService.addMessage(chatId, userMsg);
+          await dbService.addMessage(chatId, userMsg);
         } else {
           const newChat = {
             id: chatId,
@@ -1355,8 +1333,8 @@ async function startServer() {
             model: model,
             createdAt: Date.now()
           };
-          dbService.createChat(projectId, newChat);
-          dbService.addMessage(chatId, userMsg);
+          await dbService.createChat(projectId, newChat);
+          await dbService.addMessage(chatId, userMsg);
         }
         // Notify client about chat update
         io.emit(`chats:updated:${username}`, { projectId });
@@ -1364,12 +1342,11 @@ async function startServer() {
         logger.error(`Failed to pre-save user message for chat ${chatId}`, e);
       }
 
-      const configData = await fs.readFile(getUserPaths(username).config, 'utf-8');
-      const config = JSON.parse(configData);
-      const facts = dbService.getMemory(projectId);
+      const config = await dbService.getConfig(username);
+      const facts = await dbService.getMemory(projectId);
 
       // Inject memory into system prompt
-      const systemPrompt = bodySystemPrompt || config.systemPrompt || '';
+      const systemPrompt = bodySystemPrompt || config?.systemPrompt || '';
       const memoryContext = facts.length > 0 
         ? `\n\nUser Context (Long-term Memory):\n${facts.map((f: string) => `- ${f}`).join('\n')}`
         : '';
@@ -1601,7 +1578,7 @@ async function startServer() {
       logger.release(`Ollama Proxy: Chat session complete for ${chatId} (${username}) in project ${projectId}`);
       
       // Save assistant message to DB
-      dbService.addMessage(chatId, { role: 'assistant', content: assistantContent, timestamp: Date.now() });
+      await dbService.addMessage(chatId, { role: 'assistant', content: assistantContent, timestamp: Date.now() });
       io.emit(`chats:updated:${username}`, { projectId });
 
       // Post-chat logic
@@ -1772,7 +1749,7 @@ async function startServer() {
     if (chatId !== 'memory-extraction') {
       try {
         logger.debug(`Post-chat logic: Starting memory extraction for ${chatId} (${username}) in project ${projectId}`);
-        const currentFacts = dbService.getMemory(projectId);
+        const currentFacts = await dbService.getMemory(projectId);
         
         const context = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
         
@@ -1809,7 +1786,7 @@ async function startServer() {
           if (match) {
             const consolidatedFacts = JSON.parse(match[0]);
             if (Array.isArray(consolidatedFacts)) {
-              dbService.saveMemory(projectId, consolidatedFacts);
+              await dbService.saveMemory(projectId, consolidatedFacts);
               io.emit(`memory:updated:${username}`, { facts: consolidatedFacts });
               logger.release(`Post-chat logic: Memory consolidated for ${username} in project ${projectId}. Total facts: ${consolidatedFacts.length}`);
             }
