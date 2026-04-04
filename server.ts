@@ -564,6 +564,8 @@ async function startServer() {
       logger.debug(`Project: Initializing git in ${paths.workspace}`);
       const git = simpleGit(paths.workspace);
       await git.init();
+      await git.addConfig('user.name', username);
+      await git.addConfig('user.email', `${username}@ollama.web`);
       await fs.writeFile(path.join(paths.workspace, '.gitkeep'), '');
       await git.add('.');
       await git.commit('Initial project commit');
