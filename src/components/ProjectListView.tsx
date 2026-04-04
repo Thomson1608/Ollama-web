@@ -64,7 +64,10 @@ export const ProjectListView: React.FC<ProjectListViewProps> = ({
                       <Layout className="text-blue-600 group-hover:text-white transition-colors" size={24} />
                     </div>
                     <button
-                      onClick={(e) => onDeleteProject(project.id, e)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteProject(project.id, e);
+                      }}
                       className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
                       title="Xóa dự án"
                     >
