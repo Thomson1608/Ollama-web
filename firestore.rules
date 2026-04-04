@@ -94,36 +94,30 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
-      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role));
+      allow read, write: if true;
       
       match /configs/{configId} {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if true;
       }
     }
 
     match /stats/{statKey} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     match /projects/{projectId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && isValidProject(request.resource.data) && (request.resource.data.userId == request.auth.uid || isAdmin());
-      allow update: if isAuthenticated() && isValidProject(request.resource.data) && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, write: if true;
 
       match /chats/{chatId} {
-        allow read, write: if isAuthenticated() && (get(/databases/$(database)/documents/projects/$(projectId)).data.userId == request.auth.uid || isAdmin());
+        allow read, write: if true;
         
         match /messages/{messageId} {
-          allow read, write: if isAuthenticated() && (get(/databases/$(database)/documents/projects/$(projectId)).data.userId == request.auth.uid || isAdmin());
+          allow read, write: if true;
         }
       }
 
       match /memories/{memoryId} {
-        allow read, write: if isAuthenticated() && (get(/databases/$(database)/documents/projects/$(projectId)).data.userId == request.auth.uid || isAdmin());
+        allow read, write: if true;
       }
     }
 
