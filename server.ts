@@ -870,47 +870,6 @@ async function startServer() {
     res.status(404).send('File not found in workspace');
   });
 
-  const workspaceProcesses = new Map<string, ChildProcess>();
-  const WORKSPACE_PORTS = new Map<string, number>();
-  let nextPort = 3001;
-
-  // API: Write workspace file
-  app.post('/api/workspace/write', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    try {
-      const { name, content } = req.body;
-      if (!name) return res.status(400).json({ error: 'Missing filename' });
-      const paths = getUserPaths(username);
-      const safeName = path.normalize(name).replace(/^(\.\.[\/\\])+/, '');
-      const filePath = path.join(paths.workspace, safeName);
-      const dirPath = path.dirname(filePath);
-      
-      // Ensure directory exists
-      await fs.mkdir(dirPath, { recursive: true });
-      
-      await fs.writeFile(filePath, content, 'utf-8');
-      io.emit(`workspace:updated:${username}`);
-      res.json({ success: true });
-      
-      // Auto commit after writing
-      const git = simpleGit(paths.workspace);
-      try {
-        await git.add('.');
-        const status = await git.status();
-        if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
-          await git.commit(`Update ${safeName}`);
-          io.emit(`workspace:history_updated:${username}`);
-        }
-      } catch (e) {
-        logger.error('Auto commit failed', e);
-      }
-    } catch (error) {
-      logger.error('Failed to write file', error);
-      res.status(500).json({ error: 'Failed to write file' });
-    }
-  });
-
   // API: Delete workspace file
   app.delete('/api/workspace/delete', async (req, res) => {
     const username = req.headers['x-username'] as string;
@@ -940,20 +899,6 @@ async function startServer() {
     } catch (error) {
       logger.error('Failed to delete file or folder', error);
       res.status(500).json({ error: 'Failed to delete file or folder' });
-    }
-  });
-
-  // API: Get workspace history
-  app.get('/api/workspace/history', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    try {
-      const paths = getUserPaths(username);
-      const git = simpleGit(paths.workspace);
-      const log = await git.log();
-      res.json({ history: log.all });
-    } catch (error: any) {
-      res.json({ history: [] });
     }
   });
 
@@ -1003,6 +948,10 @@ async function startServer() {
     const paths = getUserPaths(username);
     express.static(paths.workspace)(req, res, next);
   });
+
+  const workspaceProcesses = new Map<string, ChildProcess>();
+  const WORKSPACE_PORTS = new Map<string, number>();
+  let nextPort = 3001;
 
   app.post('/api/workspace/run', async (req, res) => {
     const username = req.headers['x-username'] as string;

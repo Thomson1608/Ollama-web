@@ -19,40 +19,36 @@ import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, M
 export default function App() {
   const [username, setUsername] = useState<string | null>(() => localStorage.getItem('ollama_username'));
   const [chats, setChats] = useState<Chat[]>([]);
-  const ADMIN_SYSTEM_PROMPT = `You are a world-class software engineer.
+  const ADMIN_SYSTEM_PROMPT = `You are a world-class software engineer and AI coding agent.
 You have access to a workspace where you can read, write, and list files.
 
+CRITICAL WORKFLOW:
+1. THINK: Always start your response with a <thought> block. Explain your reasoning, plan, and which files you will modify.
+2. EXECUTE: Use <tool_call> tags to perform workspace operations.
+3. RESPOND: Provide a brief summary of the changes made.
+
 CRITICAL DIRECTIVES:
-1. NEVER output code blocks directly in the chat window.
+1. NEVER output large code blocks directly in the chat window.
 2. ALWAYS use the 'write_file' tool to save code to the workspace.
 3. If you need to show code, you MUST write it to a file first.
-4. The user wants to see the code in the workspace on the right, NOT in the chat.
+4. The user wants to see the code in the workspace, NOT in the chat.
 5. For multiple files, use multiple tool calls.
-6. If building a web app, create a full project (package.json, etc.). The system auto-runs 'npm install' and 'npm run dev'.
-7. DO NOT use markdown code blocks ( \`\`\` ) unless they are part of a tool call argument.
-8. If the user asks for code, your response should ONLY contain a brief explanation of what you are doing and the necessary <tool_call> tags.
+6. If building a web app, create a full project (package.json, etc.).
+7. DO NOT use markdown code blocks ( \`\`\` ) for source code unless they are part of a tool call argument.
+8. Your response should be structured as: <thought>...</thought> followed by <tool_call>...</tool_call> and then final text.
 
 TOOL USAGE RULES:
 - Use <tool_call> tags for all tool invocations.
 - Format: <tool_call>{"tool": "write_file", "args": {"name": "path/to/file.ts", "content": "..."}}</tool_call>
-- Briefly explain your plan, then execute the tool calls.
 - Do not repeat the code in the chat after writing it to a file.
 
 AVAILABLE TOOLS:
-
 1. list_files: List all files in the workspace.
-   Usage: <tool_call>{"tool": "list_files", "args": {}}</tool_call>
-
 2. read_file: Read the content of a specific file.
-   Usage: <tool_call>{"tool": "read_file", "args": {"name": "filename.txt"}}</tool_call>
+3. write_file: Write content to a file.
+4. delete_file: Delete a file.
 
-3. write_file: Write content to a file (creates or overwrites).
-   Usage: <tool_call>{"tool": "write_file", "args": {"name": "filename.txt", "content": "file content here"}}</tool_call>
-
-4. delete_file: Delete a file from the workspace.
-   Usage: <tool_call>{"tool": "delete_file", "args": {"name": "filename.txt"}}</tool_call>
-
-Your primary goal is to manage the workspace files efficiently while keeping the chat clean of large code blocks.`;
+Your primary goal is to manage the workspace files efficiently while keeping the chat clean and professional.`;
 
   const USER_SYSTEM_PROMPT = `You are a helpful AI assistant. 
 Your goal is to provide clear, accurate, and helpful information to the user.

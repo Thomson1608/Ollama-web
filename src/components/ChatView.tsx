@@ -44,7 +44,71 @@ interface ChatViewProps {
   username?: string | null;
 }
 
-const ToolCallRenderer = ({ toolCall }: { toolCall: any }) => {
+const ThoughtBlock = ({ children }: { children: React.ReactNode }) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+  
+  return (
+    <div className="my-4 border border-blue-100 bg-blue-50/30 rounded-xl overflow-hidden transition-all shadow-sm">
+      <button 
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:bg-blue-50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Cpu size={14} className={cn(isExpanded && "animate-pulse")} />
+          <span>Thinking Process</span>
+        </div>
+        <ChevronDown size={14} className={cn("transition-transform duration-300", isExpanded && "rotate-180")} />
+      </button>
+      <motion.div 
+        initial={false}
+        animate={{ height: isExpanded ? 'auto' : 0, opacity: isExpanded ? 1 : 0 }}
+        className="overflow-hidden"
+      >
+        <div className="px-4 pb-4 text-xs text-blue-800/70 italic leading-relaxed border-t border-blue-100/50 pt-2">
+          {children}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+const ToolCallRenderer = ({ toolCall, username, isFinished }: { toolCall: any, username?: string | null, isFinished: boolean }) => {
+  const [status, setStatus] = useState<'idle' | 'working' | 'completed' | 'error'>('idle');
+  const executedRef = useRef(false);
+
+  useEffect(() => {
+    if (isFinished && !executedRef.current && (toolCall.tool === 'write_file' || toolCall.tool === 'delete_file')) {
+      const execute = async () => {
+        setStatus('working');
+        try {
+          const isWrite = toolCall.tool === 'write_file';
+          const endpoint = isWrite ? '/api/workspace/write' : `/api/workspace/delete?name=${encodeURIComponent(toolCall.args.name)}`;
+          const method = isWrite ? 'POST' : 'DELETE';
+          const body = isWrite ? JSON.stringify({ name: toolCall.args.name, content: toolCall.args.content }) : undefined;
+
+          const res = await fetch(endpoint, {
+            method,
+            headers: { 
+              'Content-Type': 'application/json',
+              'x-username': username || ''
+            },
+            body
+          });
+          
+          if (res.ok) {
+            setStatus('completed');
+            executedRef.current = true;
+          } else {
+            setStatus('error');
+          }
+        } catch (e) {
+          setStatus('error');
+        }
+      };
+      execute();
+    }
+  }, [isFinished, toolCall, username]);
+
   try {
     const tool = toolCall.tool;
     const args = toolCall.args;
@@ -54,33 +118,39 @@ const ToolCallRenderer = ({ toolCall }: { toolCall: any }) => {
     
     switch (tool) {
       case 'write_file':
-        icon = <FileEdit size={16} className="text-blue-500" />;
-        text = `Writing to ${args.name}`;
+        icon = <FileEdit size={16} className={cn(status === 'completed' ? "text-green-500" : "text-blue-500")} />;
+        text = status === 'completed' ? `Updated ${args.name}` : `Updating ${args.name}...`;
         break;
       case 'read_file':
         icon = <FileText size={16} className="text-green-500" />;
-        text = `Reading ${args.name}`;
+        text = `Read ${args.name}`;
         break;
       case 'delete_file':
-        icon = <Trash2 size={16} className="text-red-500" />;
-        text = `Deleting ${args.name}`;
+        icon = <Trash2 size={16} className={cn(status === 'completed' ? "text-green-500" : "text-red-500")} />;
+        text = status === 'completed' ? `Deleted ${args.name}` : `Deleting ${args.name}...`;
         break;
       case 'list_files':
         icon = <FolderSearch size={16} className="text-purple-500" />;
-        text = `Listing workspace files`;
+        text = `Listed workspace files`;
         break;
       default:
         text = `Using tool: ${tool}`;
     }
 
     return (
-      <div className="my-3 inline-flex max-w-full items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm overflow-hidden">
-        <div className="shrink-0">{icon}</div>
+      <div className={cn(
+        "my-3 inline-flex max-w-full items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium shadow-sm overflow-hidden transition-all",
+        status === 'completed' ? "bg-green-50 border-green-100 text-green-700" : "bg-white border-gray-200 text-gray-700"
+      )}>
+        <div className="shrink-0">
+          {status === 'working' ? <Loader2 className="animate-spin text-blue-500" size={16} /> : icon}
+        </div>
         <span className="truncate">{text}</span>
+        {status === 'completed' && <CheckCircle2 size={14} className="text-green-500 ml-1" />}
       </div>
     );
   } catch (e) {
-    return null; // Hide invalid tool calls
+    return null;
   }
 };
 
@@ -301,10 +371,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   const renderMessage = (content: string, isStreaming: boolean) => {
-    // Split by complete tool calls
-    const parts = content.split(/(<tool_call>[\s\S]*?<\/tool_call>)/g);
+    // Split by thought and tool calls
+    const parts = content.split(/(<thought>[\s\S]*?<\/thought>|<tool_call>[\s\S]*?<\/tool_call>)/g);
     
     return parts.map((part, i) => {
+      if (part.startsWith('<thought>') && part.endsWith('</thought>')) {
+        const thought = part.match(/<thought>([\s\S]*?)<\/thought>/)?.[1] || '';
+        return <ThoughtBlock key={i}>{thought}</ThoughtBlock>;
+      }
+
       if (part.startsWith('<tool_call>') && part.endsWith('</tool_call>')) {
         try {
           const match = part.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
@@ -314,29 +389,36 @@ export const ChatView: React.FC<ChatViewProps> = ({
             jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
           }
           const toolCall = JSON.parse(jsonString);
-          return <ToolCallRenderer key={i} toolCall={toolCall} />;
+          return <ToolCallRenderer key={i} toolCall={toolCall} username={username} isFinished={!isStreaming} />;
         } catch (e) {
           return null;
         }
       }
       
-      // Handle incomplete tool calls during streaming
-      if (part.includes('<tool_call>')) {
+      // Handle incomplete tags during streaming
+      if (part.includes('<thought>') && !part.includes('</thought>')) {
+        const thought = part.split('<thought>')[1];
+        return <ThoughtBlock key={i}>{thought}</ThoughtBlock>;
+      }
+
+      if (part.includes('<tool_call>') && !part.includes('</tool_call>')) {
          const visibleText = part.split('<tool_call>')[0];
          return (
            <React.Fragment key={i}>
-             <Markdown
-               components={{
-                 code({ node, className, children, ...props }: any) {
-                   return <code className={className} {...props}>{children}</code>;
-                 }
-               }}
-             >
-               {visibleText}
-             </Markdown>
+             {visibleText && (
+               <Markdown
+                 components={{
+                   code({ node, className, children, ...props }: any) {
+                     return <code className={className} {...props}>{children}</code>;
+                   }
+                 }}
+               >
+                 {visibleText}
+               </Markdown>
+             )}
              <div className="my-3 inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm animate-pulse">
                <Loader2 className="animate-spin text-blue-500" size={16} />
-               <span>Working on files...</span>
+               <span>Updating workspace...</span>
              </div>
            </React.Fragment>
          );
@@ -366,7 +448,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                     return (
                       <div className="flex flex-col gap-2">
                         {validCalls.map((call: any, idx: number) => (
-                          <ToolCallRenderer key={idx} toolCall={call} />
+                          <ToolCallRenderer key={idx} toolCall={call} username={username} isFinished={!isStreaming} />
                         ))}
                       </div>
                     );
