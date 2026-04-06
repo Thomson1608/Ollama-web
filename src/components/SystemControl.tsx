@@ -12,7 +12,9 @@ import {
   Loader2,
   Search,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -54,7 +56,23 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<'monitor' | 'processes' | 'services' | 'terminal'>('monitor');
   const [processSearch, setProcessSearch] = useState('');
+  const [sortColumn, setSortColumn] = useState<string>('state');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const terminalEndRef = useRef<HTMLDivElement>(null);
+
+  const handleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc');
+    }
+  };
+
+  const SortIcon = ({ column }: { column: string }) => {
+    if (sortColumn !== column) return null;
+    return sortDirection === 'asc' ? <ArrowUp size={12} className="inline ml-1" /> : <ArrowDown size={12} className="inline ml-1" />;
+  };
 
   const [isFixingPermissions, setIsFixingPermissions] = useState(false);
 
@@ -408,12 +426,12 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
             <table className="w-full text-left text-[10px] md:text-xs min-w-[500px] md:min-w-0">
               <thead className="bg-gray-50 text-gray-500 font-bold uppercase tracking-wider sticky top-0">
                 <tr>
-                  <th className="px-3 md:px-4 py-3">PID</th>
-                  <th className="px-3 md:px-4 py-3">Name</th>
-                  <th className="px-3 md:px-4 py-3">Status</th>
-                  <th className="px-3 md:px-4 py-3">CPU%</th>
-                  <th className="px-3 md:px-4 py-3">MEM%</th>
-                  <th className="px-3 md:px-4 py-3 hidden sm:table-cell">User</th>
+                  <th className="px-3 md:px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('pid')}>PID <SortIcon column="pid" /></th>
+                  <th className="px-3 md:px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('name')}>Name <SortIcon column="name" /></th>
+                  <th className="px-3 md:px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('state')}>Status <SortIcon column="state" /></th>
+                  <th className="px-3 md:px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('cpu')}>CPU% <SortIcon column="cpu" /></th>
+                  <th className="px-3 md:px-4 py-3 cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('mem')}>MEM% <SortIcon column="mem" /></th>
+                  <th className="px-3 md:px-4 py-3 hidden sm:table-cell cursor-pointer hover:bg-gray-100 transition-colors" onClick={() => handleSort('user')}>User <SortIcon column="user" /></th>
                   <th className="px-3 md:px-4 py-3 text-right">Action</th>
                 </tr>
               </thead>
@@ -421,14 +439,20 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
                 {processes.list
                   .filter((p: any) => p.name.toLowerCase().includes(processSearch.toLowerCase()) || p.pid.toString().includes(processSearch))
                   .sort((a: any, b: any) => {
-                    // Sort by state 'running' first
-                    const aRunning = a.state === 'running';
-                    const bRunning = b.state === 'running';
-                    if (aRunning !== bRunning) return aRunning ? -1 : 1;
+                    let valA = a[sortColumn];
+                    let valB = b[sortColumn];
                     
-                    // Then by CPU usage descending
-                    if (b.cpu !== a.cpu) return b.cpu - a.cpu;
-                    return b.mem - a.mem;
+                    if (sortColumn === 'state') {
+                      valA = a.state === 'running' ? 1 : 0;
+                      valB = b.state === 'running' ? 1 : 0;
+                    } else if (typeof valA === 'string') {
+                      valA = valA.toLowerCase();
+                      valB = valB.toLowerCase();
+                    }
+
+                    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                    return 0;
                   })
                   .map((p: any) => (
                     <tr key={p.pid} className="hover:bg-gray-50 transition-colors">
