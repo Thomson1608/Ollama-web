@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import { Toaster, toast } from 'sonner';
 import { io, Socket } from 'socket.io-client';
 import { Sidebar } from './components/Sidebar';
@@ -18,7 +18,63 @@ import { ProjectInitView } from './components/ProjectInitView';
 import { ProjectListView } from './components/ProjectListView';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
 
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+          <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center border border-red-100">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Đã có lỗi xảy ra</h2>
+            <p className="text-gray-600 mb-6 font-medium">
+              Ứng dụng gặp sự cố không mong muốn. Vui lòng thử tải lại trang.
+            </p>
+            <div className="text-left bg-gray-50 rounded-lg p-4 mb-6 overflow-auto max-h-40 border border-gray-200">
+              <code className="text-xs text-red-500 font-mono break-all">
+                {this.state.error?.toString()}
+              </code>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-all shadow-sm active:scale-[0.98]"
+            >
+              Tải lại trang
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [username, setUsername] = useState<string | null>(() => localStorage.getItem('ollama_username'));
   const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem('ollama_project_id'));
   const [projects, setProjects] = useState<Project[]>([]);
@@ -131,8 +187,13 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const chatAbortController = useRef<AbortController | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const lastUserMessageRef = useRef<string>('');
+  const projectIdRef = useRef<string | null>(projectId);
 
-  const activeChat = chats.find(c => c.id === activeChatId);
+  useEffect(() => {
+    projectIdRef.current = projectId;
+  }, [projectId]);
+
+  const activeChat = Array.isArray(chats) ? chats.find(c => c.id === activeChatId) : undefined;
 
   // Sync activeChatId to localStorage
   useEffect(() => {
@@ -245,7 +306,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       if (response.ok) {
         const data = await response.json();
         isRemoteUpdate.current = true;
-        setChats(data.chats);
+        setChats(Array.isArray(data.chats) ? data.chats : []);
         setGeneratingChatIds(new Set(data.generatingChatIds));
       }
     } catch (error) {
@@ -411,10 +472,16 @@ If the user asks you to write code, you should provide it in a markdown code blo
       }
     });
 
-    socket.on(`chats:updated:${username}`, (updatedChats) => {
+    socket.on(`chats:updated:${username}`, (data) => {
       console.log('Socket.io: chats:updated event received');
-      isRemoteUpdate.current = true;
-      setChats(updatedChats);
+      if (data && data.projectId) {
+        if (data.projectId === projectIdRef.current) {
+          fetchChats(data.projectId);
+        }
+      } else if (Array.isArray(data)) {
+        isRemoteUpdate.current = true;
+        setChats(data);
+      }
     });
 
     socket.on(`config:updated:${username}`, (updatedConfig) => {
@@ -673,7 +740,13 @@ If the user asks you to write code, you should provide it in a markdown code blo
         setModels(fetchedModels);
         
         if (fetchedModels.length > 0 && !selectedModel) {
-          setSelectedModel(fetchedModels[0].name);
+          // Prioritize non-image models for initial selection
+          const chatModel = fetchedModels.find((m: any) => 
+            !m.name.toLowerCase().includes('flux') && 
+            !m.name.toLowerCase().includes('stable-diffusion') &&
+            !m.name.toLowerCase().includes('sdxl')
+          );
+          setSelectedModel(chatModel ? chatModel.name : fetchedModels[0].name);
         }
         
         setConnectionStatus('connected');
@@ -834,7 +907,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     
     // Inherit prompt from last chat if exists
     let inheritedPrompt = systemPrompt;
-    if (chats.length > 0) {
+    if (Array.isArray(chats) && chats.length > 0) {
       const lastChat = chats[0]; // Assuming chats are sorted by date desc
       const lastMessages = lastChat.messages.slice(-4);
       if (lastMessages.length > 0) {
@@ -904,7 +977,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       });
       
       if (response.ok) {
-        setChats(chats.filter(c => c.id !== id));
+        setChats(Array.isArray(chats) ? chats.filter(c => c.id !== id) : []);
         if (activeChatId === id) {
           setActiveChatId(null);
         }
@@ -1010,7 +1083,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       });
     }
 
-    const currentChat = chats.find(c => c.id === currentChatId);
+    const currentChat = Array.isArray(chats) ? chats.find(c => c.id === currentChatId) : undefined;
 
     // Create new abort controller for this chat
     chatAbortController.current = new AbortController();
@@ -1029,7 +1102,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
           systemPrompt: currentChat?.systemPrompt || systemPrompt,
           parameters: currentChat?.parameters || globalParameters,
           messages: [
-            ...(chats.find(c => c.id === currentChatId)?.messages || []).map(m => ({ role: m.role, content: m.content, images: m.images })),
+            ...(Array.isArray(chats) ? (chats.find(c => c.id === currentChatId)?.messages || []) : []).map(m => ({ role: m.role, content: m.content, images: m.images })),
             { role: 'user', content: messageContent, images: image ? [image.split(',')[1]] : undefined }
           ],
         }),

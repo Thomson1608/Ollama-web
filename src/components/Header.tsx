@@ -97,7 +97,11 @@ export const Header: React.FC<HeaderProps> = ({
                 ) : (
                   <>
                     <optgroup label="Local Models (Ollama)">
-                      {models.map(m => {
+                      {models.filter(m => 
+                        !m.name.toLowerCase().includes('flux') && 
+                        !m.name.toLowerCase().includes('stable-diffusion') &&
+                        !m.name.toLowerCase().includes('sdxl')
+                      ).map(m => {
                         const isRunning = runningModels.some(rm => rm.name === m.name || rm.model === m.name);
                         return (
                           <option key={m.name} value={m.name}>

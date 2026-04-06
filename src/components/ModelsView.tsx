@@ -140,6 +140,17 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
                     <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-[10px] font-medium uppercase">
                       {model.details.quantization_level || 'Unknown'}
                     </span>
+                    {(!model.name.toLowerCase().includes('flux') && 
+                      !model.name.toLowerCase().includes('stable-diffusion') &&
+                      !model.name.toLowerCase().includes('sdxl')) ? (
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-bold uppercase">
+                        Chat Support
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-orange-50 text-orange-600 rounded text-[10px] font-bold uppercase">
+                        Image Model
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between text-xs text-gray-400 pt-4 border-t border-gray-50">
                     <span>{formatSize(model.size)}</span>
