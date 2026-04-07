@@ -18,8 +18,8 @@ import { ProjectInitView } from './components/ProjectInitView';
 import { ProjectListView } from './components/ProjectListView';
 import { 
   Panel, 
-  PanelGroup, 
-  PanelResizeHandle 
+  Group, 
+  Separator 
 } from 'react-resizable-panels';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
 import { cn } from './lib/utils';
@@ -1389,7 +1389,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
             )}
 
             {(currentView === 'chat' || currentView === 'workspace') && projectId ? (
-              <PanelGroup direction="horizontal" className="flex h-full w-full overflow-hidden">
+              <Group orientation="horizontal" className="flex h-full w-full overflow-hidden">
                 {/* Left Panel: Chat */}
                 <Panel 
                   defaultSize={isMobile ? 100 : 30} 
@@ -1418,9 +1418,9 @@ If the user asks you to write code, you should provide it in a markdown code blo
                 </Panel>
 
                 {!isMobile && (
-                  <PanelResizeHandle className="w-1.5 bg-bg-primary hover:bg-accent-primary/20 transition-colors cursor-col-resize flex items-center justify-center group border-x border-border-primary">
+                  <Separator className="w-1.5 bg-bg-primary hover:bg-accent-primary/20 transition-colors cursor-col-resize flex items-center justify-center group border-x border-border-primary">
                     <div className="w-[1px] h-8 bg-border-primary group-hover:bg-accent-primary transition-colors" />
-                  </PanelResizeHandle>
+                  </Separator>
                 )}
 
                 {/* Right Panel: Workspace */}
@@ -1441,7 +1441,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     onInstallDependencies={handleInstallDependencies}
                   />
                 </Panel>
-              </PanelGroup>
+              </Group>
             ) : (
               <>
                 {currentView === 'chat' && (

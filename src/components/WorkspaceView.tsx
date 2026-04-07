@@ -5,7 +5,7 @@ import { WorkspaceFile } from '../types';
 import { toast } from 'sonner';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { cn } from '../lib/utils';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { Panel, Group, Separator } from 'react-resizable-panels';
 
 import { Socket } from 'socket.io-client';
 
@@ -369,7 +369,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
 
       <div className="flex flex-1 overflow-hidden relative">
         {viewMode === 'code' ? (
-          <PanelGroup direction="horizontal" className="h-full w-full">
+          <Group orientation="horizontal" className="h-full w-full">
             {/* File List Panel */}
             <Panel 
               defaultSize={20} 
@@ -436,9 +436,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
             </Panel>
 
             {isFileListVisible && (
-              <PanelResizeHandle className="w-1.5 bg-bg-primary hover:bg-accent-primary/20 transition-colors cursor-col-resize flex items-center justify-center group border-x border-border-primary">
+              <Separator className="w-1.5 bg-bg-primary hover:bg-accent-primary/20 transition-colors cursor-col-resize flex items-center justify-center group border-x border-border-primary">
                 <div className="w-[1px] h-8 bg-border-primary group-hover:bg-accent-primary transition-colors" />
-              </PanelResizeHandle>
+              </Separator>
             )}
 
             {/* File Editor Panel */}
@@ -486,7 +486,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                 </div>
               )}
             </Panel>
-          </PanelGroup>
+          </Group>
         ) : viewMode === 'web' ? (
           <div className="flex-1 flex flex-col bg-bg-primary min-w-0">
             <div className="flex-1 p-4 overflow-hidden flex flex-col gap-4 relative">
