@@ -102,7 +102,7 @@ export const SystemLogView: React.FC = () => {
             <select 
               value={filterType} 
               onChange={(e) => setFilterType(e.target.value)}
-              className="bg-transparent text-sm text-text-primary focus:outline-none"
+              className="bg-transparent text-sm text-text-primary focus:outline-none [&>option]:bg-bg-primary"
             >
               <option value="all">All Types</option>
               <option value="DEBUG">Debug</option>
@@ -116,7 +116,7 @@ export const SystemLogView: React.FC = () => {
             <select 
               value={filterTag} 
               onChange={(e) => setFilterTag(e.target.value)}
-              className="bg-transparent text-sm text-text-primary focus:outline-none"
+              className="bg-transparent text-sm text-text-primary focus:outline-none [&>option]:bg-bg-primary"
             >
               <option value="all">All Tags</option>
               <option value="SYSTEM">System</option>

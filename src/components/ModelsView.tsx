@@ -51,7 +51,7 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
   const cloudLocalModels = models.filter(m => m.name.includes(':cloud') && m.name.toLowerCase().includes(modelSearchQuery.toLowerCase()));
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
+    <div className="p-4 md:p-6 space-y-6">
       {/* Filter Tabs */}
       <div className="flex p-1 bg-bg-secondary border border-border-primary rounded-2xl w-fit">
         <button

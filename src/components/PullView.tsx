@@ -40,9 +40,9 @@ export const PullView: React.FC<PullViewProps> = ({
   const filteredModels = popularModels.filter(m => m.type === modelFilter);
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
+    <div className="p-4 md:p-6 space-y-6">
       {/* Filter Tabs */}
-      <div className="flex p-1 bg-bg-secondary rounded-2xl w-fit mx-auto border border-border-primary">
+      <div className="flex p-1 bg-bg-secondary rounded-2xl w-fit border border-border-primary">
         <button
           onClick={() => setModelFilter('local')}
           className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${
