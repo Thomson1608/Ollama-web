@@ -918,22 +918,64 @@ async function startServer() {
     }
   });
 
+  // API: Get user role
+  app.get('/api/user/role', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    try {
+      const user = await dbService.getUser(username);
+      res.json({ role: user?.role || 'user' });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get user role' });
+    }
+  });
   // API: Get system stats (CPU, Memory, Disk, Swap)
   app.get('/api/system/stats', async (req, res) => {
     try {
-      const [cpu, mem, fsSize] = await Promise.all([
+      const [cpu, mem, fsSize, freeOutput] = await Promise.all([
         si.currentLoad(),
         si.mem(),
-        si.fsSize()
+        si.fsSize(),
+        execAsync('free -b').then(r => r.stdout).catch(() => '')
       ]);
+
+      let swapTotal = mem.swaptotal;
+      let swapUsed = mem.swapused;
+      let swapFree = mem.swapfree;
+
+      // Try to get more accurate swap info from free command or /proc/meminfo
+      if (freeOutput) {
+        const lines = freeOutput.trim().split('\n');
+        const swapLine = lines.find(l => l.startsWith('Swap:'));
+        if (swapLine) {
+          const parts = swapLine.split(/\s+/);
+          swapTotal = parseInt(parts[1]);
+          swapUsed = parseInt(parts[2]);
+          swapFree = parseInt(parts[3]);
+        }
+      } else {
+        // Fallback to /proc/meminfo if free is not available
+        try {
+          const meminfo = await execAsync('cat /proc/meminfo').then(r => r.stdout);
+          const totalMatch = meminfo.match(/SwapTotal:\s+(\d+)\s+kB/);
+          const freeMatch = meminfo.match(/SwapFree:\s+(\d+)\s+kB/);
+          if (totalMatch && freeMatch) {
+            swapTotal = parseInt(totalMatch[1]) * 1024;
+            swapFree = parseInt(freeMatch[1]) * 1024;
+            swapUsed = swapTotal - swapFree;
+          }
+        } catch (e) {
+          // Keep si.mem values if both fail
+        }
+      }
+
       res.json({ 
         cpu, 
         mem: {
           ...mem,
-          // Ensure swap info is explicitly included if needed by frontend
-          swapTotal: mem.swaptotal,
-          swapUsed: mem.swapused,
-          swapFree: mem.swapfree
+          swapTotal,
+          swapUsed,
+          swapFree
         }, 
         fsSize 
       });
@@ -987,13 +1029,13 @@ async function startServer() {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
-      const isUserAdmin = await isAdmin(username);
-      if (!isUserAdmin) return res.status(403).json({ error: 'Admin privileges required' });
-
+      // Allow all authenticated users to read swap config for monitoring
       const [swappiness, swapDevices] = await Promise.all([
         execAsync('cat /proc/sys/vm/swappiness').then(r => parseInt(r.stdout.trim())).catch(() => 60),
         execAsync('swapon --show --bytes --noheadings').then(r => {
-          return r.stdout.trim().split('\n').filter(l => l).map(line => {
+          const lines = r.stdout.trim().split('\n').filter(l => l);
+          if (lines.length === 0) throw new Error('No swap devices from swapon');
+          return lines.map(line => {
             const parts = line.split(/\s+/);
             return {
               name: parts[0],
@@ -1003,7 +1045,25 @@ async function startServer() {
               priority: parseInt(parts[4])
             };
           });
-        }).catch(() => [])
+        }).catch(async () => {
+          // Fallback to /proc/swaps
+          try {
+            const swaps = await execAsync('cat /proc/swaps').then(r => r.stdout);
+            const lines = swaps.trim().split('\n').slice(1); // Skip header
+            return lines.map(line => {
+              const parts = line.split(/\s+/);
+              return {
+                name: parts[0],
+                type: parts[1],
+                size: parseInt(parts[2]) * 1024, // KB to Bytes
+                used: parseInt(parts[3]) * 1024, // KB to Bytes
+                priority: parseInt(parts[4])
+              };
+            });
+          } catch (e) {
+            return [];
+          }
+        })
       ]);
 
       res.json({ swappiness, swapDevices });

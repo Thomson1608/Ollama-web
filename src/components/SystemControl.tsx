@@ -182,6 +182,7 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
   };
 
   const [isFixingPermissions, setIsFixingPermissions] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
 
   const fixPermissions = async () => {
     setIsFixingPermissions(true);
@@ -203,10 +204,27 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
   const fetchStats = async () => {
     try {
       const res = await fetch('/api/system/stats');
-      const data = await res.json();
-      setStats(data);
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
     } catch (e) {
       console.error('Failed to fetch stats', e);
+    }
+  };
+
+  const checkAdmin = async () => {
+    if (!username) return;
+    try {
+      const res = await fetch('/api/user/role', {
+        headers: { 'x-username': username }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setIsAdminUser(data.role === 'admin');
+      }
+    } catch (e) {
+      console.error('Failed to check admin status', e);
     }
   };
 
@@ -249,7 +267,7 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      await Promise.all([fetchStats(), fetchProcesses(), fetchServices(), fetchCurrentUser(), fetchSwapConfig()]);
+      await Promise.all([fetchStats(), fetchProcesses(), fetchServices(), fetchCurrentUser(), fetchSwapConfig(), checkAdmin()]);
       setLoading(false);
     };
     init();
@@ -438,17 +456,29 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
           ))}
         </div>
 
-        <button 
-          onClick={fixPermissions}
-          disabled={isFixingPermissions}
-          className={cn(
-            "flex items-center justify-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-xl transition-all text-xs font-bold border border-amber-200 shadow-sm",
-            isFixingPermissions && "opacity-50 cursor-not-allowed"
-          )}
-        >
-          {isFixingPermissions ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
-          {isFixingPermissions ? 'Fixing...' : 'Fix Workspace Permissions'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              fetchStats();
+              if (activeSection === 'swap') fetchSwapConfig();
+            }}
+            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+            title="Refresh Stats"
+          >
+            <RotateCcw size={16} />
+          </button>
+          <button 
+            onClick={fixPermissions}
+            disabled={isFixingPermissions}
+            className={cn(
+              "flex items-center justify-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-xl transition-all text-xs font-bold border border-amber-200 shadow-sm",
+              isFixingPermissions && "opacity-50 cursor-not-allowed"
+            )}
+          >
+            {isFixingPermissions ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
+            {isFixingPermissions ? 'Fixing...' : 'Fix Workspace Permissions'}
+          </button>
+        </div>
       </div>
 
       {activeSection === 'monitor' && stats && (
@@ -720,10 +750,10 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
               </div>
               <button
                 onClick={updateSwappiness}
-                disabled={isUpdatingSwap || newSwappiness === swapConfig?.swappiness}
+                disabled={isUpdatingSwap || newSwappiness === swapConfig?.swappiness || !isAdminUser}
                 className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-sm"
               >
-                {isUpdatingSwap ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Apply Swappiness'}
+                {isUpdatingSwap ? <Loader2 size={14} className="animate-spin mx-auto" /> : isAdminUser ? 'Apply Swappiness' : 'Admin Only'}
               </button>
             </div>
 
@@ -758,10 +788,10 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
                 </div>
                 <button
                   onClick={setupSwapFile}
-                  disabled={isUpdatingSwap}
+                  disabled={isUpdatingSwap || !isAdminUser}
                   className="w-full py-2.5 bg-orange-500 text-white rounded-xl text-xs font-bold hover:bg-orange-600 transition-all disabled:opacity-50 shadow-sm"
                 >
-                  {isUpdatingSwap ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Create & Enable Swap'}
+                  {isUpdatingSwap ? <Loader2 size={14} className="animate-spin mx-auto" /> : isAdminUser ? 'Create & Enable Swap' : 'Admin Only'}
                 </button>
               </div>
             </div>
@@ -802,7 +832,7 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
                       </td>
                       <td className="px-4 py-3 text-gray-500">{dev.priority}</td>
                       <td className="px-4 py-3 text-right">
-                        {dev.name.includes('swapfile') && (
+                        {dev.name.includes('swapfile') && isAdminUser && (
                           <button
                             onClick={() => removeSwapFile(dev.name)}
                             className="text-red-500 hover:text-red-700 font-bold text-[10px] uppercase tracking-wider"
@@ -810,6 +840,7 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
                             Remove
                           </button>
                         )}
+                        {!isAdminUser && <span className="text-gray-400 italic">View Only</span>}
                       </td>
                     </tr>
                   ))}
