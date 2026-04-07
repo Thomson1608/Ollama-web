@@ -341,8 +341,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
         </div>
 
         {/* URL Bar Style */}
-        <div className="flex-1 max-w-xl mx-4">
-          <div className="flex items-center gap-2 bg-bg-tertiary border border-border-primary rounded-lg px-3 py-1.5 text-text-secondary">
+        <div className="flex-1 max-w-xl mx-4 flex items-center gap-2">
+          <button 
+            onClick={runWorkspace}
+            disabled={isLoading}
+            className="px-3 py-1.5 bg-accent-primary text-white text-xs font-medium rounded-lg hover:bg-accent-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            <Play size={14} />
+            {isLoading ? 'Starting...' : 'Run Server'}
+          </button>
+          <div className="flex-1 flex items-center gap-2 bg-bg-tertiary border border-border-primary rounded-lg px-3 py-1.5 text-text-secondary">
             <Globe size={14} />
             <div className="flex-1 text-xs truncate font-mono">
               {viewMode === 'web' ? (previewType === 'node' ? '/' : (selectedFile?.endsWith('.html') ? `/${selectedFile}` : '/index.html')) : (selectedFile || 'No file selected')}
