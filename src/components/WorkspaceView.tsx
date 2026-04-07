@@ -1,5 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code, ChevronRight, ChevronDown, History, ArrowLeft, X, Globe, Settings2 } from 'lucide-react';
+import { 
+  Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code, 
+  ChevronRight, ChevronDown, History, ArrowLeft, X, Globe, Settings2,
+  Maximize2, Minimize2, Smartphone, Tablet, Monitor
+} from 'lucide-react';
 import { motion } from 'motion/react';
 import { WorkspaceFile } from '../types';
 import { toast } from 'sonner';
@@ -37,12 +41,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [isConsoleOpen, setIsConsoleOpen] = useState(true);
   const [isFileListVisible, setIsFileListVisible] = useState(!isMobile);
+  const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('desktop');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // History state
   const [history, setHistory] = useState<any[]>([]);
   const [selectedCommit, setSelectedCommit] = useState<string | null>(null);
   const [commitDetails, setCommitDetails] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [availableScripts, setAvailableScripts] = useState<Record<string, string>>({});
+  const [selectedScript, setSelectedScript] = useState<string>('dev');
 
   const checkPackageJson = async () => {
     if (!username || !projectId) return;
@@ -159,8 +167,30 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
     }
   }, [viewMode]);
 
+  const fetchScripts = async () => {
+    if (!username || !projectId) return;
+    try {
+      const res = await fetch(`/api/workspace/scripts?projectId=${projectId}`, {
+        headers: { 'x-username': username }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableScripts(data.scripts);
+        // Set default script if 'dev' exists, otherwise first available
+        if (data.scripts.dev) {
+          setSelectedScript('dev');
+        } else if (Object.keys(data.scripts).length > 0) {
+          setSelectedScript(Object.keys(data.scripts)[0]);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch scripts', e);
+    }
+  };
+
   useEffect(() => {
     fetchFiles();
+    fetchScripts();
     if (selectedFile && !isEditing && !selectedIsDirectory && username && projectId) {
       // Fetch content without resetting preview mode
       fetch(`/api/workspace/read?name=${encodeURIComponent(selectedFile)}&projectId=${projectId}`, {
@@ -200,7 +230,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
     try {
       const res = await fetch(`/api/workspace/run?projectId=${projectId}`, { 
         method: 'POST',
-        headers: { 'x-username': username }
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username 
+        },
+        body: JSON.stringify({ script: selectedScript })
       });
       if (res.ok) {
         const data = await res.json();
@@ -346,14 +380,29 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
 
         {/* URL Bar Style */}
         <div className="flex-1 max-w-xl mx-4 flex items-center gap-2">
-          <button 
-            onClick={runWorkspace}
-            disabled={isLoading}
-            className="px-3 py-1.5 bg-accent-primary text-white text-xs font-medium rounded-lg hover:bg-accent-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
-          >
-            <Play size={14} />
-            {isLoading ? 'Starting...' : 'Run Server'}
-          </button>
+          <div className="flex items-center bg-bg-tertiary rounded-lg border border-border-primary overflow-hidden">
+            <select 
+              value={selectedScript}
+              onChange={(e) => setSelectedScript(e.target.value)}
+              className="bg-transparent text-[10px] font-bold text-text-secondary px-2 py-1.5 outline-none border-r border-border-primary hover:text-text-primary transition-colors cursor-pointer"
+            >
+              {Object.keys(availableScripts).length > 0 ? (
+                Object.keys(availableScripts).map(s => (
+                  <option key={s} value={s} className="bg-bg-secondary text-text-primary">{s}</option>
+                ))
+              ) : (
+                <option value="dev" className="bg-bg-secondary text-text-primary">dev</option>
+              )}
+            </select>
+            <button 
+              onClick={runWorkspace}
+              disabled={isLoading}
+              className="px-3 py-1.5 bg-accent-primary text-white text-[10px] font-bold hover:bg-accent-primary/90 transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <Play size={12} fill="currentColor" />
+              {isLoading ? 'Starting...' : 'Run'}
+            </button>
+          </div>
           <div className="flex-1 flex items-center gap-2 bg-bg-tertiary border border-border-primary rounded-lg px-3 py-1.5 text-text-secondary">
             <Globe size={14} />
             <div className="flex-1 text-xs truncate font-mono">
@@ -511,22 +560,73 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
             </Panel>
           </Group>
         ) : viewMode === 'web' ? (
-          <div className="flex-1 flex flex-col bg-bg-primary min-w-0">
-            <div className="flex-1 p-0 overflow-hidden flex flex-col relative">
-              <div className={cn(
-                "flex-1 bg-white border border-border-primary overflow-hidden",
-                isConsoleOpen ? "rounded-t-xl border-b-0" : "rounded-xl"
-              )}>
-                <iframe 
-                  key={previewKey}
-                  src={previewType === 'node' ? `/workspace-preview/${username}/?t=${previewKey}` : (selectedFile?.endsWith('.html') ? `/preview/${username}/${projectId}/${selectedFile.split('/').map(encodeURIComponent).join('/')}?t=${previewKey}` : `/preview/${username}/${projectId}/index.html?t=${previewKey}`)} 
-                  className="w-full h-full border-none"
-                  title="Web Preview"
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                />
+          <div className={cn(
+            "flex-1 flex flex-col bg-bg-primary min-w-0 transition-all duration-300",
+            isFullscreen ? "fixed inset-0 z-[100] p-4 bg-black/40 backdrop-blur-sm" : "relative"
+          )}>
+            <div className={cn(
+              "flex-1 p-0 overflow-hidden flex flex-col relative",
+              isFullscreen && "bg-bg-primary rounded-2xl shadow-2xl max-w-6xl mx-auto w-full"
+            )}>
+              {/* Preview Toolbar */}
+              <div className="px-4 py-2 bg-bg-secondary border-b border-border-primary flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-4">
+                  <div className="flex bg-bg-tertiary p-0.5 rounded-lg">
+                    {[
+                      { id: 'mobile', label: 'Mobile', icon: Smartphone },
+                      { id: 'tablet', label: 'Tablet', icon: Tablet },
+                      { id: 'desktop', label: 'Desktop', icon: Monitor }
+                    ].map(device => (
+                      <button
+                        key={device.id}
+                        onClick={() => setPreviewDevice(device.id as any)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-[10px] font-bold transition-all flex items-center gap-1.5",
+                          previewDevice === device.id ? "bg-bg-primary text-accent-primary shadow-sm" : "text-text-secondary hover:text-text-primary"
+                        )}
+                        title={device.label}
+                      >
+                        <device.icon size={12} />
+                        <span className="hidden md:inline">{device.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setIsFullscreen(!isFullscreen)}
+                    className="p-1.5 text-text-secondary hover:text-text-primary transition-colors bg-bg-tertiary rounded-lg border border-border-primary"
+                    title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+                  >
+                    {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 bg-bg-tertiary flex items-center justify-center overflow-hidden p-4">
+                <div 
+                  className={cn(
+                    "bg-white border border-border-primary overflow-hidden transition-all duration-500 shadow-2xl",
+                    isConsoleOpen && !isFullscreen ? "rounded-t-xl border-b-0" : "rounded-xl"
+                  )}
+                  style={{ 
+                    width: previewDevice === 'mobile' ? '375px' : previewDevice === 'tablet' ? '768px' : '100%',
+                    height: '100%',
+                    maxWidth: '100%'
+                  }}
+                >
+                  <iframe 
+                    key={previewKey}
+                    src={previewType === 'node' ? `/workspace-preview/${username}/?t=${previewKey}` : (selectedFile?.endsWith('.html') ? `/preview/${username}/${projectId}/${selectedFile.split('/').map(encodeURIComponent).join('/')}?t=${previewKey}` : `/preview/${username}/${projectId}/index.html?t=${previewKey}`)} 
+                    className="w-full h-full border-none"
+                    title="Web Preview"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  />
+                </div>
               </div>
               
-              {isConsoleOpen && (
+              {isConsoleOpen && !isFullscreen && (
                 <div className="h-40 bg-bg-secondary border border-border-primary rounded-b-xl overflow-hidden flex flex-col shrink-0 shadow-xl">
                   <div className="px-4 py-2 bg-bg-tertiary border-b border-border-primary flex items-center justify-between">
                     <span className="text-[10px] font-mono text-text-secondary uppercase tracking-widest">Terminal</span>

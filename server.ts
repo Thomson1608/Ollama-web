@@ -10,6 +10,7 @@ import { spawn, ChildProcess, exec } from 'child_process';
 import treeKill from 'tree-kill';
 import { promisify } from 'util';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import waitOn from 'wait-on';
 import { simpleGit, SimpleGit } from 'simple-git';
 import si from 'systeminformation';
 import { initializeApp } from 'firebase/app';
@@ -1641,14 +1642,34 @@ async function startServer() {
     }
   }
 
+  app.get('/api/workspace/scripts', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
+    if (!username || !projectId) return res.status(400).json({ error: 'Username and ProjectId required' });
+    try {
+      const paths = getUserPaths(username, projectId);
+      const packageJsonPath = path.join(paths.workspace, 'package.json');
+      if (await fileExists(packageJsonPath)) {
+        const pkgContent = await fs.readFile(packageJsonPath, 'utf-8');
+        const pkg = JSON.parse(pkgContent);
+        res.json({ scripts: pkg.scripts || {} });
+      } else {
+        res.json({ scripts: {} });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to get scripts' });
+    }
+  });
+
   app.post('/api/workspace/run', async (req, res) => {
     const username = req.headers['x-username'] as string;
     const projectId = req.query.projectId as string;
+    const { script } = req.body; // Allow specifying a script
     if (!username) return res.status(400).json({ error: 'Username header required' });
     if (!projectId) return res.status(400).json({ error: 'ProjectId required' });
     try {
       const paths = getUserPaths(username, projectId);
-      logger.debug(`API: Running workspace for ${username} in project ${projectId}...`);
+      logger.debug(`API: Running workspace for ${username} in project ${projectId} with script ${script || 'default'}...`);
       
       // Kill existing process for this user
       killWorkspaceProcess(username);
@@ -1659,28 +1680,37 @@ async function startServer() {
         
         // User wants port 3001 specifically
         let port = 3001;
-        // If it's a multi-user environment, we might want to stick to WORKSPACE_PORTS
-        // but the user explicitly asked for 3001.
-        // Let's try to free up 3001.
         await killPort(port);
         WORKSPACE_PORTS.set(username, port);
 
         const pkgContent = await fs.readFile(packageJsonPath, 'utf-8');
         const pkg = JSON.parse(pkgContent);
-        let startCmd = 'npm run dev';
         
-        // Check if it's a Vite app
+        let startCmd = '';
         const isVite = (pkg.dependencies?.vite || pkg.devDependencies?.vite);
-        
-        if (pkg.scripts?.dev) {
-          // Force port 3001 and strictPort
-          startCmd = `npm run dev -- --port ${port} --strictPort`;
-          // If Vite, add base path to fix asset loading issues in proxy
-          if (isVite) {
-            startCmd += ` --base /workspace-preview/${username}/`;
+
+        if (script && pkg.scripts?.[script]) {
+          // Use the requested script
+          startCmd = `npm run ${script}`;
+          // If it's a dev/start script, try to inject port
+          if (script === 'dev' || script === 'start') {
+             startCmd += ` -- --port ${port} --strictPort`;
+             if (isVite) {
+               startCmd += ` --base /workspace-preview/${username}/`;
+             }
           }
-        } else if (pkg.scripts?.start) {
-          startCmd = `npm start`;
+        } else {
+          // Default logic
+          if (pkg.scripts?.dev) {
+            startCmd = `npm run dev -- --port ${port} --strictPort`;
+            if (isVite) {
+              startCmd += ` --base /workspace-preview/${username}/`;
+            }
+          } else if (pkg.scripts?.start) {
+            startCmd = `npm start`;
+          } else {
+            startCmd = 'npm run dev';
+          }
         }
 
         // Always try to install if node_modules is missing or package.json is newer
@@ -1735,7 +1765,22 @@ async function startServer() {
           workspaceProcesses.delete(username);
         });
 
-        res.json({ success: true, type: 'node', port });
+        // Wait for the port to be ready before returning
+        try {
+          logger.debug(`Workspace: Waiting for port ${port} to be ready...`);
+          await waitOn({
+            resources: [`http://localhost:${port}`],
+            timeout: 60000, // 1 minute timeout
+            interval: 500,
+            validateStatus: (status) => status >= 200 && status < 500
+          });
+          logger.release(`Workspace: Port ${port} is ready for ${username}`);
+          res.json({ success: true, type: 'node', port });
+        } catch (waitError) {
+          logger.error(`Workspace: Port ${port} failed to become ready for ${username}`, waitError);
+          // Still return success, but the user might see the error in the iframe
+          res.json({ success: true, type: 'node', port, warning: 'Port not ready yet' });
+        }
       } else {
         res.json({ success: true, type: 'static' });
       }
