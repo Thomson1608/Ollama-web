@@ -153,6 +153,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
   const [newModelName, setNewModelName] = useState('');
   const [modelSearchQuery, setModelSearchQuery] = useState('');
+  const [isStoppingModel, setIsStoppingModel] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
@@ -776,6 +777,43 @@ If the user asks you to write code, you should provide it in a markdown code blo
     }
   };
 
+  const stopModel = async (name: string) => {
+    setIsStoppingModel(name);
+    try {
+      const response = await fetch('/api/ollama/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: name }),
+      });
+
+      if (response.ok) {
+        toast.success(`Model ${name} stopped`);
+        await fetchRunningModels();
+      } else {
+        throw new Error('Failed to stop model');
+      }
+    } catch (error) {
+      toast.error(`Error stopping model ${name}`);
+    } finally {
+      setIsStoppingModel(null);
+    }
+  };
+
+  const handleSelectModel = async (name: string) => {
+    // If there are running models, stop them first
+    if (runningModels.length > 0) {
+      const runningModel = runningModels[0]; // Assuming only one should be running
+      if (runningModel.name !== name) {
+        toast.info(`Stopping ${runningModel.name} before starting ${name}...`);
+        await stopModel(runningModel.name);
+      }
+    }
+    
+    setSelectedModel(name);
+    setCurrentView('chat');
+    if (!activeChatId) createNewChat();
+  };
+
   useEffect(() => {
     if (newModelName.trim().length > 0) {
       const filtered = allOllamaModels
@@ -1363,7 +1401,9 @@ If the user asks you to write code, you should provide it in a markdown code blo
                   modelSearchQuery={modelSearchQuery}
                   setModelSearchQuery={setModelSearchQuery}
                   deleteModel={deleteModel}
-                  setSelectedModel={setSelectedModel}
+                  stopModel={stopModel}
+                  isStoppingModel={isStoppingModel}
+                  setSelectedModel={handleSelectModel}
                   setCurrentView={setCurrentView}
                   activeChatId={activeChatId}
                   createNewChat={createNewChat}

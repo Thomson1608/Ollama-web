@@ -3,7 +3,9 @@ import {
   Cpu, 
   Trash2, 
   Search,
-  Globe
+  Globe,
+  Square,
+  Loader2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { OllamaModel, RunningModel, ConnectionStatus } from '../types';
@@ -15,6 +17,8 @@ interface ModelsViewProps {
   modelSearchQuery: string;
   setModelSearchQuery: (query: string) => void;
   deleteModel: (name: string) => void;
+  stopModel: (name: string) => void;
+  isStoppingModel: string | null;
   setSelectedModel: (model: string) => void;
   setCurrentView: (view: 'chat' | 'models' | 'pull') => void;
   activeChatId: string | null;
@@ -32,6 +36,8 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
   modelSearchQuery,
   setModelSearchQuery,
   deleteModel,
+  stopModel,
+  isStoppingModel,
   setSelectedModel,
   setCurrentView,
   activeChatId,
@@ -107,6 +113,8 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
             )}
             {localModels.map(model => {
               const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
+              const isStopping = isStoppingModel === model.name;
+
               return (
                 <div key={model.digest} className={cn(
                   "bg-white p-5 rounded-3xl border transition-all group relative",
@@ -115,7 +123,7 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
                   {isRunning && (
                     <div className="absolute top-4 right-12 flex items-center gap-1.5 bg-green-100 text-green-700 px-2 py-1 rounded-full text-[10px] font-bold animate-pulse">
                       <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                      RUNNING
+                      {isStopping ? 'STOPPING...' : 'RUNNING'}
                     </div>
                   )}
                   <div className="flex items-start justify-between mb-4">
@@ -125,12 +133,25 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
                     )}>
                       <Cpu size={20} />
                     </div>
-                    <button 
-                      onClick={() => deleteModel(model.name)}
-                      className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex gap-1">
+                      {isRunning && (
+                        <button 
+                          onClick={() => stopModel(model.name)}
+                          disabled={isStopping}
+                          className="p-2 hover:bg-orange-50 text-gray-300 hover:text-orange-500 rounded-lg transition-colors disabled:opacity-50"
+                          title="Stop Model"
+                        >
+                          {isStopping ? <Loader2 size={16} className="animate-spin" /> : <Square size={16} />}
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => deleteModel(model.name)}
+                        className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
+                        title="Delete Model"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                   <h3 className="font-bold text-gray-800 mb-1 truncate pr-16" title={model.name}>{model.name}</h3>
                   <div className="flex flex-wrap gap-2 mb-4">
@@ -157,14 +178,16 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
                     <span>{new Date(model.modified_at).toLocaleDateString()}</span>
                   </div>
                   <button 
-                    onClick={() => {
-                      setSelectedModel(model.name);
-                      setCurrentView('chat');
-                      if (!activeChatId) createNewChat();
-                    }}
-                    className="w-full mt-4 py-2 bg-gray-50 hover:bg-blue-50 text-gray-600 hover:text-blue-600 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-blue-100"
+                    onClick={() => setSelectedModel(model.name)}
+                    disabled={isStopping || (isRunning && isStoppingModel !== null)}
+                    className={cn(
+                      "w-full mt-4 py-2 rounded-xl text-xs font-bold transition-all border",
+                      isRunning 
+                        ? "bg-green-50 text-green-600 border-green-100 hover:bg-green-100" 
+                        : "bg-gray-50 hover:bg-blue-50 text-gray-600 hover:text-blue-600 border-transparent hover:border-blue-100"
+                    )}
                   >
-                    Select for Chat
+                    {isRunning ? 'Currently Active' : 'Select for Chat'}
                   </button>
                 </div>
               );
@@ -179,6 +202,8 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
             )}
             {cloudLocalModels.map(model => {
               const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
+              const isStopping = isStoppingModel === model.name;
+
               return (
                 <div key={model.digest} className={cn(
                   "bg-white p-5 rounded-3xl border transition-all group relative",
@@ -187,7 +212,7 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
                   {isRunning && (
                     <div className="absolute top-4 right-12 flex items-center gap-1.5 bg-green-100 text-green-700 px-2 py-1 rounded-full text-[10px] font-bold animate-pulse">
                       <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                      RUNNING
+                      {isStopping ? 'STOPPING...' : 'RUNNING'}
                     </div>
                   )}
                   <div className="flex items-start justify-between mb-4">
@@ -197,12 +222,25 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
                     )}>
                       <Globe size={20} />
                     </div>
-                    <button 
-                      onClick={() => deleteModel(model.name)}
-                      className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex gap-1">
+                      {isRunning && (
+                        <button 
+                          onClick={() => stopModel(model.name)}
+                          disabled={isStopping}
+                          className="p-2 hover:bg-orange-50 text-gray-300 hover:text-orange-500 rounded-lg transition-colors disabled:opacity-50"
+                          title="Stop Model"
+                        >
+                          {isStopping ? <Loader2 size={16} className="animate-spin" /> : <Square size={16} />}
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => deleteModel(model.name)}
+                        className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-colors"
+                        title="Delete Model"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                   <h3 className="font-bold text-gray-800 mb-1 truncate pr-16" title={model.name}>{model.name}</h3>
                   <div className="flex flex-wrap gap-2 mb-4">
@@ -215,14 +253,16 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
                     <span>{new Date(model.modified_at).toLocaleDateString()}</span>
                   </div>
                   <button 
-                    onClick={() => {
-                      setSelectedModel(model.name);
-                      setCurrentView('chat');
-                      if (!activeChatId) createNewChat();
-                    }}
-                    className="w-full mt-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-600 rounded-xl text-xs font-bold transition-all border border-transparent hover:border-purple-200"
+                    onClick={() => setSelectedModel(model.name)}
+                    disabled={isStopping || (isRunning && isStoppingModel !== null)}
+                    className={cn(
+                      "w-full mt-4 py-2 rounded-xl text-xs font-bold transition-all border",
+                      isRunning 
+                        ? "bg-green-50 text-green-600 border-green-100 hover:bg-green-100" 
+                        : "bg-purple-50 hover:bg-purple-100 text-purple-600 border-transparent hover:border-purple-200"
+                    )}
                   >
-                    Select for Chat
+                    {isRunning ? 'Currently Active' : 'Select for Chat'}
                   </button>
                 </div>
               );

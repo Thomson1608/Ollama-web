@@ -1716,6 +1716,30 @@ async function startServer() {
   // --- Ollama Proxy Endpoints ---
 
   // List models
+  app.post('/api/ollama/stop', async (req, res) => {
+    const { model } = req.body;
+    if (!model) return res.status(400).json({ error: 'Model name required' });
+
+    try {
+      logger.release(`Ollama Proxy: Stopping model ${model}`);
+      const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, keep_alive: 0 }),
+      });
+
+      if (response.ok) {
+        res.json({ status: 'success', message: `Model ${model} stopped` });
+      } else {
+        const error = await response.text();
+        res.status(response.status).send(error);
+      }
+    } catch (error) {
+      logger.error(`Ollama Proxy Error: Failed to stop model ${model}`, error);
+      res.status(500).json({ error: 'Failed to stop model' });
+    }
+  });
+
   app.get('/api/ollama/tags', async (req, res) => {
     try {
       logger.debug(`Ollama Proxy: Fetching tags from ${OLLAMA_URL}/api/tags`);
