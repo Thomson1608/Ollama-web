@@ -141,6 +141,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   });
 
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
+  const [workspaceHost, setWorkspaceHost] = useState(() => localStorage.getItem('workspace_host') || 'localhost');
 
   // Update system prompt when username changes
   useEffect(() => {
@@ -603,6 +604,14 @@ If the user asks you to write code, you should provide it in a markdown code blo
           if (data.parameters) {
             setGlobalParameters(data.parameters);
           }
+          if (data.ollamaUrl) {
+            setOllamaUrl(data.ollamaUrl);
+            localStorage.setItem('ollama_url', data.ollamaUrl);
+          }
+          if (data.workspaceHost) {
+            setWorkspaceHost(data.workspaceHost);
+            localStorage.setItem('workspace_host', data.workspaceHost);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch data from backend:', error);
@@ -665,7 +674,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
           body: JSON.stringify({ 
             systemPrompt, 
             parameters: globalParameters,
-            ollamaUrl 
+            ollamaUrl,
+            workspaceHost 
           }),
         });
       } catch (error) {
@@ -675,7 +685,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     
     const timeoutId = setTimeout(syncConfig, 1000);
     return () => clearTimeout(timeoutId);
-  }, [systemPrompt, globalParameters, ollamaUrl, isInitialized, username]);
+  }, [systemPrompt, globalParameters, ollamaUrl, workspaceHost, isInitialized, username]);
 
   useEffect(() => {
     checkConnection();
@@ -1521,6 +1531,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     setParameters={setGlobalParameters}
                     ollamaUrl={ollamaUrl}
                     setOllamaUrl={setOllamaUrl}
+                    workspaceHost={workspaceHost}
+                    setWorkspaceHost={setWorkspaceHost}
                     memory={memory}
                     clearMemory={clearMemory}
                     saveSettings={saveSettings}

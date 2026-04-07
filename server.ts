@@ -363,11 +363,12 @@ async function isAdmin(username: string) {
 }
 
 let OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+let WORKSPACE_HOST = process.env.WORKSPACE_HOST || 'localhost';
 
 // Load initial config for Ollama URL if available
-async function initOllamaUrl() {
+async function initSystemConfig() {
   try {
-    // We'll use a global system config for Ollama URL
+    // We'll use a global system config for Ollama URL and Workspace Host
     const configRef = doc(db, 'system', 'config');
     const configSnap = await getDoc(configRef);
     if (configSnap.exists()) {
@@ -376,12 +377,16 @@ async function initOllamaUrl() {
         OLLAMA_URL = data.ollamaUrl;
         logger.release(`System: Loaded Ollama URL from DB: ${OLLAMA_URL}`);
       }
+      if (data.workspaceHost) {
+        WORKSPACE_HOST = data.workspaceHost;
+        logger.release(`System: Loaded Workspace Host from DB: ${WORKSPACE_HOST}`);
+      }
     }
   } catch (e) {
     logger.error('Failed to load system config', e);
   }
 }
-initOllamaUrl();
+initSystemConfig();
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
 
 
@@ -866,8 +871,8 @@ async function startServer() {
       };
       
       const finalConfig = config || defaultConfig;
-      // Also include the global Ollama URL
-      res.json({ ...finalConfig, ollamaUrl: OLLAMA_URL });
+      // Also include the global Ollama URL and Workspace Host
+      res.json({ ...finalConfig, ollamaUrl: OLLAMA_URL, workspaceHost: WORKSPACE_HOST });
     } catch (error) {
       logger.error('Không thể đọc cấu hình:', error);
       res.status(500).json({ error: 'Không thể đọc cấu hình' });
@@ -881,7 +886,7 @@ async function startServer() {
 
     try {
       const config = req.body;
-      const { systemPrompt, parameters, ollamaUrl } = config;
+      const { systemPrompt, parameters, ollamaUrl, workspaceHost } = config;
       
       await dbService.saveConfig(username, { systemPrompt, parameters });
       
@@ -890,6 +895,13 @@ async function startServer() {
         OLLAMA_URL = ollamaUrl;
         await setDoc(doc(db, 'system', 'config'), { ollamaUrl }, { merge: true });
         logger.release(`System: Updated global Ollama URL to ${OLLAMA_URL} by ${username}`);
+      }
+
+      // Update global Workspace Host if provided and user is admin
+      if (workspaceHost && await isAdmin(username)) {
+        WORKSPACE_HOST = workspaceHost;
+        await setDoc(doc(db, 'system', 'config'), { workspaceHost }, { merge: true });
+        logger.release(`System: Updated global Workspace Host to ${WORKSPACE_HOST} by ${username}`);
       }
       
       io.emit(`config:updated:${username}`, config);
@@ -1790,6 +1802,22 @@ async function startServer() {
     }
   });
 
+  app.post('/api/workspace/run-command', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
+    const { command } = req.body;
+    if (!username || !projectId || !command) return res.status(400).json({ error: 'Missing required fields' });
+    try {
+      const paths = getUserPaths(username, projectId);
+      logger.release(`Workspace: Running command for ${username}: ${command}`);
+      const { stdout, stderr } = await execAsync(command, { cwd: paths.workspace });
+      res.json({ stdout, stderr });
+    } catch (error) {
+      logger.error('Failed to run command', error);
+      res.status(500).json({ error: 'Failed to run command', details: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   app.post('/api/workspace/stop', (req, res) => {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
@@ -1805,7 +1833,7 @@ async function startServer() {
     if (!port) return res.status(404).send('Workspace not running');
     
     createProxyMiddleware({
-      target: `http://localhost:${port}`,
+      target: `http://${WORKSPACE_HOST}:${port}`,
       changeOrigin: true,
       ws: true,
       pathRewrite: {

@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { 
   Folder, File, Trash2, RefreshCw, FileText, Plus, Play, Code, 
   ChevronRight, ChevronDown, History, ArrowLeft, X, Globe, Settings2,
-  Maximize2, Minimize2, Smartphone, Tablet, Monitor
+  Maximize2, Minimize2, Smartphone, Tablet, Monitor, ExternalLink, Eraser,
+  Square, ShieldCheck
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { WorkspaceFile } from '../types';
@@ -260,6 +261,30 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
     }
   };
 
+  const clearCache = async () => {
+    if (!username || !projectId) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa cache (.next, node_modules/.cache)?')) return;
+    
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/api/workspace/run-command?projectId=${projectId}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username 
+        },
+        body: JSON.stringify({ command: 'rm -rf .next node_modules/.cache && chmod -R 755 .' })
+      });
+      if (res.ok) {
+        toast.success('Đã xóa cache thành công');
+      }
+    } catch (error) {
+      toast.error('Không thể xóa cache');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
     return () => {
       stopWorkspace();
@@ -402,6 +427,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
               <Play size={12} fill="currentColor" />
               {isLoading ? 'Starting...' : 'Run'}
             </button>
+            <button 
+              onClick={async () => {
+                await stopWorkspace();
+                toast.info('Server stopped');
+              }}
+              className="px-3 py-1.5 bg-bg-tertiary text-text-secondary text-[10px] font-bold hover:text-red-500 transition-colors border-l border-border-primary"
+              title="Stop Server"
+            >
+              <Square size={12} fill="currentColor" />
+            </button>
           </div>
           <div className="flex-1 flex items-center gap-2 bg-bg-tertiary border border-border-primary rounded-lg px-3 py-1.5 text-text-secondary">
             <Globe size={14} />
@@ -410,10 +445,85 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
             </div>
             <div className="flex items-center gap-2">
               <button 
-                onClick={() => setPreviewKey(prev => prev + 1)}
-                className="hover:text-text-primary transition-colors"
+                onClick={async () => {
+                  setIsLoading(true);
+                  try {
+                    const res = await fetch(`/api/workspace/run-command?projectId=${projectId}`, {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'x-username': username 
+                      },
+                      body: JSON.stringify({ command: 'chmod -R 755 .' })
+                    });
+                    if (res.ok) {
+                      toast.success('Đã sửa quyền file thành công');
+                    }
+                  } catch (error) {
+                    toast.error('Không thể sửa quyền file');
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                className="hover:text-green-500 transition-colors"
+                title="Fix Permissions"
+              >
+                <ShieldCheck size={14} />
+              </button>
+              <button 
+                onClick={async () => {
+                  if (!confirm('Bạn có chắc chắn muốn cài đặt lại dependencies (npm install)?')) return;
+                  setIsLoading(true);
+                  try {
+                    const res = await fetch(`/api/workspace/run-command?projectId=${projectId}`, {
+                      method: 'POST',
+                      headers: { 
+                        'Content-Type': 'application/json',
+                        'x-username': username 
+                      },
+                      body: JSON.stringify({ command: 'rm -rf node_modules package-lock.json && npm install' })
+                    });
+                    if (res.ok) {
+                      toast.success('Đã cài đặt lại dependencies thành công');
+                    }
+                  } catch (error) {
+                    toast.error('Không thể cài đặt lại dependencies');
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                className="hover:text-accent-primary transition-colors"
+                title="Reinstall Dependencies"
               >
                 <RefreshCw size={14} />
+              </button>
+              <button 
+                onClick={clearCache}
+                className="hover:text-red-500 transition-colors"
+                title="Clear Cache (.next)"
+              >
+                <Eraser size={14} />
+              </button>
+              <button 
+                onClick={() => setPreviewKey(prev => prev + 1)}
+                className="hover:text-text-primary transition-colors"
+                title="Reload Preview"
+              >
+                <RefreshCw size={14} />
+              </button>
+              <button 
+                onClick={() => {
+                  const url = previewType === 'node' 
+                    ? `/workspace-preview/${username}/` 
+                    : (selectedFile?.endsWith('.html') 
+                      ? `/preview/${username}/${projectId}/${selectedFile.split('/').map(encodeURIComponent).join('/')}` 
+                      : `/preview/${username}/${projectId}/index.html`);
+                  window.open(url, '_blank');
+                }}
+                className="hover:text-text-primary transition-colors"
+                title="Open in New Tab"
+              >
+                <ExternalLink size={14} />
               </button>
               <button className="hover:text-text-primary transition-colors">
                 <ChevronRight size={14} className="rotate-90" />
@@ -594,6 +704,80 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button 
+                    onClick={async () => {
+                      if (!confirm('Bạn có chắc chắn muốn cài đặt lại dependencies (npm install)?')) return;
+                      setIsLoading(true);
+                      try {
+                        const res = await fetch(`/api/workspace/run-command?projectId=${projectId}`, {
+                          method: 'POST',
+                          headers: { 
+                            'Content-Type': 'application/json',
+                            'x-username': username 
+                          },
+                          body: JSON.stringify({ command: 'rm -rf node_modules package-lock.json && npm install' })
+                        });
+                        if (res.ok) {
+                          toast.success('Đã cài đặt lại dependencies thành công');
+                        }
+                      } catch (error) {
+                        toast.error('Không thể cài đặt lại dependencies');
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="p-1.5 text-text-secondary hover:text-accent-primary transition-colors bg-bg-tertiary rounded-lg border border-border-primary"
+                    title="Reinstall Dependencies"
+                  >
+                    <RefreshCw size={14} />
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      setIsLoading(true);
+                      try {
+                        const res = await fetch(`/api/workspace/run-command?projectId=${projectId}`, {
+                          method: 'POST',
+                          headers: { 
+                            'Content-Type': 'application/json',
+                            'x-username': username 
+                          },
+                          body: JSON.stringify({ command: 'chmod -R 755 .' })
+                        });
+                        if (res.ok) {
+                          toast.success('Đã sửa quyền file thành công');
+                        }
+                      } catch (error) {
+                        toast.error('Không thể sửa quyền file');
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="p-1.5 text-text-secondary hover:text-green-500 transition-colors bg-bg-tertiary rounded-lg border border-border-primary"
+                    title="Fix Permissions"
+                  >
+                    <ShieldCheck size={14} />
+                  </button>
+                  <button 
+                    onClick={clearCache}
+                    className="p-1.5 text-text-secondary hover:text-red-500 transition-colors bg-bg-tertiary rounded-lg border border-border-primary"
+                    title="Clear Cache (.next)"
+                  >
+                    <Eraser size={14} />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const url = previewType === 'node' 
+                        ? `/workspace-preview/${username}/` 
+                        : (selectedFile?.endsWith('.html') 
+                          ? `/preview/${username}/${projectId}/${selectedFile.split('/').map(encodeURIComponent).join('/')}` 
+                          : `/preview/${username}/${projectId}/index.html`);
+                      window.open(url, '_blank');
+                    }}
+                    className="p-1.5 text-text-secondary hover:text-text-primary transition-colors bg-bg-tertiary rounded-lg border border-border-primary"
+                    title="Open in New Tab"
+                  >
+                    <ExternalLink size={14} />
+                  </button>
                   <button 
                     onClick={() => setIsFullscreen(!isFullscreen)}
                     className="p-1.5 text-text-secondary hover:text-text-primary transition-colors bg-bg-tertiary rounded-lg border border-border-primary"
