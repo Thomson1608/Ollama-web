@@ -93,26 +93,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
         className={cn(
-          "bg-white border-r border-gray-200 flex flex-col overflow-hidden h-full shrink-0",
+          "bg-bg-secondary border-r border-border-primary flex flex-col overflow-hidden h-full shrink-0",
           isMobile && "fixed inset-y-0 left-0 z-50 shadow-2xl"
         )}
       >
-      <div className="p-4 flex items-center justify-between border-b border-gray-100">
-        <div className="flex items-center gap-2 font-semibold text-gray-800">
-          <Terminal size={20} className="text-blue-600" />
+      <div className="p-4 flex items-center justify-between border-b border-border-primary">
+        <div className="flex items-center gap-2 font-semibold text-text-primary">
+          <Terminal size={20} className="text-accent-primary" />
           <span>Ollama UI</span>
         </div>
         <div className="flex items-center gap-1">
           <button 
             onClick={() => setCurrentView('project-list')}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
+            className="p-1.5 hover:bg-bg-tertiary rounded-lg transition-colors text-text-secondary hover:text-text-primary"
             title="Projects"
           >
             <LayoutGrid size={18} />
           </button>
           <button 
             onClick={createNewChat}
-            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
+            className="p-1.5 hover:bg-bg-tertiary rounded-lg transition-colors text-text-secondary hover:text-text-primary"
             title="New Chat"
           >
             <Plus size={20} />
@@ -120,9 +120,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 no-scrollbar">
         {chats.length === 0 ? (
-          <div className="text-center py-10 text-gray-400 text-sm">
+          <div className="text-center py-10 text-text-secondary text-sm">
             No chats yet
           </div>
         ) : (
@@ -137,15 +137,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className={cn(
                 "w-full flex items-center gap-3 p-3 rounded-xl text-left text-sm transition-all group cursor-pointer",
                 activeChatId === chat.id && currentView === 'chat'
-                  ? "bg-blue-50 text-blue-700 font-medium" 
-                  : "hover:bg-gray-50 text-gray-600"
+                  ? "bg-accent-primary/10 text-accent-primary font-medium" 
+                  : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
               )}
             >
-              <MessageSquare size={16} className={activeChatId === chat.id && currentView === 'chat' ? "text-blue-500" : "text-gray-400"} />
+              <MessageSquare size={16} className={activeChatId === chat.id && currentView === 'chat' ? "text-accent-primary" : "text-text-secondary"} />
               {editingChatId === chat.id ? (
                 <input
                   autoFocus
-                  className="flex-1 bg-white border border-blue-300 rounded px-1 py-0.5 outline-none text-sm"
+                  className="flex-1 bg-bg-primary border border-accent-primary rounded px-1 py-0.5 outline-none text-sm text-text-primary"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   onBlur={() => handleFinishRename(chat.id)}
@@ -160,7 +160,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div className="flex-1 flex flex-col min-w-0">
                     <span className="truncate">{chat.title}</span>
                     {chat.isClosed && (
-                      <span className="text-[10px] text-gray-400 font-medium">Closed (Read-only)</span>
+                      <span className="text-[10px] text-text-secondary font-medium">Closed (Read-only)</span>
                     )}
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -170,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           e.stopPropagation();
                           onCloseChat(chat.id);
                         }}
-                        className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400 hover:text-orange-500"
+                        className="p-1 hover:bg-bg-primary rounded transition-all text-text-secondary hover:text-orange-400"
                         title="Close Chat"
                       >
                         <RefreshCw size={14} />
@@ -178,14 +178,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     )}
                     <button 
                       onClick={(e) => handleStartRename(chat, e)}
-                      className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400 hover:text-blue-500"
+                      className="p-1 hover:bg-bg-primary rounded transition-all text-text-secondary hover:text-accent-primary"
                       title="Rename"
                     >
                       <Edit2 size={14} />
                     </button>
                     <button 
                       onClick={(e) => deleteChat(chat.id, e)}
-                      className="p-1 hover:bg-gray-200 rounded transition-all text-gray-400 hover:text-red-500"
+                      className="p-1 hover:bg-bg-primary rounded transition-all text-text-secondary hover:text-red-400"
                       title="Delete"
                     >
                       <Trash2 size={14} />
@@ -198,27 +198,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      <div className="p-4 border-t border-gray-100 space-y-3">
+      <div className="p-4 border-t border-border-primary space-y-3">
         <div className="flex items-center justify-between text-xs px-1">
-          <span className="text-gray-500">Status</span>
+          <span className="text-text-secondary">Status</span>
           <div className="flex items-center gap-1.5">
             {isSyncing && (
-              <RefreshCw size={10} className="animate-spin text-blue-500 mr-1" />
+              <RefreshCw size={10} className="animate-spin text-accent-primary mr-1" />
             )}
             {connectionStatus === 'connected' ? (
               <>
                 <div className="w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-green-600 font-medium">Online</span>
+                <span className="text-green-500 font-medium">Online</span>
               </>
             ) : connectionStatus === 'disconnected' ? (
               <>
                 <div className="w-2 h-2 rounded-full bg-red-500" />
-                <span className="text-red-600 font-medium">Offline</span>
+                <span className="text-red-500 font-medium">Offline</span>
               </>
             ) : (
               <>
-                <RefreshCw size={12} className="animate-spin text-gray-400" />
-                <span className="text-gray-400">Checking...</span>
+                <RefreshCw size={12} className="animate-spin text-text-secondary" />
+                <span className="text-text-secondary">Checking...</span>
               </>
             )}
           </div>
@@ -231,7 +231,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
             className={cn(
               "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-              currentView === 'chat' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+              currentView === 'chat' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
             )}
             title="Chat"
           >
@@ -247,7 +247,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={cn(
                   "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-                  currentView === 'models' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+                  currentView === 'models' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
                 )}
                 title="Models"
               >
@@ -260,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={cn(
                   "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-                  currentView === 'pull' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+                  currentView === 'pull' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
                 )}
                 title="Pull"
               >
@@ -273,7 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={cn(
                   "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-                  currentView === 'workspace' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+                  currentView === 'workspace' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
                 )}
                 title="Workspace"
               >
@@ -289,7 +289,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }}
           className={cn(
             "w-full flex items-center gap-2 p-2 rounded-lg text-sm transition-colors",
-            currentView === 'settings' ? "bg-blue-50 text-blue-600 font-medium" : "hover:bg-gray-100 text-gray-600"
+            currentView === 'settings' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
           )}
         >
           <Settings size={16} />
@@ -297,7 +297,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
         <button 
           onClick={clearAllChats}
-          className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium text-red-500 hover:bg-red-50 transition-colors border border-red-100"
+          className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors border border-red-500/20"
         >
           <Trash2 size={14} />
           Clear All Chats

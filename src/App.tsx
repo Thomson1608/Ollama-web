@@ -17,6 +17,7 @@ import { LoginView } from './components/LoginView';
 import { ProjectInitView } from './components/ProjectInitView';
 import { ProjectListView } from './components/ProjectListView';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
+import { cn } from './lib/utils';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -35,25 +36,25 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-          <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center border border-red-100">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="min-h-screen flex items-center justify-center bg-bg-primary p-4">
+          <div className="max-w-md w-full bg-bg-secondary rounded-xl shadow-lg p-8 text-center border border-border-primary">
+            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Đã có lỗi xảy ra</h2>
-            <p className="text-gray-600 mb-6 font-medium">
+            <h2 className="text-2xl font-bold text-text-primary mb-2">Đã có lỗi xảy ra</h2>
+            <p className="text-text-secondary mb-6 font-medium">
               Ứng dụng gặp sự cố không mong muốn. Vui lòng thử tải lại trang.
             </p>
-            <div className="text-left bg-gray-50 rounded-lg p-4 mb-6 overflow-auto max-h-40 border border-gray-200">
+            <div className="text-left bg-bg-tertiary rounded-lg p-4 mb-6 overflow-auto max-h-40 border border-border-primary">
               <code className="text-xs text-red-500 font-mono break-all">
                 {this.state.error?.toString()}
               </code>
             </div>
             <button
               onClick={() => window.location.reload()}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg transition-all shadow-sm active:scale-[0.98]"
+              className="w-full bg-accent-primary hover:bg-accent-primary/90 text-white font-semibold py-2.5 px-4 rounded-lg transition-all shadow-sm active:scale-[0.98]"
             >
               Tải lại trang
             </button>
@@ -1305,16 +1306,16 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   if (!username) {
     return (
-      <div className="h-[100dvh] w-full bg-[#f5f5f5] overflow-hidden">
-        <Toaster position="top-center" />
+      <div className="h-[100dvh] w-full bg-bg-primary overflow-hidden">
+        <Toaster position="top-center" theme="dark" />
         <LoginView onLogin={handleLogin} />
       </div>
     );
   }
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-[#f5f5f5]">
-      <Toaster position="top-center" />
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-bg-primary text-text-primary">
+      <Toaster position="top-center" theme="dark" />
       
       {currentView !== 'project-list' && currentView !== 'project-init' && (
         <Sidebar 
@@ -1337,7 +1338,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
         />
       )}
 
-      <main className="flex-1 flex flex-col relative min-w-0">
+      <main className="flex-1 flex flex-col relative min-w-0 bg-bg-primary">
         <Header 
           isSidebarOpen={isSidebarOpen}
           setIsSidebarOpen={setIsSidebarOpen}
@@ -1355,7 +1356,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
         />
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex overflow-hidden">
             {currentView === 'project-list' && (
               <ProjectListView 
                 projects={projects} 
@@ -1369,9 +1370,13 @@ If the user asks you to write code, you should provide it in a markdown code blo
               <ProjectInitView onInit={handleInitProject} isLoading={isLoading} />
             )}
 
-            {currentView === 'chat' && (
-              <div className="flex h-full overflow-hidden">
-                <div className="flex-1">
+            {(currentView === 'chat' || currentView === 'workspace') && projectId ? (
+              <div className="flex h-full w-full overflow-hidden">
+                {/* Left Panel: Chat */}
+                <div className={cn(
+                  "flex flex-col border-r border-border-primary transition-all duration-300",
+                  isMobile ? (currentView === 'chat' ? "w-full" : "w-0 overflow-hidden") : "w-[400px] shrink-0"
+                )}>
                   <ChatView 
                     activeChatId={activeChatId}
                     activeChat={activeChat}
@@ -1389,73 +1394,100 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     projectId={projectId}
                   />
                 </div>
-              </div>
-            )}
-            
-            {currentView === 'models' && (
-              <div className="flex-1 overflow-y-auto bg-gray-50/30">
-                <ModelsView 
-                  models={models}
-                  runningModels={runningModels}
-                  connectionStatus={connectionStatus}
-                  modelSearchQuery={modelSearchQuery}
-                  setModelSearchQuery={setModelSearchQuery}
-                  deleteModel={deleteModel}
-                  stopModel={stopModel}
-                  isStoppingModel={isStoppingModel}
-                  setSelectedModel={handleSelectModel}
-                  setCurrentView={setCurrentView}
-                  activeChatId={activeChatId}
-                  createNewChat={createNewChat}
-                  formatSize={formatSize}
-                  modelFilter={modelFilter}
-                  setModelFilter={setModelFilter}
-                  popularModels={popularModels}
-                />
-              </div>
-            )}
 
-            {currentView === 'pull' && (
-              <div className="flex-1 overflow-y-auto bg-gray-50/30">
-                <PullView 
-                  newModelName={newModelName}
-                  setNewModelName={setNewModelName}
-                  pullModel={pullModel}
-                  pullingModel={pullingModel}
-                  cancelPull={cancelPull}
-                  showSuggestions={showSuggestions}
-                  setShowSuggestions={setShowSuggestions}
-                  suggestions={suggestions}
-                  popularModels={popularModels}
-                  modelFilter={modelFilter}
-                  setModelFilter={setModelFilter}
-                />
+                {/* Right Panel: Workspace */}
+                <div className={cn(
+                  "flex-1 flex flex-col overflow-hidden min-w-0",
+                  isMobile && currentView === 'chat' && "hidden"
+                )}>
+                  <WorkspaceView 
+                    refreshTrigger={workspaceRefreshTrigger} 
+                    socket={socketRef.current} 
+                    isMobile={isMobile}
+                    username={username}
+                    projectId={projectId || undefined}
+                    onInstallDependencies={handleInstallDependencies}
+                  />
+                </div>
               </div>
-            )}
+            ) : (
+              <>
+                {currentView === 'chat' && (
+                  <div className="flex-1">
+                    <ChatView 
+                      activeChatId={activeChatId}
+                      activeChat={activeChat}
+                      isLoading={isLoading || (activeChatId ? generatingChatIds.has(activeChatId) : false)}
+                      isAiTypingGlobally={activeChatId ? generatingChatIds.has(activeChatId) && !isLoading : false}
+                      isGloballyBusy={generatingChatIds.size > 0}
+                      input={input}
+                      setInput={setInput}
+                      handleSendMessage={handleSendMessage}
+                      createNewChat={createNewChat}
+                      connectionStatus={connectionStatus}
+                      messagesEndRef={messagesEndRef}
+                      onUpdateSystemPrompt={(prompt) => activeChatId && updateChatSystemPrompt(activeChatId, prompt)}
+                      username={username}
+                      projectId={projectId}
+                    />
+                  </div>
+                )}
+                
+                {currentView === 'models' && (
+                  <div className="flex-1 overflow-y-auto bg-bg-secondary">
+                    <ModelsView 
+                      models={models}
+                      runningModels={runningModels}
+                      connectionStatus={connectionStatus}
+                      modelSearchQuery={modelSearchQuery}
+                      setModelSearchQuery={setModelSearchQuery}
+                      deleteModel={deleteModel}
+                      stopModel={stopModel}
+                      isStoppingModel={isStoppingModel}
+                      setSelectedModel={handleSelectModel}
+                      setCurrentView={setCurrentView}
+                      activeChatId={activeChatId}
+                      createNewChat={createNewChat}
+                      formatSize={formatSize}
+                      modelFilter={modelFilter}
+                      setModelFilter={setModelFilter}
+                      popularModels={popularModels}
+                    />
+                  </div>
+                )}
 
-            {currentView === 'workspace' && (
-              <WorkspaceView 
-                refreshTrigger={workspaceRefreshTrigger} 
-                socket={socketRef.current} 
-                isMobile={isMobile}
-                username={username}
-                projectId={projectId || undefined}
-                onInstallDependencies={handleInstallDependencies}
-              />
-            )}
+                {currentView === 'pull' && (
+                  <div className="flex-1 overflow-y-auto bg-bg-secondary">
+                    <PullView 
+                      newModelName={newModelName}
+                      setNewModelName={setNewModelName}
+                      pullModel={pullModel}
+                      pullingModel={pullingModel}
+                      cancelPull={cancelPull}
+                      showSuggestions={showSuggestions}
+                      setShowSuggestions={setShowSuggestions}
+                      suggestions={suggestions}
+                      popularModels={popularModels}
+                      modelFilter={modelFilter}
+                      setModelFilter={setModelFilter}
+                    />
+                  </div>
+                )}
 
-            {currentView === 'settings' && (
-              <SettingsView 
-                systemPrompt={systemPrompt}
-                setSystemPrompt={setSystemPrompt}
-                parameters={globalParameters}
-                setParameters={setGlobalParameters}
-                memory={memory}
-                clearMemory={clearMemory}
-                saveSettings={saveSettings}
-                connectionStatus={connectionStatus}
-                username={username}
-              />
+                {currentView === 'settings' && (
+                  <SettingsView 
+                    systemPrompt={systemPrompt}
+                    setSystemPrompt={setSystemPrompt}
+                    parameters={globalParameters}
+                    setParameters={setGlobalParameters}
+                    memory={memory}
+                    clearMemory={clearMemory}
+                    saveSettings={saveSettings}
+                    connectionStatus={connectionStatus}
+                    username={username}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>

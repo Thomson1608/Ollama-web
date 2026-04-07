@@ -374,8 +374,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
                  {visibleText}
                </Markdown>
              )}
-             <div className="my-3 inline-flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 shadow-sm animate-pulse">
-               <Loader2 className="animate-spin text-blue-500" size={16} />
+             <div className="my-3 inline-flex items-center gap-2 px-3 py-2 bg-bg-tertiary border border-border-primary rounded-lg text-sm font-medium text-text-primary shadow-sm animate-pulse">
+               <Loader2 className="animate-spin text-accent-primary" size={16} />
                <span>Updating workspace...</span>
              </div>
            </React.Fragment>
@@ -417,7 +417,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
                 return (
                   <div className="relative group/code my-8">
-                    <div className="flex items-center justify-between bg-gray-800 text-gray-300 px-4 py-2 rounded-t-xl border-x border-t border-gray-700">
+                    <div className="flex items-center justify-between bg-[#1e1e1e] text-gray-300 px-4 py-2 rounded-t-xl border-x border-t border-border-primary">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-red-500" />
                         <div className="w-2 h-2 rounded-full bg-yellow-500" />
@@ -444,7 +444,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                               });
                             }
                           }}
-                          className="bg-gray-700 hover:bg-gray-800 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95"
+                          className="bg-bg-tertiary hover:bg-gray-800 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95 border border-border-primary"
                         >
                           <Plus size={10} />
                           Lưu file
@@ -454,13 +454,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                             navigator.clipboard.writeText(codeString);
                             toast.success('Đã sao chép vào bộ nhớ tạm');
                           }}
-                          className="bg-gray-700 hover:bg-gray-600 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95"
+                          className="bg-bg-tertiary hover:bg-gray-700 text-white text-[10px] font-medium px-2 py-1 rounded shadow-sm flex items-center gap-1 transition-all active:scale-95 border border-border-primary"
                         >
                           Sao chép
                         </button>
                       </div>
                     </div>
-                    <pre className={cn("rounded-b-xl p-4 overflow-x-auto bg-gray-900 text-gray-100 text-sm max-w-full border-x border-b border-gray-800 shadow-inner", className)}>
+                    <pre className={cn("rounded-b-xl p-4 overflow-x-auto bg-[#0d0d0d] text-gray-100 text-sm max-w-full border-x border-b border-border-primary shadow-inner", className)}>
                       <code {...props}>{children}</code>
                     </pre>
                   </div>
@@ -477,174 +477,132 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col relative">
-      {/* Chat Header / System Prompt */}
-      {activeChatId && (
-        <div className="bg-white border-b border-gray-100 px-4 py-2 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-          <div className="flex-1 flex items-center gap-3 overflow-hidden">
-            <button 
-              onClick={() => setIsSystemPromptExpanded(!isSystemPromptExpanded)}
-              className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-gray-800 transition-colors shrink-0"
-            >
-              <div className={cn(
-                "w-6 h-6 rounded bg-blue-50 flex items-center justify-center text-blue-600 transition-transform",
-                isSystemPromptExpanded && "rotate-180"
-              )}>
-                <ChevronDown size={14} />
-              </div>
-              System Instruction
-            </button>
-            {!isSystemPromptExpanded && (
-              <span className="text-xs text-gray-400 truncate italic">
-                {activeChat?.systemPrompt || "Default system instructions active..."}
-              </span>
-            )}
+    <div className="h-full flex flex-col relative bg-bg-primary">
+      {/* Chat Header */}
+      <div className="bg-bg-primary border-b border-border-primary px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 bg-accent-primary rounded flex items-center justify-center">
+            <Cpu size={14} className="text-white" />
           </div>
+          <span className="text-sm font-bold tracking-tight">Gemini</span>
         </div>
-      )}
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setIsSystemPromptExpanded(!isSystemPromptExpanded)}
+            className="p-1.5 text-text-secondary hover:text-text-primary transition-colors"
+            title="System Instructions"
+          >
+            <Settings2 size={18} />
+          </button>
+        </div>
+      </div>
 
       {/* Expanded System Prompt */}
       {activeChatId && isSystemPromptExpanded && (
         <motion.div 
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
-          className="bg-gray-50 border-b border-gray-200 overflow-hidden"
+          className="bg-bg-secondary border-b border-border-primary overflow-hidden"
         >
-          <div className="p-4 max-w-3xl mx-auto">
+          <div className="p-4">
             <textarea
               value={activeChat?.systemPrompt || ''}
               onChange={(e) => onUpdateSystemPrompt(e.target.value)}
-              placeholder="Enter system instructions to guide the model's behavior..."
-              className="w-full h-32 bg-white border border-gray-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all resize-none font-mono"
+              placeholder="Enter system instructions..."
+              className="w-full h-32 bg-bg-tertiary border border-border-primary rounded-xl p-3 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary outline-none transition-all resize-none font-mono"
             />
-            <div className="flex justify-end mt-2">
-              <button 
-                onClick={() => setIsSystemPromptExpanded(false)}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700"
-              >
-                Done
-              </button>
-            </div>
           </div>
         </motion.div>
       )}
 
-      <div className="flex-1 overflow-y-auto p-2 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth no-scrollbar">
         {!activeChatId ? (
-          <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4 md:space-y-6 px-4">
-            <div className="w-12 h-12 md:w-16 md:h-16 bg-blue-100 rounded-xl md:rounded-2xl flex items-center justify-center text-blue-600">
-              <Cpu size={28} className="md:hidden" />
-              <Cpu size={32} className="hidden md:block" />
+          <div className="h-full flex flex-col items-center justify-center text-center max-w-xs mx-auto space-y-6">
+            <div className="w-16 h-16 bg-bg-tertiary border border-border-primary rounded-2xl flex items-center justify-center text-accent-primary shadow-xl">
+              <Cpu size={32} />
             </div>
-            <div className="space-y-1 md:space-y-2">
-              <h2 className="text-xl md:text-2xl font-bold text-gray-800">AI Chat Interface</h2>
-              <p className="text-xs md:text-sm text-gray-500">
-                Select a model from the Models tab to start.
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold">New Chat</h2>
+              <p className="text-sm text-text-secondary">
+                Select a model to start a new conversation.
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-3 w-full">
-              <button 
-                onClick={createNewChat}
-                className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white p-2.5 md:p-3 rounded-xl text-sm md:text-base font-medium transition-all shadow-lg shadow-blue-200"
-              >
-                <Plus size={18} />
-                New Conversation
-              </button>
-            </div>
-            {connectionStatus === 'disconnected' && (
-              <div className="p-3 md:p-4 bg-red-50 border border-red-100 rounded-xl flex gap-3 text-left">
-                <AlertCircle className="text-red-500 shrink-0" size={18} />
-                <div className="text-[11px] md:text-sm">
-                  <p className="font-semibold text-red-800">Ollama is unreachable</p>
-                  <p className="text-red-600 mt-1">
-                    Make sure Ollama is running and CORS is enabled with:<br/>
-                    <code className="bg-red-100 px-1 rounded">OLLAMA_ORIGINS="*" ollama serve</code>
-                  </p>
-                </div>
-              </div>
-            )}
+            <button 
+              onClick={createNewChat}
+              className="w-full flex items-center justify-center gap-2 bg-accent-primary hover:bg-blue-600 text-white py-3 rounded-xl font-medium transition-all shadow-lg shadow-blue-900/20"
+            >
+              <Plus size={18} />
+              Start Chatting
+            </button>
           </div>
         ) : (
-          <div className="max-w-3xl mx-auto w-full space-y-4 md:space-y-6 overflow-x-hidden">
+          <div className="w-full space-y-6">
             {activeChat?.messages.map((msg, i) => (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 key={i} 
                 className={cn(
-                  "flex gap-2 md:gap-4 w-full overflow-hidden items-start",
+                  "flex gap-3 w-full items-start",
                   msg.role === 'user' ? "flex-row-reverse" : "flex-row"
                 )}
               >
                 <div className={cn(
-                  "w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center shrink-0 text-xs md:text-sm",
+                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold",
                   msg.role === 'user' 
-                    ? "bg-gray-800 text-white" 
-                    : "bg-blue-100 text-blue-600"
+                    ? "bg-bg-tertiary text-text-primary border border-border-primary" 
+                    : "bg-accent-primary text-white"
                 )}>
-                  {msg.role === 'user' ? 'U' : (
-                    <>
-                      <Cpu size={14} className="md:hidden" />
-                      <Cpu size={16} className="hidden md:block" />
-                    </>
-                  )}
+                  {msg.role === 'user' ? 'U' : 'AI'}
                 </div>
                 <div className={cn(
-                  "flex-1 min-w-0 max-w-[90%] md:max-w-[80%] p-3 md:p-4 rounded-2xl relative group/msg shadow-sm",
+                  "flex-1 min-w-0 max-w-[85%] p-4 rounded-2xl relative group/msg",
                   msg.role === 'user' 
-                    ? "bg-blue-600 text-white rounded-tr-none" 
-                    : "bg-white border border-gray-200 rounded-tl-none"
+                    ? "bg-bg-tertiary border border-border-primary text-text-primary" 
+                    : "bg-bg-secondary border border-border-primary text-text-primary"
                 )}>
                   {msg.role === 'assistant' && (
-                    <div className="absolute -top-2 -right-2 flex gap-1">
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/msg:opacity-100 transition-opacity">
                       <button
                         onClick={() => toggleSpeech(msg.content, i)}
                         className={cn(
-                          "p-1.5 bg-white border border-gray-100 rounded-lg shadow-sm text-gray-400 hover:text-blue-600 transition-all md:opacity-0 md:group-hover/msg:opacity-100",
-                          speakingMessageIndex === i && "text-blue-600 opacity-100"
+                          "p-1.5 bg-bg-tertiary border border-border-primary rounded-lg text-text-secondary hover:text-accent-primary transition-all",
+                          speakingMessageIndex === i && "text-accent-primary"
                         )}
-                        title={speakingMessageIndex === i ? "Dừng đọc" : "Đọc tin nhắn"}
                       >
                         {speakingMessageIndex === i ? <VolumeX size={14} /> : <Volume2 size={14} />}
                       </button>
                     </div>
                   )}
                   {msg.images && msg.images.length > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-2">
+                    <div className="mb-3 flex flex-wrap gap-2">
                       {msg.images.map((img, idx) => (
                         <img 
                           key={idx} 
                           src={img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`} 
                           alt="Uploaded" 
-                          className="max-w-full rounded-lg border border-gray-200 shadow-sm max-h-64 object-contain"
+                          className="max-w-full rounded-xl border border-border-primary shadow-sm max-h-64 object-contain"
                           referrerPolicy="no-referrer"
                         />
                       ))}
                     </div>
                   )}
-                  <div className={cn("markdown-body text-xs md:text-sm break-words overflow-x-auto", msg.role === 'user' ? "text-white" : "text-gray-800")}>
+                  <div className="markdown-body">
                     {renderMessage(msg.content, i === activeChat.messages.length - 1 && (isLoading || isAiTypingGlobally))}
                   </div>
                 </div>
               </motion.div>
             ))}
             {(isLoading || isAiTypingGlobally) && (
-              <div className="flex gap-2 md:gap-4">
-                <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center shrink-0 animate-pulse bg-blue-100 text-blue-600">
-                  <Cpu size={14} />
+              <div className="flex gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-accent-primary text-white animate-pulse">
+                  <Cpu size={16} />
                 </div>
-                <div className="bg-white border p-3 md:p-4 rounded-2xl rounded-tl-none shadow-sm border-gray-200">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-1">
-                      <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-gray-300 rounded-full animate-bounce" />
-                      <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.2s]" />
-                      <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-gray-300 rounded-full animate-bounce [animation-delay:0.4s]" />
-                    </div>
-                    {isAiTypingGlobally && !isLoading && (
-                      <span className="text-[8px] md:text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-                        AI is responding in another tab...
-                      </span>
-                    )}
+                <div className="bg-bg-secondary border border-border-primary p-4 rounded-2xl">
+                  <div className="flex gap-1">
+                    <div className="w-1.5 h-1.5 bg-accent-primary rounded-full animate-bounce" />
+                    <div className="w-1.5 h-1.5 bg-accent-primary rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-1.5 h-1.5 bg-accent-primary rounded-full animate-bounce [animation-delay:0.4s]" />
                   </div>
                 </div>
               </div>
@@ -655,23 +613,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
       </div>
 
       {/* Input Area */}
-      <div 
-        className="shrink-0 bg-gradient-to-t from-[#f5f5f5] via-[#f5f5f5] to-transparent"
-        style={{ 
-          paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--keyboard-offset, 0px))',
-          transition: 'padding-bottom 0.2s ease-out'
-        }}
-      >
-        <form 
-          onSubmit={onSendMessage}
-          className="max-w-3xl mx-auto w-full p-2 md:p-6"
-        >
+      <div className="p-4 bg-bg-primary border-t border-border-primary">
+        <form onSubmit={onSendMessage} className="max-w-3xl mx-auto space-y-3">
           {selectedImage && (
-            <div className="mb-2 relative inline-block">
+            <div className="relative inline-block">
               <img 
                 src={selectedImage} 
                 alt="Selected" 
-                className="h-20 w-20 object-cover rounded-lg border-2 border-blue-500 shadow-md"
+                className="h-20 w-20 object-cover rounded-xl border border-accent-primary shadow-lg"
                 referrerPolicy="no-referrer"
               />
               <button
@@ -683,31 +632,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
               </button>
             </div>
           )}
+          
           <div className={cn(
-            "flex items-end gap-1 md:gap-2 bg-white border border-gray-200 rounded-2xl p-1.5 md:p-3 shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500",
-            (!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy) && "bg-gray-50 opacity-80"
+            "relative flex flex-col bg-bg-secondary border border-border-primary rounded-2xl overflow-hidden transition-all focus-within:border-accent-primary/50 focus-within:ring-1 focus-within:ring-accent-primary/50",
+            (!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy) && "opacity-50"
           )}>
-            <input 
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageSelect}
-              accept="image/*"
-              className="hidden"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy || activeChat?.isClosed}
-              className="p-1.5 md:p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shrink-0 disabled:opacity-50"
-              title="Tải ảnh lên"
-            >
-              <ImageIcon size={20} />
-            </button>
             <textarea
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);
-                // Auto-resize
                 e.target.style.height = 'auto';
                 e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
               }}
@@ -717,43 +650,48 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   onSendMessage();
                 }
               }}
-              placeholder={
-                isAiTypingGlobally 
-                  ? "AI is busy in another tab..." 
-                  : isGloballyBusy
-                    ? "AI is busy in another chat..."
-                    : activeChat?.isClosed
-                      ? "This chat is closed (Read-only)"
-                      : activeChatId 
-                        ? "Ask anything..." 
-                        : "Start a new chat first"
-              }
+              placeholder={activeChatId ? "Ask anything..." : "Start a new chat..."}
               disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy || activeChat?.isClosed}
               rows={1}
-              style={{ height: 'auto' }}
-              className="flex-1 min-w-0 bg-transparent border-none focus:ring-0 p-1 md:p-2 text-sm resize-none disabled:cursor-not-allowed min-h-[36px] max-h-[200px]"
+              className="w-full bg-transparent border-none focus:ring-0 p-4 text-sm text-text-primary resize-none min-h-[56px] max-h-[200px]"
             />
-            <div className="flex items-center gap-0.5 md:gap-1 pb-1 shrink-0">
-              <button
-                type="button"
-                onClick={toggleListening}
-                disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy || activeChat?.isClosed}
-                className={cn(
-                  "p-1.5 md:p-2 rounded-xl transition-all shadow-sm disabled:shadow-none disabled:bg-transparent disabled:text-gray-400 shrink-0",
-                  isListening 
-                    ? "bg-red-100 text-red-600 hover:bg-red-200 animate-pulse" 
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                )}
-                title={isListening ? "Dừng ghi âm" : "Nhập bằng giọng nói"}
-              >
-                {isListening ? <MicOff size={16} /> : <Mic size={16} />}
-              </button>
+            
+            <div className="flex items-center justify-between px-3 py-2 bg-bg-tertiary/50 border-t border-border-primary/50">
+              <div className="flex items-center gap-1">
+                <input 
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageSelect}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy || activeChat?.isClosed}
+                  className="p-2 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded-lg transition-all"
+                >
+                  <Plus size={18} />
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  disabled={!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy || activeChat?.isClosed}
+                  className={cn(
+                    "p-2 rounded-lg transition-all",
+                    isListening ? "bg-red-500/10 text-red-500" : "text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+                  )}
+                >
+                  {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+                </button>
+              </div>
+              
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading || isAiTypingGlobally || isGloballyBusy || !activeChatId || activeChat?.isClosed}
-                className="p-1.5 md:p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 text-white rounded-xl transition-all shadow-lg shadow-blue-200 disabled:shadow-none shrink-0"
+                className="p-2 bg-accent-primary hover:bg-blue-600 disabled:bg-bg-tertiary disabled:text-text-secondary text-white rounded-lg transition-all shadow-lg shadow-blue-900/20"
               >
-                <Send size={16} />
+                <Send size={18} />
               </button>
             </div>
           </div>

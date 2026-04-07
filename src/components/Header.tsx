@@ -73,30 +73,30 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   return (
-    <header className="h-16 bg-white/80 backdrop-blur-md border-b border-gray-200 flex items-center justify-between px-2 md:px-4 sticky top-0 z-10">
+    <header className="h-16 bg-bg-primary/80 backdrop-blur-md border-b border-border-primary flex items-center justify-between px-2 md:px-4 sticky top-0 z-10">
       <div className="flex items-center gap-1 md:gap-3 overflow-hidden">
         <button 
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors shrink-0"
+          className="p-2 hover:bg-bg-tertiary rounded-lg text-text-secondary transition-colors shrink-0"
         >
           {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
         </button>
-        <div className="h-4 w-[1px] bg-gray-200 mx-0.5 md:mx-1 shrink-0" />
+        <div className="h-4 w-[1px] bg-border-primary mx-0.5 md:mx-1 shrink-0" />
         {currentView === 'chat' ? (
           <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
             <div className="flex flex-col shrink-0">
-              <span className="text-[8px] md:text-[10px] font-medium text-gray-400 uppercase tracking-wider">Model</span>
+              <span className="text-[8px] md:text-[10px] font-medium text-text-secondary uppercase tracking-wider">Model</span>
               <select 
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={isBusy}
-                className={`bg-transparent text-xs md:text-sm font-semibold text-gray-800 focus:outline-none cursor-pointer max-w-[100px] md:max-w-none truncate ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`bg-transparent text-xs md:text-sm font-semibold text-text-primary focus:outline-none cursor-pointer max-w-[100px] md:max-w-none truncate ${isBusy ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {models.length === 0 ? (
                   <option value="">No models found</option>
                 ) : (
                   <>
-                    <optgroup label="Local Models (Ollama)">
+                    <optgroup label="Local Models (Ollama)" className="bg-bg-secondary text-text-primary">
                       {models.filter(m => 
                         !m.name.toLowerCase().includes('flux') && 
                         !m.name.toLowerCase().includes('stable-diffusion') &&
@@ -116,37 +116,37 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {runningModel && (
-              <div className="flex flex-col border-l border-gray-100 pl-2 md:pl-4 shrink-0">
-                <span className="text-[8px] md:text-[10px] font-medium text-gray-400 uppercase tracking-wider">Expiry</span>
-                <span className="text-[10px] md:text-xs font-mono font-bold text-blue-600 bg-blue-50 px-1 py-0.5 rounded">
+              <div className="flex flex-col border-l border-border-primary pl-2 md:pl-4 shrink-0">
+                <span className="text-[8px] md:text-[10px] font-medium text-text-secondary uppercase tracking-wider">Expiry</span>
+                <span className="text-[10px] md:text-xs font-mono font-bold text-accent-primary bg-accent-primary/10 px-1 py-0.5 rounded">
                   {formatExpiresAt(runningModel.expires_at)}
                 </span>
               </div>
             )}
           </div>
         ) : currentView === 'models' ? (
-          <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Models</span>
+          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Models</span>
         ) : currentView === 'pull' ? (
-          <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Pull</span>
+          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Pull</span>
         ) : currentView === 'workspace' ? (
-          <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Workspace</span>
+          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Workspace</span>
         ) : currentView === 'project-list' ? (
-          <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Projects</span>
+          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Projects</span>
         ) : (
-          <span className="font-bold text-gray-800 shrink-0 text-sm md:text-base">Settings</span>
+          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Settings</span>
         )}
       </div>
       
       <div className="flex items-center gap-2">
         {connectionStatus === 'disconnected' && (
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-red-50 text-red-600 rounded-full text-xs font-bold border border-red-100">
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-red-500/10 text-red-400 rounded-full text-xs font-bold border border-red-500/20">
             <AlertCircle size={14} />
             OFFLINE
           </div>
         )}
         <button 
           onClick={checkConnection}
-          className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+          className="p-2 hover:bg-bg-tertiary rounded-lg text-text-secondary transition-colors"
           title="Refresh Models"
         >
           <RefreshCw size={18} className={connectionStatus === 'checking' ? "animate-spin" : ""} />
@@ -156,16 +156,16 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative ml-2">
             <button 
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-              className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-xl transition-all border border-transparent hover:border-gray-200"
+              className="flex items-center gap-2 p-1.5 hover:bg-bg-tertiary rounded-xl transition-all border border-transparent hover:border-border-primary"
             >
-              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
-                <User size={16} className="text-blue-600" />
+              <div className="w-8 h-8 bg-accent-primary/10 rounded-lg flex items-center justify-center shrink-0">
+                <User size={16} className="text-accent-primary" />
               </div>
               <div className="hidden md:flex flex-col items-start">
-                <span className="text-xs font-bold text-gray-700 truncate max-w-[100px]">{username}</span>
-                <span className="text-[10px] text-gray-400 capitalize">{username === 'admin' ? 'Administrator' : 'User'}</span>
+                <span className="text-xs font-bold text-text-primary truncate max-w-[100px]">{username}</span>
+                <span className="text-[10px] text-text-secondary capitalize">{username === 'admin' ? 'Administrator' : 'User'}</span>
               </div>
-              <ChevronDown size={14} className={cn("text-gray-400 transition-transform", isUserMenuOpen && "rotate-180")} />
+              <ChevronDown size={14} className={cn("text-text-secondary transition-transform", isUserMenuOpen && "rotate-180")} />
             </button>
 
             {isUserMenuOpen && (
@@ -174,10 +174,10 @@ export const Header: React.FC<HeaderProps> = ({
                   className="fixed inset-0 z-20" 
                   onClick={() => setIsUserMenuOpen(false)}
                 />
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-30 animate-in fade-in zoom-in duration-200 origin-top-right">
-                  <div className="px-4 py-2 border-b border-gray-50 mb-1">
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Account</p>
-                    <p className="text-sm font-bold text-gray-800 truncate">{username}</p>
+                <div className="absolute right-0 mt-2 w-56 bg-bg-secondary rounded-2xl shadow-xl border border-border-primary py-2 z-30 animate-in fade-in zoom-in duration-200 origin-top-right">
+                  <div className="px-4 py-2 border-b border-border-primary mb-1">
+                    <p className="text-xs font-medium text-text-secondary uppercase tracking-wider">Account</p>
+                    <p className="text-sm font-bold text-text-primary truncate">{username}</p>
                   </div>
                   
                   <button 
@@ -185,20 +185,20 @@ export const Header: React.FC<HeaderProps> = ({
                       setShowSettings(true);
                       setIsUserMenuOpen(false);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-text-secondary hover:bg-bg-tertiary hover:text-accent-primary transition-colors"
                   >
                     <Settings size={16} />
                     <span>Common Settings</span>
                   </button>
 
-                  <div className="h-[1px] bg-gray-50 my-1" />
+                  <div className="h-[1px] bg-border-primary my-1" />
                   
                   <button 
                     onClick={() => {
                       onLogout?.();
                       setIsUserMenuOpen(false);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
                   >
                     <LogOut size={16} />
                     <span>Logout</span>

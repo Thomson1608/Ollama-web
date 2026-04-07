@@ -118,18 +118,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   ] as const;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-gray-50/30">
+    <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary">
       {/* Header - Fixed at top */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-gray-100 px-4 md:px-8 py-4 md:py-6 z-10 shrink-0">
+      <div className="bg-bg-primary/80 backdrop-blur-md border-b border-border-primary px-4 md:px-8 py-4 md:py-6 z-10 shrink-0">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3 md:gap-4">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-xl md:rounded-2xl flex items-center justify-center text-blue-600 shadow-sm shrink-0">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-accent-primary/10 rounded-xl md:rounded-2xl flex items-center justify-center text-accent-primary shadow-sm shrink-0">
               <Settings size={20} className="md:hidden" />
               <Settings size={24} className="hidden md:block" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-xl md:text-2xl font-bold text-gray-800 truncate">Settings</h2>
-              <p className="text-[10px] md:text-sm text-gray-500 truncate">Configure AI behavior</p>
+              <h2 className="text-xl md:text-2xl font-bold text-text-primary truncate">Settings</h2>
+              <p className="text-[10px] md:text-sm text-text-secondary truncate">Configure AI behavior</p>
             </div>
           </div>
           <button 
@@ -137,8 +137,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             disabled={!hasChanges}
             className={`flex items-center justify-center gap-2 px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-lg w-full md:w-auto ${
               hasChanges 
-                ? "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 cursor-pointer" 
-                : "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
+                ? "bg-accent-primary hover:bg-accent-primary/90 text-white shadow-accent-primary/20 cursor-pointer" 
+                : "bg-bg-tertiary text-text-secondary cursor-not-allowed shadow-none"
             }`}
           >
             <Save size={16} className="md:hidden" />
@@ -156,8 +156,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               className={cn(
                 "flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-medium transition-colors whitespace-nowrap shrink-0",
                 activeTab === tab.id 
-                  ? "bg-blue-50 text-blue-700 border border-blue-100" 
-                  : "text-gray-600 hover:bg-gray-100 border border-transparent"
+                  ? "bg-accent-primary/10 text-accent-primary border border-accent-primary/20" 
+                  : "text-text-secondary hover:bg-bg-tertiary border border-transparent"
               )}
             >
               <tab.icon size={14} className="md:hidden" />
@@ -169,7 +169,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* Body - Scrollable */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar">
         <motion.div 
           key={activeTab}
           initial={{ opacity: 0, y: 10 }}
@@ -178,28 +178,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           className="max-w-4xl mx-auto pb-12"
         >
           {activeTab === 'general' && (
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6 flex flex-col">
+            <div className="bg-bg-secondary p-6 rounded-3xl border border-border-primary shadow-sm space-y-6 flex flex-col">
               <div className="space-y-4 flex-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                    <Globe size={16} className="text-blue-500" />
+                  <label className="text-sm font-bold text-text-primary flex items-center gap-2">
+                    <Globe size={16} className="text-accent-primary" />
                     Ollama Server Status
                   </label>
                   <div className="flex items-center gap-1.5">
                     {connectionStatus === 'connected' ? (
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+                      <div className="flex items-center gap-1 text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20">
                         <CheckCircle2 size={10} />
                         CONNECTED
                       </div>
                     ) : (
-                      <div className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">
+                      <div className="flex items-center gap-1 text-[10px] font-bold text-red-500 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
                         <AlertCircle size={10} />
                         DISCONNECTED
                       </div>
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 leading-relaxed">
+                <p className="text-xs text-text-secondary leading-relaxed">
                   The application is configured to connect to Ollama via the backend server. 
                   {connectionStatus === 'connected' 
                     ? " The connection is currently active and healthy." 
@@ -207,19 +207,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </p>
               </div>
 
-              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
-                <div className="flex items-center gap-2 text-blue-800 font-bold text-sm">
+              <div className="p-4 bg-accent-primary/10 rounded-2xl border border-accent-primary/20 space-y-3">
+                <div className="flex items-center gap-2 text-accent-primary font-bold text-sm">
                   <Terminal size={16} />
                   Server-Side Logic
                 </div>
-                <p className="text-[11px] text-blue-700 leading-relaxed">
+                <p className="text-[11px] text-text-secondary leading-relaxed">
                   All AI processing and model management are now handled by the backend server for improved security and reliability when deployed on a VPS.
                 </p>
               </div>
 
-              <div className="p-4 bg-red-50 rounded-2xl border border-red-100 space-y-3">
+              <div className="p-4 bg-red-500/10 rounded-2xl border border-red-500/20 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-red-800 font-bold text-sm">
+                  <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
                     <Power size={16} />
                     System Power
                   </div>
@@ -227,25 +227,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onClick={handleShutdown}
                     className={`text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 ${
                       isConfirmingShutdown 
-                        ? "bg-red-600 hover:bg-red-700 text-white" 
-                        : "bg-white text-red-600 border border-red-200 hover:bg-red-50"
+                        ? "bg-red-500 hover:bg-red-600 text-white" 
+                        : "bg-bg-secondary text-red-400 border border-red-500/20 hover:bg-red-500/10"
                     }`}
                   >
                     <Power size={14} />
                     {isConfirmingShutdown ? "Click to Confirm Shutdown" : "Shutdown Server (1 Min)"}
                   </button>
                 </div>
-                <p className="text-[11px] text-red-700 leading-relaxed">
+                <p className="text-[11px] text-text-secondary leading-relaxed">
                   This will schedule a full system shutdown in 1 minute. Use this if you are running the application on a dedicated machine or VPS and want to power it off.
                 </p>
               </div>
 
-              <div className="pt-6 border-t border-gray-50">
+              <div className="pt-6 border-t border-border-primary">
                 <div className="flex items-center gap-2 mb-6">
-                  <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600">
+                  <div className="w-8 h-8 bg-accent-primary/10 rounded-lg flex items-center justify-center text-accent-primary">
                     <Activity size={18} />
                   </div>
-                  <h3 className="text-lg font-bold text-gray-800">System Control & Monitoring</h3>
+                  <h3 className="text-lg font-bold text-text-primary">System Control & Monitoring</h3>
                 </div>
                 <SystemControl username={username} />
               </div>
@@ -253,24 +253,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           )}
 
           {activeTab === 'memory' && (
-            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+            <div className="bg-bg-secondary p-6 rounded-3xl border border-border-primary shadow-sm space-y-6">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                    <Brain size={16} className="text-blue-500" />
+                  <label className="text-sm font-bold text-text-primary flex items-center gap-2">
+                    <Brain size={16} className="text-accent-primary" />
                     Long-term Memory
                   </label>
                   {memory.facts.length > 0 && (
                     <button 
                       onClick={clearMemory}
-                      className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1"
+                      className="text-[10px] font-bold text-red-400 hover:text-red-500 flex items-center gap-1"
                     >
                       <Trash2 size={10} />
                       CLEAR
                     </button>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 leading-relaxed">
+                <p className="text-xs text-text-secondary leading-relaxed">
                   Information the AI has learned about you over time. This is used to personalize your experience.
                 </p>
                 <MemoryEditor 
@@ -282,39 +282,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           )}
 
           {activeTab === 'prompt' && (
-            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+            <div className="bg-bg-secondary p-8 rounded-3xl border border-border-primary shadow-sm space-y-6">
               <div className="flex items-center justify-between">
-                <label className="text-base font-bold text-gray-700 flex items-center gap-2">
-                  <UserCircle size={20} className="text-blue-500" />
+                <label className="text-base font-bold text-text-primary flex items-center gap-2">
+                  <UserCircle size={20} className="text-accent-primary" />
                   System Prompt
                 </label>
                 {hasChanges && (
-                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 animate-pulse">
+                  <span className="text-[10px] font-bold text-accent-primary bg-accent-primary/10 px-2 py-0.5 rounded-full border border-accent-primary/20 animate-pulse">
                     UNSAVED CHANGES
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-500 leading-relaxed">
+              <p className="text-xs text-text-secondary leading-relaxed">
                 Define the AI's personality, knowledge boundaries, and response style. This prompt is sent with every message to guide the AI's behavior.
               </p>
               <textarea 
                 value={localPrompt}
                 onChange={(e) => setLocalPrompt(e.target.value)}
                 placeholder="Tell the AI who you are and how it should behave..."
-                className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-6 py-5 text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-mono min-h-[400px] leading-relaxed"
+                className="w-full bg-bg-primary border border-border-primary rounded-2xl px-6 py-5 text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary transition-all text-sm font-mono min-h-[400px] leading-relaxed no-scrollbar"
               />
             </div>
           )}
 
           {activeTab === 'model' && (
-            <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-8">
+            <div className="bg-bg-secondary p-8 rounded-3xl border border-border-primary shadow-sm space-y-8">
               <div className="flex items-center justify-between">
-                <label className="text-base font-bold text-gray-700 flex items-center gap-2">
-                  <Cpu size={20} className="text-blue-500" />
+                <label className="text-base font-bold text-text-primary flex items-center gap-2">
+                  <Cpu size={20} className="text-accent-primary" />
                   Model Default Parameters
                 </label>
                 {hasChanges && (
-                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 animate-pulse">
+                  <span className="text-[10px] font-bold text-accent-primary bg-accent-primary/10 px-2 py-0.5 rounded-full border border-accent-primary/20 animate-pulse">
                     UNSAVED CHANGES
                   </span>
                 )}
@@ -324,11 +324,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 {/* Temperature */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                    <label className="text-sm font-medium text-text-secondary flex items-center gap-1.5">
                       Temperature
-                      <Info size={14} className="text-gray-400 cursor-help" />
+                      <Info size={14} className="text-text-secondary cursor-help" />
                     </label>
-                    <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                    <span className="text-xs font-mono bg-bg-tertiary px-1.5 py-0.5 rounded text-text-primary">
                       {(localParameters.temperature ?? 0.7).toFixed(1)}
                     </span>
                   </div>
@@ -339,18 +339,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     step="0.1"
                     value={localParameters.temperature ?? 0.7}
                     onChange={(e) => updateParam('temperature', parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    className="w-full h-1.5 bg-bg-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
                   />
                 </div>
 
                 {/* Top P */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                    <label className="text-sm font-medium text-text-secondary flex items-center gap-1.5">
                       Top P
-                      <Info size={14} className="text-gray-400 cursor-help" />
+                      <Info size={14} className="text-text-secondary cursor-help" />
                     </label>
-                    <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                    <span className="text-xs font-mono bg-bg-tertiary px-1.5 py-0.5 rounded text-text-primary">
                       {(localParameters.topP ?? 0.9).toFixed(2)}
                     </span>
                   </div>
@@ -361,18 +361,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     step="0.01"
                     value={localParameters.topP ?? 0.9}
                     onChange={(e) => updateParam('topP', parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    className="w-full h-1.5 bg-bg-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
                   />
                 </div>
 
                 {/* Top K */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                    <label className="text-sm font-medium text-text-secondary flex items-center gap-1.5">
                       Top K
-                      <Info size={14} className="text-gray-400 cursor-help" />
+                      <Info size={14} className="text-text-secondary cursor-help" />
                     </label>
-                    <span className="text-xs font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+                    <span className="text-xs font-mono bg-bg-tertiary px-1.5 py-0.5 rounded text-text-primary">
                       {localParameters.topK ?? 40}
                     </span>
                   </div>
@@ -383,46 +383,46 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     step="1"
                     value={localParameters.topK ?? 40}
                     onChange={(e) => updateParam('topK', parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    className="w-full h-1.5 bg-bg-tertiary rounded-lg appearance-none cursor-pointer accent-accent-primary"
                   />
                 </div>
 
                 {/* Max Tokens */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                    <label className="text-sm font-medium text-text-secondary flex items-center gap-1.5">
                       Max Tokens
                     </label>
                   </div>
                   <div className="relative">
-                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                    <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" size={16} />
                     <input 
                       type="number" 
                       placeholder="Default"
                       value={localParameters.maxTokens ?? ''}
                       onChange={(e) => updateParam('maxTokens', e.target.value ? parseInt(e.target.value) : undefined)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                      className="w-full pl-10 pr-4 py-2 bg-bg-primary border border-border-primary rounded-xl text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 focus:border-accent-primary outline-none transition-all"
                     />
                   </div>
                 </div>
               </div>
 
               {/* JSON Mode */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+              <div className="flex items-center justify-between p-4 bg-bg-tertiary rounded-2xl border border-border-primary">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-600 shadow-sm">
+                  <div className="w-10 h-10 bg-bg-primary rounded-xl flex items-center justify-center text-accent-primary shadow-sm">
                     <Terminal size={20} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-gray-800">JSON Mode</h4>
-                    <p className="text-[10px] text-gray-500">Force the model to output valid JSON</p>
+                    <h4 className="text-sm font-bold text-text-primary">JSON Mode</h4>
+                    <p className="text-[10px] text-text-secondary">Force the model to output valid JSON</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => updateParam('jsonMode', !localParameters.jsonMode)}
                   className={cn(
                     "w-12 h-6 rounded-full transition-all relative",
-                    localParameters.jsonMode ? "bg-blue-600" : "bg-gray-300"
+                    localParameters.jsonMode ? "bg-accent-primary" : "bg-bg-tertiary border border-border-primary"
                   )}
                 >
                   <div className={cn(
@@ -435,7 +435,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           )}
 
           {activeTab === 'stats' && (
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-bg-secondary rounded-3xl border border-border-primary shadow-sm overflow-hidden">
               <StatsView />
             </div>
           )}
