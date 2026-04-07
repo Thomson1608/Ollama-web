@@ -38,7 +38,7 @@ const __dirname = path.dirname(__filename);
 const execAsync = promisify(exec);
 
 const DATA_DIR = path.join(__dirname, 'data');
-const USERS_DIR = path.join(DATA_DIR, 'users');
+const USERS_DIR = DATA_DIR;
 const SYSTEM_LOG_FILE = path.join(DATA_DIR, 'system.log');
 
 // Initialize Firebase
@@ -344,11 +344,11 @@ const dbService = {
 // Helper to get user-specific paths
 function getUserPaths(username: string, projectId?: string) {
   const userDir = path.join(USERS_DIR, username);
-  const projectDir = projectId ? path.join(userDir, 'projects', projectId) : userDir;
+  const projectDir = projectId ? path.join(userDir, projectId) : userDir;
   return {
     dir: userDir,
     projectDir: projectDir,
-    workspace: path.join(projectDir, 'workspace')
+    workspace: projectDir
   };
 }
 
