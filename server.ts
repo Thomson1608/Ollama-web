@@ -361,7 +361,26 @@ async function isAdmin(username: string) {
   }
 }
 
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+let OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+
+// Load initial config for Ollama URL if available
+async function initOllamaUrl() {
+  try {
+    // We'll use a global system config for Ollama URL
+    const configRef = doc(db, 'system', 'config');
+    const configSnap = await getDoc(configRef);
+    if (configSnap.exists()) {
+      const data = configSnap.data();
+      if (data.ollamaUrl) {
+        OLLAMA_URL = data.ollamaUrl;
+        logger.release(`System: Loaded Ollama URL from DB: ${OLLAMA_URL}`);
+      }
+    }
+  } catch (e) {
+    logger.error('Failed to load system config', e);
+  }
+}
+initOllamaUrl();
 const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
 
 
@@ -839,14 +858,15 @@ async function startServer() {
     if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
 
     try {
-      const config = await dbService.getConfig(username);
-      if (!config) {
-        return res.json({
-          systemPrompt: `Bạn là một trợ lý hữu ích cho ${username}.`,
-          parameters: { temperature: 0.7, topP: 0.9, topK: 40, maxTokens: null, stop: [], jsonMode: false }
-        });
-      }
-      res.json(config);
+      const config = await dbService.getConfig(username) as any;
+      const defaultConfig = {
+        systemPrompt: `Bạn là một trợ lý hữu ích cho ${username}.`,
+        parameters: { temperature: 0.7, topP: 0.9, topK: 40, maxTokens: null, stop: [], jsonMode: false }
+      };
+      
+      const finalConfig = config || defaultConfig;
+      // Also include the global Ollama URL
+      res.json({ ...finalConfig, ollamaUrl: OLLAMA_URL });
     } catch (error) {
       logger.error('Không thể đọc cấu hình:', error);
       res.status(500).json({ error: 'Không thể đọc cấu hình' });
@@ -860,7 +880,16 @@ async function startServer() {
 
     try {
       const config = req.body;
-      await dbService.saveConfig(username, config);
+      const { systemPrompt, parameters, ollamaUrl } = config;
+      
+      await dbService.saveConfig(username, { systemPrompt, parameters });
+      
+      // Update global Ollama URL if provided and user is admin
+      if (ollamaUrl && await isAdmin(username)) {
+        OLLAMA_URL = ollamaUrl;
+        await setDoc(doc(db, 'system', 'config'), { ollamaUrl }, { merge: true });
+        logger.release(`System: Updated global Ollama URL to ${OLLAMA_URL} by ${username}`);
+      }
       
       io.emit(`config:updated:${username}`, config);
       res.json({ success: true });
@@ -1416,6 +1445,20 @@ async function startServer() {
       await fs.writeFile(filePath, content, 'utf-8');
       io.emit(`workspace:updated:${username}`);
       res.json({ success: true });
+
+      // If package.json was written, trigger dependency check
+      if (safeName === 'package.json' && projectId) {
+        logger.release(`Workspace: package.json updated for ${username} in ${projectId}. Triggering check...`);
+        // We don't await here to not block the response
+        fetch(`http://localhost:3000/api/workspace/check-package-json`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-username': username
+          },
+          body: JSON.stringify({ projectId })
+        }).catch(e => logger.error('Failed to trigger check-package-json', e));
+      }
       
       // Auto commit after writing (unless skipped)
       if (!skipCommit) {
@@ -1625,9 +1668,17 @@ async function startServer() {
         const pkgContent = await fs.readFile(packageJsonPath, 'utf-8');
         const pkg = JSON.parse(pkgContent);
         let startCmd = 'npm run dev';
+        
+        // Check if it's a Vite app
+        const isVite = (pkg.dependencies?.vite || pkg.devDependencies?.vite);
+        
         if (pkg.scripts?.dev) {
-          // Force port 3001 in Vite
+          // Force port 3001 and strictPort
           startCmd = `npm run dev -- --port ${port} --strictPort`;
+          // If Vite, add base path to fix asset loading issues in proxy
+          if (isVite) {
+            startCmd += ` --base /workspace-preview/${username}/`;
+          }
         } else if (pkg.scripts?.start) {
           startCmd = `npm start`;
         }

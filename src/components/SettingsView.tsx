@@ -33,6 +33,8 @@ interface SettingsViewProps {
   setSystemPrompt: (prompt: string) => void;
   parameters: ModelParameters;
   setParameters: (params: ModelParameters) => void;
+  ollamaUrl: string;
+  setOllamaUrl: (url: string) => void;
   memory: Memory;
   clearMemory: () => void;
   saveSettings: () => void;
@@ -49,6 +51,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setSystemPrompt,
   parameters,
   setParameters,
+  ollamaUrl,
+  setOllamaUrl,
   memory,
   clearMemory,
   saveSettings,
@@ -60,11 +64,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const [localParameters, setLocalParameters] = useState<ModelParameters>(parameters);
+  const [localOllamaUrl, setLocalOllamaUrl] = useState(ollamaUrl);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
   const [isConfirmingShutdown, setIsConfirmingShutdown] = useState(false);
   
   const hasChanges = 
     localPrompt !== systemPrompt || 
+    localOllamaUrl !== ollamaUrl ||
     JSON.stringify(localMemory) !== JSON.stringify(memory.facts) ||
     JSON.stringify(localParameters) !== JSON.stringify(parameters);
 
@@ -73,11 +79,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLocalPrompt(systemPrompt);
     setLocalMemory(memory.facts);
     setLocalParameters(parameters);
-  }, [systemPrompt, memory, parameters]);
+    setLocalOllamaUrl(ollamaUrl);
+  }, [systemPrompt, memory, parameters, ollamaUrl]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
     setParameters(localParameters);
+    setOllamaUrl(localOllamaUrl);
     // Update memory via API
     fetch('/api/memory', {
       method: 'POST',
@@ -208,6 +216,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     )}
                   </div>
                 </div>
+                
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-text-secondary">Ollama API URL</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text"
+                      value={localOllamaUrl}
+                      onChange={(e) => setLocalOllamaUrl(e.target.value)}
+                      placeholder="http://localhost:11434"
+                      className="flex-1 bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                    />
+                  </div>
+                  <p className="text-[10px] text-text-secondary">
+                    Địa chỉ URL của máy chủ Ollama. Mặc định là http://localhost:11434.
+                  </p>
+                </div>
+
                 <p className="text-xs text-text-secondary leading-relaxed">
                   The application is configured to connect to Ollama via the backend server. 
                   {connectionStatus === 'connected' 

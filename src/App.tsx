@@ -140,6 +140,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
     return ADMIN_SYSTEM_PROMPT;
   });
 
+  const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
+
   // Update system prompt when username changes
   useEffect(() => {
     if (!localStorage.getItem('ollama_system_prompt')) {
@@ -660,7 +662,11 @@ If the user asks you to write code, you should provide it in a markdown code blo
             'Content-Type': 'application/json',
             'x-username': username
           },
-          body: JSON.stringify({ systemPrompt, parameters: globalParameters }),
+          body: JSON.stringify({ 
+            systemPrompt, 
+            parameters: globalParameters,
+            ollamaUrl 
+          }),
         });
       } catch (error) {
         console.error('Failed to sync config to backend:', error);
@@ -669,7 +675,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     
     const timeoutId = setTimeout(syncConfig, 1000);
     return () => clearTimeout(timeoutId);
-  }, [systemPrompt, globalParameters, isInitialized, username]);
+  }, [systemPrompt, globalParameters, ollamaUrl, isInitialized, username]);
 
   useEffect(() => {
     checkConnection();
@@ -1513,6 +1519,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     setSystemPrompt={setSystemPrompt}
                     parameters={globalParameters}
                     setParameters={setGlobalParameters}
+                    ollamaUrl={ollamaUrl}
+                    setOllamaUrl={setOllamaUrl}
                     memory={memory}
                     clearMemory={clearMemory}
                     saveSettings={saveSettings}
