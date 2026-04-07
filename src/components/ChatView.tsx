@@ -746,9 +746,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 <button
                   type="submit"
                   disabled={!input.trim() || isLoading || isAiTypingGlobally || isGloballyBusy || !activeChatId || activeChat?.isClosed}
-                  className="p-2.5 bg-bg-tertiary border border-border-primary text-text-secondary hover:text-text-primary disabled:opacity-50 rounded-xl transition-all shadow-sm"
+                  className="p-2.5 bg-bg-tertiary border border-border-primary text-text-secondary hover:text-text-primary disabled:opacity-50 rounded-xl transition-all shadow-sm flex items-center justify-center"
                 >
-                  <Send size={18} />
+                  {isLoading || isAiTypingGlobally || isGloballyBusy ? (
+                    <Loader2 size={18} className="animate-spin" />
+                  ) : (
+                    <Send size={18} />
+                  )}
                 </button>
               </div>
             </div>
