@@ -35,6 +35,8 @@ interface SettingsViewProps {
   setParameters: (params: ModelParameters) => void;
   ollamaUrl: string;
   setOllamaUrl: (url: string) => void;
+  ollamaApiKey: string;
+  setOllamaApiKey: (key: string) => void;
   memory: Memory;
   clearMemory: () => void;
   saveSettings: () => void;
@@ -53,6 +55,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setParameters,
   ollamaUrl,
   setOllamaUrl,
+  ollamaApiKey,
+  setOllamaApiKey,
   memory,
   clearMemory,
   saveSettings,
@@ -65,12 +69,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const [localParameters, setLocalParameters] = useState<ModelParameters>(parameters);
   const [localOllamaUrl, setLocalOllamaUrl] = useState(ollamaUrl);
+  const [localOllamaApiKey, setLocalOllamaApiKey] = useState(ollamaApiKey);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
   const [isConfirmingShutdown, setIsConfirmingShutdown] = useState(false);
   
   const hasChanges = 
     localPrompt !== systemPrompt || 
     localOllamaUrl !== ollamaUrl ||
+    localOllamaApiKey !== ollamaApiKey ||
     JSON.stringify(localMemory) !== JSON.stringify(memory.facts) ||
     JSON.stringify(localParameters) !== JSON.stringify(parameters);
 
@@ -80,12 +86,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLocalMemory(memory.facts);
     setLocalParameters(parameters);
     setLocalOllamaUrl(ollamaUrl);
-  }, [systemPrompt, memory, parameters, ollamaUrl]);
+    setLocalOllamaApiKey(ollamaApiKey);
+  }, [systemPrompt, memory, parameters, ollamaUrl, ollamaApiKey]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
     setParameters(localParameters);
     setOllamaUrl(localOllamaUrl);
+    setOllamaApiKey(localOllamaApiKey);
     // Update memory via API
     fetch('/api/memory', {
       method: 'POST',
@@ -231,6 +239,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <p className="text-[10px] text-text-secondary">
                     Địa chỉ URL của máy chủ Ollama. Mặc định là http://localhost:11434.
                   </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-text-secondary">Ollama API Key</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="password"
+                      value={localOllamaApiKey}
+                      onChange={(e) => setLocalOllamaApiKey(e.target.value)}
+                      placeholder="Nhập API Key..."
+                      className="flex-1 bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                    />
+                  </div>
                 </div>
 
                 <p className="text-xs text-text-secondary leading-relaxed">

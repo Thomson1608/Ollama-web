@@ -141,6 +141,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   });
 
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
+  const [ollamaApiKey, setOllamaApiKey] = useState(() => localStorage.getItem('ollama_api_key') || '');
   const [workspaceHost, setWorkspaceHost] = useState(() => localStorage.getItem('workspace_host') || 'localhost');
 
   // Update system prompt when username changes
@@ -1536,9 +1537,15 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     parameters={globalParameters}
                     setParameters={setGlobalParameters}
                     ollamaUrl={ollamaUrl}
-                    setOllamaUrl={setOllamaUrl}
-                    workspaceHost={workspaceHost}
-                    setWorkspaceHost={setWorkspaceHost}
+                    setOllamaUrl={(url) => {
+                      setOllamaUrl(url);
+                      localStorage.setItem('ollama_url', url);
+                    }}
+                    ollamaApiKey={ollamaApiKey}
+                    setOllamaApiKey={(key) => {
+                      setOllamaApiKey(key);
+                      localStorage.setItem('ollama_api_key', key);
+                    }}
                     memory={memory}
                     clearMemory={clearMemory}
                     saveSettings={saveSettings}
