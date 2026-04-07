@@ -1978,7 +1978,21 @@ async function startServer() {
               if (jsonString.startsWith('```')) {
                 jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
               }
-              const call = JSON.parse(jsonString);
+              let call;
+              try {
+                call = JSON.parse(jsonString);
+              } catch (parseError) {
+                const nameMatch = jsonString.match(/<name>([\s\S]*?)<\/name>/);
+                const argsMatch = jsonString.match(/<arguments>([\s\S]*?)<\/arguments>/);
+                if (nameMatch && argsMatch) {
+                  call = {
+                    name: nameMatch[1].trim(),
+                    args: JSON.parse(argsMatch[1].trim())
+                  };
+                } else {
+                  throw parseError;
+                }
+              }
               const toolName = call.tool || call.name;
               const toolArgs = call.args || call.arguments || call;
               if (toolName) {
@@ -2062,7 +2076,21 @@ async function startServer() {
                   if (jsonString.startsWith('```')) {
                     jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
                   }
-                  const call = JSON.parse(jsonString);
+                  let call;
+                  try {
+                    call = JSON.parse(jsonString);
+                  } catch (parseError) {
+                    const nameMatch = jsonString.match(/<name>([\s\S]*?)<\/name>/);
+                    const argsMatch = jsonString.match(/<arguments>([\s\S]*?)<\/arguments>/);
+                    if (nameMatch && argsMatch) {
+                      call = {
+                        name: nameMatch[1].trim(),
+                        args: JSON.parse(argsMatch[1].trim())
+                      };
+                    } else {
+                      throw parseError;
+                    }
+                  }
                   const toolName = call.tool || call.name;
                   const toolArgs = call.args || call.arguments || call;
                   if (toolName) {
