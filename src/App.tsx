@@ -116,6 +116,7 @@ CRITICAL DIRECTIVES:
    - Running build scripts or tests.
 4. CLEAN CHAT: Do not output large code blocks in the chat. The workspace is the source of truth.
 5. NO MARKDOWN CODE BLOCKS: Do NOT use \`\`\` for source code in your response text. Only use them inside <tool_call> arguments if necessary.
+6. PROJECT INITIALIZATION: When running commands like 'create-next-app .' or 'create-react-app .', ensure the current directory is empty first. If it contains files like '.gitkeep', delete them using 'run_command' (e.g., 'rm -rf ./* ./.* 2>/dev/null || true') before initializing.
 
 AVAILABLE TOOLS:
 1. list_files: List all files in the workspace.
