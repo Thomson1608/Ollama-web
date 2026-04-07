@@ -489,8 +489,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
           </Group>
         ) : viewMode === 'web' ? (
           <div className="flex-1 flex flex-col bg-bg-primary min-w-0">
-            <div className="flex-1 p-4 overflow-hidden flex flex-col gap-4 relative">
-              <div className="flex-1 bg-white rounded-xl border border-border-primary overflow-hidden shadow-2xl">
+            <div className="flex-1 p-0 overflow-hidden flex flex-col relative">
+              <div className={cn(
+                "flex-1 bg-white border border-border-primary overflow-hidden",
+                isConsoleOpen ? "rounded-t-xl border-b-0" : "rounded-xl"
+              )}>
                 <iframe 
                   key={previewKey}
                   src={previewType === 'node' ? `/workspace-preview/${username}/?t=${previewKey}` : (selectedFile?.endsWith('.html') ? `/preview/${username}/${selectedFile.split('/').map(encodeURIComponent).join('/')}?t=${previewKey}` : `/preview/${username}/index.html?t=${previewKey}`)} 
@@ -501,7 +504,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
               </div>
               
               {isConsoleOpen && (
-                <div className="h-40 bg-bg-secondary border border-border-primary rounded-xl overflow-hidden flex flex-col shrink-0 shadow-xl">
+                <div className="h-40 bg-bg-secondary border border-border-primary rounded-b-xl overflow-hidden flex flex-col shrink-0 shadow-xl">
                   <div className="px-4 py-2 bg-bg-tertiary border-b border-border-primary flex items-center justify-between">
                     <span className="text-[10px] font-mono text-text-secondary uppercase tracking-widest">Terminal</span>
                     <button 

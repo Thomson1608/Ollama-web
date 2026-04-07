@@ -1395,7 +1395,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                   defaultSize={isMobile ? 100 : 30} 
                   minSize={isMobile ? 0 : 20}
                   className={cn(
-                    "flex flex-col transition-all duration-300",
+                    "flex flex-col transition-all duration-300 min-w-[200px]",
                     isMobile && currentView !== 'chat' && "hidden"
                   )}
                 >

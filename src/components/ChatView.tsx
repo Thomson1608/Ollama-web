@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { Chat, ConnectionStatus } from '../types';
@@ -472,9 +474,21 @@ export const ChatView: React.FC<ChatViewProps> = ({
                         </button>
                       </div>
                     </div>
-                    <pre className={cn("rounded-b-xl p-4 overflow-x-auto bg-[#0d0d0d] text-gray-100 text-sm max-w-full border-x border-b border-border-primary shadow-inner", className)}>
-                      <code {...props}>{children}</code>
-                    </pre>
+                    <div className="rounded-b-xl overflow-hidden border-x border-b border-border-primary shadow-inner">
+                      <SyntaxHighlighter
+                        language={langPart || 'text'}
+                        style={vscDarkPlus}
+                        showLineNumbers={true}
+                        customStyle={{
+                          margin: 0,
+                          padding: '1rem',
+                          fontSize: '0.875rem',
+                          backgroundColor: '#1e1e1e'
+                        }}
+                      >
+                        {codeString}
+                      </SyntaxHighlighter>
+                    </div>
                   </div>
                 );
               }
