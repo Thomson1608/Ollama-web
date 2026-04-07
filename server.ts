@@ -365,10 +365,47 @@ const LOG_LEVEL = process.env.LOG_LEVEL || 'debug'; // 'debug' or 'release'
 
 
 
+function getTagAndMessage(message: string): { tag: string, msg: string } {
+  const prefixes: Record<string, string> = {
+    'Socket.io:': 'NETWORK',
+    'Project:': 'PROJECT',
+    'Workspace:': 'WORKSPACE',
+    'Terminal:': 'WORKSPACE',
+    'Ollama Proxy:': 'CHAT',
+    'Ollama Proxy Error:': 'CHAT',
+    'Ollama Chat Error:': 'CHAT',
+    'Ollama Pull Error:': 'CHAT',
+    'Ollama Delete Error:': 'CHAT',
+    'Ollama PS Error:': 'CHAT',
+    'API:': 'API',
+    'Tool': 'TOOL',
+    'Post-chat logic': 'CHAT',
+    'Stream Tool Error:': 'TOOL',
+    'Heuristic:': 'TOOL',
+    'Auto-commit': 'FILE',
+    'Auto commit': 'FILE'
+  };
+
+  for (const [prefix, tag] of Object.entries(prefixes)) {
+    if (message.startsWith(prefix)) {
+      return { tag, msg: message };
+    }
+  }
+
+  const lowerMsg = message.toLowerCase();
+  if (lowerMsg.includes('file') || lowerMsg.includes('commit')) return { tag: 'FILE', msg: message };
+  if (lowerMsg.includes('chat') || lowerMsg.includes('model')) return { tag: 'CHAT', msg: message };
+  if (lowerMsg.includes('workspace') || lowerMsg.includes('npm') || lowerMsg.includes('process')) return { tag: 'WORKSPACE', msg: message };
+  if (lowerMsg.includes('swap') || lowerMsg.includes('service') || lowerMsg.includes('shutdown')) return { tag: 'SYSTEM', msg: message };
+  
+  return { tag: 'SYSTEM', msg: message };
+}
+
 const logger = {
   debug: (message: string, data?: any) => {
     if (LOG_LEVEL === 'debug') {
-      const logMsg = `[DEBUG] ${new Date().toISOString()} - ${message}${data ? ' ' + JSON.stringify(data, null, 2) : ''}\n`;
+      const { tag, msg } = getTagAndMessage(message);
+      const logMsg = `[DEBUG] [${tag}] ${new Date().toISOString()} - ${msg}${data ? ' ' + JSON.stringify(data, null, 2) : ''}\n`;
       process.stdout.write(logMsg);
       try {
         fsSync.appendFileSync(SYSTEM_LOG_FILE, logMsg);
@@ -376,7 +413,8 @@ const logger = {
     }
   },
   release: (message: string, data?: any) => {
-    const logMsg = `[RELEASE] ${new Date().toISOString()} - ${message}${data ? ' ' + JSON.stringify(data, null, 2) : ''}\n`;
+    const { tag, msg } = getTagAndMessage(message);
+    const logMsg = `[RELEASE] [${tag}] ${new Date().toISOString()} - ${msg}${data ? ' ' + JSON.stringify(data, null, 2) : ''}\n`;
     process.stdout.write(logMsg);
     try {
       fsSync.appendFileSync(SYSTEM_LOG_FILE, logMsg);
@@ -388,7 +426,8 @@ const logger = {
       stack: error.stack,
       ...(error as any)
     } : error;
-    const logMsg = `[ERROR] ${new Date().toISOString()} - ${message}${errorData ? ' ' + JSON.stringify(errorData, null, 2) : ''}\n`;
+    const { tag, msg } = getTagAndMessage(message);
+    const logMsg = `[ERROR] [${tag}] ${new Date().toISOString()} - ${msg}${errorData ? ' ' + JSON.stringify(errorData, null, 2) : ''}\n`;
     process.stderr.write(logMsg);
     try {
       fsSync.appendFileSync(SYSTEM_LOG_FILE, logMsg);

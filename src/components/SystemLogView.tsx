@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Terminal, Trash2, Search, Filter, Calendar } from 'lucide-react';
+import { Terminal, Trash2, Search, Filter, Calendar, Activity } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LogEntry {
   raw: string;
   timestamp: string;
   level: string;
+  tag: string;
   message: string;
   date: string;
 }
@@ -13,6 +14,7 @@ interface LogEntry {
 export const SystemLogView: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [filterType, setFilterType] = useState<string>('all');
   const [filterTag, setFilterTag] = useState<string>('all');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -25,18 +27,20 @@ export const SystemLogView: React.FC = () => {
       if (res.ok) {
         const data = await res.json();
         const parsedLogs = data.logs.map((log: string) => {
-          // Example: [DEBUG] 2026-04-07T13:31:32.123Z - Message
-          const match = log.match(/^\[(.*?)\]\s([\d:T.-]+Z)\s-\s([\s\S]*)$/);
+          // Match new format: [DEBUG] [TAG] 2026-04-07T13:31:32.123Z - Message
+          // Or old format: [DEBUG] 2026-04-07T13:31:32.123Z - Message
+          const match = log.match(/^\[(.*?)\]\s(?:\[(.*?)\]\s)?([\d:T.-]+Z)\s-\s([\s\S]*)$/);
           if (match) {
             return {
               raw: log,
               level: match[1],
-              timestamp: match[2],
-              date: match[2].split('T')[0],
-              message: match[3]
+              tag: match[2] || 'SYSTEM',
+              timestamp: match[3],
+              date: match[3].split('T')[0],
+              message: match[4]
             };
           }
-          return { raw: log, timestamp: '', level: 'INFO', message: log, date: '' };
+          return { raw: log, timestamp: '', level: 'INFO', tag: 'SYSTEM', message: log, date: '' };
         }).filter((l: LogEntry) => l.timestamp);
         setLogs(parsedLogs.reverse()); // Newest first
       }
@@ -72,28 +76,41 @@ export const SystemLogView: React.FC = () => {
       if (startDate && log.date < startDate) return false;
       if (endDate && log.date > endDate) return false;
 
+      // Type filter
+      if (filterType !== 'all' && log.level !== filterType) return false;
+
       // Tag filter
-      if (filterTag !== 'all') {
+      if (filterTag !== 'all' && log.tag !== filterTag) {
+        // Fallback for old logs without explicit tags
         const msg = log.message.toLowerCase();
-        if (filterTag === 'chat') {
-          return msg.includes('chat') || msg.includes('request to model') || msg.includes('proxy: starting chat');
-        }
-        if (filterTag === 'file') {
-          return msg.includes('tool read_file') || msg.includes('tool write_file') || msg.includes('tool delete_file') || msg.includes('auto-commit');
-        }
-        if (filterTag === 'preview') {
-          return msg.includes('workspace app') || msg.includes('running workspace') || msg.includes('npm install');
-        }
+        if (filterTag === 'CHAT' && !(msg.includes('chat') || msg.includes('model'))) return false;
+        if (filterTag === 'FILE' && !(msg.includes('file') || msg.includes('commit'))) return false;
+        if (filterTag === 'WORKSPACE' && !(msg.includes('workspace') || msg.includes('npm'))) return false;
+        if (filterTag !== 'CHAT' && filterTag !== 'FILE' && filterTag !== 'WORKSPACE') return false;
       }
 
       return true;
     });
-  }, [logs, filterTag, startDate, endDate]);
+  }, [logs, filterType, filterTag, startDate, endDate]);
 
   return (
     <div className="bg-bg-secondary p-6 rounded-xl border border-border-primary shadow-sm flex flex-col h-[calc(100vh-160px)]">
       <div className="flex flex-col md:flex-row gap-4 mb-4 items-start md:items-center justify-between shrink-0">
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg border border-border-primary">
+            <Activity size={14} className="text-text-secondary" />
+            <select 
+              value={filterType} 
+              onChange={(e) => setFilterType(e.target.value)}
+              className="bg-transparent text-sm text-text-primary focus:outline-none"
+            >
+              <option value="all">All Types</option>
+              <option value="DEBUG">Debug</option>
+              <option value="RELEASE">Release</option>
+              <option value="ERROR">Error</option>
+            </select>
+          </div>
+
           <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg border border-border-primary">
             <Filter size={14} className="text-text-secondary" />
             <select 
@@ -102,9 +119,14 @@ export const SystemLogView: React.FC = () => {
               className="bg-transparent text-sm text-text-primary focus:outline-none"
             >
               <option value="all">All Tags</option>
-              <option value="chat">Chat Messages</option>
-              <option value="file">File Operations</option>
-              <option value="preview">Web Preview</option>
+              <option value="SYSTEM">System</option>
+              <option value="CHAT">Chat Messages</option>
+              <option value="FILE">File Operations</option>
+              <option value="WORKSPACE">Workspace / Preview</option>
+              <option value="TOOL">Tools</option>
+              <option value="NETWORK">Network</option>
+              <option value="PROJECT">Project</option>
+              <option value="API">API</option>
             </select>
           </div>
 
@@ -161,9 +183,10 @@ export const SystemLogView: React.FC = () => {
           filteredLogs.map((log, i) => (
             <div key={i} className="break-all whitespace-pre-wrap">
               <span className={
-                log.level === 'ERROR' ? 'text-red-400' : 
+                log.level === 'ERROR' ? 'text-red-400 font-bold' : 
                 log.level === 'DEBUG' ? 'text-gray-500' : 'text-green-400'
               }>[{log.level}]</span>
+              <span className="text-purple-400 ml-1">[{log.tag}]</span>
               <span className="text-blue-400 ml-2">{new Date(log.timestamp).toLocaleString()}</span>
               <span className="ml-2">{log.message}</span>
             </div>
