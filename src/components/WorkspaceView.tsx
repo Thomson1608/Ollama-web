@@ -44,31 +44,30 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   const [commitDetails, setCommitDetails] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
+  const checkPackageJson = async () => {
+    if (!username || !projectId) return;
+    try {
+      const res = await fetch('/api/workspace/check-package-json', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({ projectId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.changed) {
+          toast.success('Detected package.json changes. Dependencies updated.');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to check package.json', e);
+    }
+  };
+
   // Auto-check package.json
   useEffect(() => {
-    if (!username || !projectId) return;
-    
-    const checkPackageJson = async () => {
-      try {
-        const res = await fetch('/api/workspace/check-package-json', {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'x-username': username
-          },
-          body: JSON.stringify({ projectId })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.changed) {
-            toast.success('Detected package.json changes. Dependencies updated.');
-          }
-        }
-      } catch (e) {
-        console.error('Failed to check package.json', e);
-      }
-    };
-
     checkPackageJson();
   }, [projectId, username]);
 
@@ -250,6 +249,11 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
         setIsEditing(false);
         setPreviewKey(prev => prev + 1);
         fetchFiles();
+        
+        // If package.json was saved, trigger check
+        if (selectedFile === 'package.json') {
+          checkPackageJson();
+        }
       }
     } catch (error) {
       toast.error('Failed to save file');

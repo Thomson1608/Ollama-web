@@ -7,6 +7,7 @@ import fsSync from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, ChildProcess, exec } from 'child_process';
+import treeKill from 'tree-kill';
 import { promisify } from 'util';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { simpleGit, SimpleGit } from 'simple-git';
@@ -1573,6 +1574,27 @@ async function startServer() {
   const WORKSPACE_PORTS = new Map<string, number>();
   let nextPort = 3001;
 
+  async function killPort(port: number) {
+    try {
+      // Kill any process using the port
+      await execAsync(`fuser -k ${port}/tcp`).catch(() => {});
+      await execAsync(`lsof -ti:${port} | xargs kill -9`).catch(() => {});
+      // Wait a bit for the port to be released
+      await new Promise(resolve => setTimeout(resolve, 500));
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  function killWorkspaceProcess(username: string) {
+    const proc = workspaceProcesses.get(username);
+    if (proc && proc.pid) {
+      logger.debug(`Killing workspace process ${proc.pid} for ${username}`);
+      treeKill(proc.pid, 'SIGKILL');
+      workspaceProcesses.delete(username);
+    }
+  }
+
   app.post('/api/workspace/run', async (req, res) => {
     const username = req.headers['x-username'] as string;
     const projectId = req.query.projectId as string;
@@ -1582,42 +1604,46 @@ async function startServer() {
       const paths = getUserPaths(username, projectId);
       logger.debug(`API: Running workspace for ${username} in project ${projectId}...`);
       
-      if (workspaceProcesses.has(username)) {
-        logger.debug(`Killing existing workspace process for ${username}`);
-        workspaceProcesses.get(username)?.kill();
-        workspaceProcesses.delete(username);
-      }
+      // Kill existing process for this user
+      killWorkspaceProcess(username);
 
       const packageJsonPath = path.join(paths.workspace, 'package.json');
       if (await fileExists(packageJsonPath)) {
         logger.release(`Starting workspace app for ${username}...`);
         
-        let port = WORKSPACE_PORTS.get(username);
-        if (!port) {
-          port = nextPort++;
-          WORKSPACE_PORTS.set(username, port);
-        }
+        // User wants port 3001 specifically
+        let port = 3001;
+        // If it's a multi-user environment, we might want to stick to WORKSPACE_PORTS
+        // but the user explicitly asked for 3001.
+        // Let's try to free up 3001.
+        await killPort(port);
+        WORKSPACE_PORTS.set(username, port);
 
         const pkgContent = await fs.readFile(packageJsonPath, 'utf-8');
         const pkg = JSON.parse(pkgContent);
         let startCmd = 'npm run dev';
         if (pkg.scripts?.dev) {
-          startCmd = `npm run dev -- --port ${port}`;
+          // Force port 3001 in Vite
+          startCmd = `npm run dev -- --port ${port} --strictPort`;
         } else if (pkg.scripts?.start) {
           startCmd = `npm start`;
         }
 
+        // Always try to install if node_modules is missing or package.json is newer
         let installCmd = 'npm install --no-audit --no-fund --prefer-offline --no-progress --loglevel=error && ';
         const nodeModulesPath = path.join(paths.workspace, 'node_modules');
         
         if (await fileExists(nodeModulesPath)) {
           const pkgStat = await fs.stat(packageJsonPath);
           const nmStat = await fs.stat(nodeModulesPath);
+          // If package.json is newer than node_modules folder, reinstall
           if (pkgStat.mtime <= nmStat.mtime) {
             installCmd = '';
           }
         }
 
+        logger.release(`Workspace: Executing: ${installCmd}${startCmd} in ${paths.workspace}`);
+        
         const proc = spawn(`${installCmd}${startCmd}`, {
           cwd: paths.workspace,
           shell: true,
@@ -1669,11 +1695,8 @@ async function startServer() {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
     
-    if (workspaceProcesses.has(username)) {
-      workspaceProcesses.get(username)?.kill();
-      workspaceProcesses.delete(username);
-      io.emit(`workspace:log:${username}`, 'Process stopped by user');
-    }
+    killWorkspaceProcess(username);
+    io.emit(`workspace:log:${username}`, 'Process stopped by user');
     res.json({ success: true });
   });
 

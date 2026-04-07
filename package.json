@@ -37,6 +37,7 @@
     "sonner": "^2.0.7",
     "systeminformation": "^5.31.5",
     "tailwind-merge": "^3.5.0",
+    "tree-kill": "^1.2.2",
     "vite": "^6.2.0"
   },
   "devDependencies": {
