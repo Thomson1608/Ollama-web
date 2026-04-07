@@ -1384,6 +1384,11 @@ If the user asks you to write code, you should provide it in a markdown code blo
           runningModels={runningModels}
           connectionStatus={connectionStatus}
           checkConnection={checkConnection}
+          workspaceHost={workspaceHost}
+          setWorkspaceHost={(host) => {
+            setWorkspaceHost(host);
+            localStorage.setItem('workspace_host', host);
+          }}
           setShowSettings={() => setCurrentView('settings')}
           isBusy={isLoading || generatingChatIds.size > 0}
           username={username}
@@ -1455,6 +1460,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     isMobile={isMobile}
                     username={username}
                     projectId={projectId || undefined}
+                    workspaceHost={workspaceHost}
                     onInstallDependencies={handleInstallDependencies}
                   />
                 </Panel>

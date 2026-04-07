@@ -35,8 +35,6 @@ interface SettingsViewProps {
   setParameters: (params: ModelParameters) => void;
   ollamaUrl: string;
   setOllamaUrl: (url: string) => void;
-  workspaceHost: string;
-  setWorkspaceHost: (host: string) => void;
   memory: Memory;
   clearMemory: () => void;
   saveSettings: () => void;
@@ -55,8 +53,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setParameters,
   ollamaUrl,
   setOllamaUrl,
-  workspaceHost,
-  setWorkspaceHost,
   memory,
   clearMemory,
   saveSettings,
@@ -69,14 +65,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const [localParameters, setLocalParameters] = useState<ModelParameters>(parameters);
   const [localOllamaUrl, setLocalOllamaUrl] = useState(ollamaUrl);
-  const [localWorkspaceHost, setLocalWorkspaceHost] = useState(workspaceHost);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
   const [isConfirmingShutdown, setIsConfirmingShutdown] = useState(false);
   
   const hasChanges = 
     localPrompt !== systemPrompt || 
     localOllamaUrl !== ollamaUrl ||
-    localWorkspaceHost !== workspaceHost ||
     JSON.stringify(localMemory) !== JSON.stringify(memory.facts) ||
     JSON.stringify(localParameters) !== JSON.stringify(parameters);
 
@@ -86,14 +80,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLocalMemory(memory.facts);
     setLocalParameters(parameters);
     setLocalOllamaUrl(ollamaUrl);
-    setLocalWorkspaceHost(workspaceHost);
-  }, [systemPrompt, memory, parameters, ollamaUrl, workspaceHost]);
+  }, [systemPrompt, memory, parameters, ollamaUrl]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
     setParameters(localParameters);
     setOllamaUrl(localOllamaUrl);
-    setWorkspaceHost(localWorkspaceHost);
     // Update memory via API
     fetch('/api/memory', {
       method: 'POST',
@@ -238,22 +230,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                   <p className="text-[10px] text-text-secondary">
                     Địa chỉ URL của máy chủ Ollama. Mặc định là http://localhost:11434.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-text-secondary">Workspace Host</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text"
-                      value={localWorkspaceHost}
-                      onChange={(e) => setLocalWorkspaceHost(e.target.value)}
-                      placeholder="localhost"
-                      className="flex-1 bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
-                    />
-                  </div>
-                  <p className="text-[10px] text-text-secondary">
-                    Host cho proxy workspace (ví dụ: localhost hoặc 0.0.0.0).
                   </p>
                 </div>
 

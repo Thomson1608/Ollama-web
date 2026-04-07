@@ -21,10 +21,11 @@ interface WorkspaceViewProps {
   isMobile?: boolean;
   username?: string | null;
   projectId?: string;
+  workspaceHost: string;
   onInstallDependencies?: () => Promise<void>;
 }
 
-export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, socket, isMobile, username, projectId, onInstallDependencies }) => {
+export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, socket, isMobile, username, projectId, workspaceHost, onInstallDependencies }) => {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
@@ -52,6 +53,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [availableScripts, setAvailableScripts] = useState<Record<string, string>>({});
   const [selectedScript, setSelectedScript] = useState<string>('dev');
+  const [workspacePort, setWorkspacePort] = useState<number | null>(null);
 
   const checkPackageJson = async () => {
     if (!username || !projectId) return;
@@ -240,6 +242,9 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
       if (res.ok) {
         const data = await res.json();
         setPreviewType(data.type);
+        if (data.port) {
+          setWorkspacePort(data.port);
+        }
         setPreviewKey(prev => prev + 1);
       }
     } catch (error) {
@@ -441,7 +446,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
           <div className="flex-1 flex items-center gap-2 bg-bg-tertiary border border-border-primary rounded-lg px-3 py-1.5 text-text-secondary">
             <Globe size={14} />
             <div className="flex-1 text-xs truncate font-mono">
-              {viewMode === 'web' ? (previewType === 'node' ? '/' : (selectedFile?.endsWith('.html') ? `/${selectedFile}` : '/index.html')) : (selectedFile || 'No file selected')}
+              {viewMode === 'web' ? (previewType === 'node' ? (workspacePort ? `${workspaceHost}:${workspacePort}` : '/') : (selectedFile?.endsWith('.html') ? `/${selectedFile}` : '/index.html')) : (selectedFile || 'No file selected')}
             </div>
             <div className="flex items-center gap-2">
               <button 

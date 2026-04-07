@@ -22,6 +22,8 @@ interface HeaderProps {
   runningModels: RunningModel[];
   connectionStatus: ConnectionStatus;
   checkConnection: () => void;
+  workspaceHost: string;
+  setWorkspaceHost: (host: string) => void;
   setShowSettings: (show: boolean) => void;
   isBusy: boolean;
   username?: string | null;
@@ -38,6 +40,8 @@ export const Header: React.FC<HeaderProps> = ({
   runningModels,
   connectionStatus,
   checkConnection,
+  workspaceHost,
+  setWorkspaceHost,
   setShowSettings,
   isBusy,
   username,
@@ -115,6 +119,15 @@ export const Header: React.FC<HeaderProps> = ({
               </select>
             </div>
 
+            <div className="flex flex-col shrink-0 border-l border-border-primary pl-2 md:pl-4">
+              <span className="text-[8px] md:text-[10px] font-medium text-text-secondary uppercase tracking-wider">Host</span>
+              <input
+                type="text"
+                value={workspaceHost}
+                onChange={(e) => setWorkspaceHost(e.target.value)}
+                className="bg-transparent text-xs md:text-sm font-semibold text-text-primary focus:outline-none max-w-[100px] md:max-w-[120px] truncate"
+              />
+            </div>
             {runningModel && (
               <div className="flex flex-col border-l border-border-primary pl-2 md:pl-4 shrink-0">
                 <span className="text-[8px] md:text-[10px] font-medium text-text-secondary uppercase tracking-wider">Expiry</span>
