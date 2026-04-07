@@ -229,18 +229,19 @@ State -> UI : Append Text
 
 Ollama --> API : Stream Chunk (contains <tool_call>)
 API -> API : Parse Tool Call
-API -> WS : Execute Tool (e.g., write_file)
+API -> WS : Execute Tool (skipCommit=true)
 WS --> API : Tool Result
 API --> State : Socket.IO 'tool:result'
 State -> UI : Show Toast Notification
 
 Ollama --> API : Done
+API -> WS : autoCommit (Batch all changes)
 API --> State : Socket.IO 'chats:updated'
 State -> UI : Finalize Message
 @enduml
 ```
 
-### 3.4 Agent Tool Calling Workflow (New)
+### 3.4 Agent Tool Calling Workflow (Refined)
 
 ```plantuml
 @startuml
@@ -249,15 +250,22 @@ start
 if (Chunk contains <tool_call>?) then (yes)
   :Extract tool name and arguments;
   if (User is Admin?) then (yes)
-    :Execute tool in Workspace;
+    :Execute tool in Workspace (Backend);
+    :Skip individual Git commit;
     :Send result back to UI via Socket.IO;
-    :Log tool execution;
   else (no)
     :Send "Access Denied" error to UI;
   fi
 else (no)
   :Stream text to UI;
 fi
+
+if (Stream Finished?) then (yes)
+  :Batch commit all changes to Git;
+  :Extract memory from conversation;
+  :Emit 'memory:updated' event;
+else (no)
+endif
 stop
 @enduml
 ```

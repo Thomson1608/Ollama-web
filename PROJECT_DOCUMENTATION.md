@@ -71,10 +71,10 @@ Cấu trúc phân cấp chi tiết:
 - **Chat Module:** Quản lý phiên chat, lưu trữ tin nhắn. Tích hợp logic **Memory Extraction** sau mỗi phiên chat để tóm tắt thông tin quan trọng.
 - **AI Engine Module:**
   - Giao tiếp với Ollama API (chat, pull, tags, ps).
-  - **Tool Execution:** Tự động phát hiện và thực thi các yêu cầu thao tác file (`write_file`, `read_file`, v.v.) từ AI thông qua thẻ `<tool_call>` hoặc heuristic code blocks.
+  - **Tool Execution:** Tự động phát hiện và thực thi các yêu cầu thao tác file (`write_file`, `read_file`, v.v.) từ AI thông qua thẻ `<tool_call>` hoặc heuristic code blocks. Các công cụ này được thực thi trực tiếp tại Backend để đảm bảo hiệu suất và tránh trùng lặp.
 - **Workspace Module:** 
-  - File system operations (CRUD file/folder).
-  - **Auto-commit:** Tự động commit vào Git sau mỗi lần thay đổi file.
+  - File system operations (CRUD file/folder). Tối ưu hóa việc liệt kê file bằng cách bỏ qua các thư mục nặng (`node_modules`, `.git`, `dist`, v.v.).
+  - **Batch Auto-commit:** Tối ưu hóa lịch sử Git bằng cách gom nhóm các thay đổi từ AI vào một commit duy nhất sau khi kết thúc phiên chat, thay vì commit lẻ tẻ cho từng file.
   - **App Runner:** Khởi chạy ứng dụng trong workspace (Node.js/Vite) và proxy cổng ra ngoài.
 - **System Module:** Thu thập thông số hệ thống, quản lý process và service sử dụng `systeminformation`.
 - **Terminal Module:** Thực thi lệnh shell, hỗ trợ tab-completion bằng `bash compgen`.
@@ -118,13 +118,14 @@ Sau khi kết thúc một phiên chat, backend sẽ:
 2. Gửi đến AI với prompt yêu cầu trích xuất các sự thật (facts), sở thích (preferences) hoặc mục tiêu dự án mới.
 3. Hợp nhất với bộ nhớ hiện tại, loại bỏ trùng lặp.
 4. Lưu lại vào Firestore để sử dụng làm ngữ cảnh cho các lần chat sau.
+5. **Real-time Sync:** Phát sự kiện `memory:updated` qua Socket.IO để Frontend cập nhật giao diện ngay lập tức.
 
 ### 3.4 Function Detail Design
 
-- **`autoCommit(username, message)`:** Sử dụng `simple-git` để `add .` và `commit`. Emit sự kiện `workspace:history_updated`.
+- **`autoCommit(username, message)`:** Sử dụng `simple-git` để `add .` và `commit`. Emit sự kiện `workspace:history_updated`. Hỗ trợ chế độ batch commit cho AI Agent để giữ lịch sử Git sạch sẽ.
 - **`handleSendMessage`:** Gửi tin nhắn, lắng nghe Socket `chat:chunk`. Nếu AI gọi tool, kết quả tool sẽ được hiển thị qua `toast.info`.
 - **`Terminal Completion`:** Gửi từ cuối cùng của lệnh lên backend, backend dùng `compgen` để trả về danh sách gợi ý.
-- **`Fix Permissions`:** Chạy `chmod -R 777` trên thư mục workspace của user để giải quyết lỗi truy cập.
+- **`Fix Permissions`:** Sử dụng lệnh `find` để thiết lập quyền `755` cho thư mục và `644` cho tệp tin trong workspace, đảm bảo an toàn và giải quyết lỗi truy cập.
 
 ### 3.5 Library Detail Design
 
