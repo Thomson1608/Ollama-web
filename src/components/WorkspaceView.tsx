@@ -5,6 +5,7 @@ import { WorkspaceFile } from '../types';
 import { toast } from 'sonner';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { cn } from '../lib/utils';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 import { Socket } from 'socket.io-client';
 
@@ -368,12 +369,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
 
       <div className="flex flex-1 overflow-hidden relative">
         {viewMode === 'code' ? (
-          <>
-            {/* File List */}
-            <div className={cn(
-              "absolute md:relative z-20 h-full bg-bg-secondary border-r border-border-primary flex flex-col transition-all duration-300",
-              isFileListVisible ? "w-64 translate-x-0" : "w-0 -translate-x-full md:w-0 md:translate-x-0"
-            )}>
+          <PanelGroup direction="horizontal" className="h-full w-full">
+            {/* File List Panel */}
+            <Panel 
+              defaultSize={20} 
+              minSize={15} 
+              className={cn(
+                "h-full bg-bg-secondary flex flex-col transition-all duration-300",
+                !isFileListVisible && "hidden"
+              )}
+            >
               <div className="p-4 border-b border-border-primary flex items-center justify-between shrink-0">
                 <h2 className="text-xs font-bold text-text-secondary uppercase tracking-wider flex items-center gap-2">
                   <Folder size={14} />
@@ -398,10 +403,10 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                     <div 
                       key={file.name}
                       className={cn(
-                        "group flex items-center gap-2 p-2 rounded-lg text-xs transition-all cursor-pointer",
+                        "group flex items-center gap-2 p-2 rounded-lg text-xs transition-all cursor-pointer border border-transparent",
                         selectedFile === file.name 
-                          ? "bg-accent-primary/10 text-accent-primary font-medium" 
-                          : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+                          ? "bg-accent-primary/10 text-accent-primary font-medium border-accent-primary/20" 
+                          : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary hover:border-border-primary/50"
                       )}
                       style={{ paddingLeft: `${(file.name.split('/').length - 1) * 12 + 8}px` }}
                       onClick={() => {
@@ -428,10 +433,16 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                   ))
                 )}
               </div>
-            </div>
+            </Panel>
 
-            {/* File Editor */}
-            <div className="flex-1 flex flex-col bg-bg-primary min-w-0">
+            {isFileListVisible && (
+              <PanelResizeHandle className="w-1.5 bg-bg-primary hover:bg-accent-primary/20 transition-colors cursor-col-resize flex items-center justify-center group border-x border-border-primary">
+                <div className="w-[1px] h-8 bg-border-primary group-hover:bg-accent-primary transition-colors" />
+              </PanelResizeHandle>
+            )}
+
+            {/* File Editor Panel */}
+            <Panel defaultSize={80} minSize={30} className="flex flex-col bg-bg-primary min-w-0">
               {selectedFile && !selectedIsDirectory ? (
                 <>
                   <div className="px-4 py-2 border-b border-border-primary flex items-center justify-between bg-bg-secondary shrink-0">
@@ -474,8 +485,8 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                   <p className="text-sm">Select a file to edit</p>
                 </div>
               )}
-            </div>
-          </>
+            </Panel>
+          </PanelGroup>
         ) : viewMode === 'web' ? (
           <div className="flex-1 flex flex-col bg-bg-primary min-w-0">
             <div className="flex-1 p-4 overflow-hidden flex flex-col gap-4 relative">

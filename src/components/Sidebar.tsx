@@ -135,10 +135,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 if (isMobile) setIsSidebarOpen(false);
               }}
               className={cn(
-                "w-full flex items-center gap-3 p-3 rounded-xl text-left text-sm transition-all group cursor-pointer",
+                "w-full flex items-center gap-3 p-3 rounded-lg text-left text-sm transition-all group cursor-pointer border border-transparent",
                 activeChatId === chat.id && currentView === 'chat'
-                  ? "bg-accent-primary/10 text-accent-primary font-medium" 
-                  : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
+                  ? "bg-accent-primary/10 text-accent-primary font-medium border-accent-primary/20" 
+                  : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary hover:border-border-primary/50"
               )}
             >
               <MessageSquare size={16} className={activeChatId === chat.id && currentView === 'chat' ? "text-accent-primary" : "text-text-secondary"} />

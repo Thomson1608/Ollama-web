@@ -5,13 +5,24 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
+  /* Default Dark Mode */
   --color-bg-primary: #0a0a0a;
   --color-bg-secondary: #121212;
   --color-bg-tertiary: #1a1a1a;
   --color-border-primary: #262626;
-  --color-text-primary: #ededed;
+  --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1a1;
   --color-accent-primary: #3b82f6;
+}
+
+[data-theme='light'] {
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f9fafb;
+  --color-bg-tertiary: #f3f4f6;
+  --color-border-primary: #e5e7eb;
+  --color-text-primary: #111827;
+  --color-text-secondary: #4b5563;
+  --color-accent-primary: #2563eb;
 }
 
 @layer base {

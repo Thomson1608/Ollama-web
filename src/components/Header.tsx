@@ -156,9 +156,9 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative ml-2">
             <button 
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-              className="flex items-center gap-2 p-1.5 hover:bg-bg-tertiary rounded-xl transition-all border border-transparent hover:border-border-primary"
+              className="flex items-center gap-2 p-1.5 hover:bg-bg-tertiary rounded-lg transition-all border border-border-primary/50 hover:border-accent-primary/30"
             >
-              <div className="w-8 h-8 bg-accent-primary/10 rounded-lg flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 bg-accent-primary/10 rounded-lg flex items-center justify-center shrink-0 border border-accent-primary/20">
                 <User size={16} className="text-accent-primary" />
               </div>
               <div className="hidden md:flex flex-col items-start">
@@ -174,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className="fixed inset-0 z-20" 
                   onClick={() => setIsUserMenuOpen(false)}
                 />
-                <div className="absolute right-0 mt-2 w-56 bg-bg-secondary rounded-2xl shadow-xl border border-border-primary py-2 z-30 animate-in fade-in zoom-in duration-200 origin-top-right">
+                <div className="absolute right-0 mt-2 w-56 bg-bg-secondary rounded-lg shadow-xl border border-border-primary py-2 z-30 animate-in fade-in zoom-in duration-200 origin-top-right">
                   <div className="px-4 py-2 border-b border-border-primary mb-1">
                     <p className="text-xs font-medium text-text-secondary uppercase tracking-wider">Account</p>
                     <p className="text-sm font-bold text-text-primary truncate">{username}</p>

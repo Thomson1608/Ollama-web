@@ -16,6 +16,11 @@ import { SettingsView } from './components/SettingsView';
 import { LoginView } from './components/LoginView';
 import { ProjectInitView } from './components/ProjectInitView';
 import { ProjectListView } from './components/ProjectListView';
+import { 
+  Panel, 
+  PanelGroup, 
+  PanelResizeHandle 
+} from 'react-resizable-panels';
 import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
 import { cn } from './lib/utils';
 
@@ -77,6 +82,19 @@ export default function App() {
 
 function AppContent() {
   const [username, setUsername] = useState<string | null>(() => localStorage.getItem('ollama_username'));
+  const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => (localStorage.getItem('theme') as any) || 'dark');
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'system') {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      root.setAttribute('data-theme', systemTheme);
+    } else {
+      root.setAttribute('data-theme', theme);
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
   const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem('ollama_project_id'));
   const [projects, setProjects] = useState<Project[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -1371,12 +1389,16 @@ If the user asks you to write code, you should provide it in a markdown code blo
             )}
 
             {(currentView === 'chat' || currentView === 'workspace') && projectId ? (
-              <div className="flex h-full w-full overflow-hidden">
+              <PanelGroup direction="horizontal" className="flex h-full w-full overflow-hidden">
                 {/* Left Panel: Chat */}
-                <div className={cn(
-                  "flex flex-col border-r border-border-primary transition-all duration-300",
-                  isMobile ? (currentView === 'chat' ? "w-full" : "w-0 overflow-hidden") : "w-[400px] shrink-0"
-                )}>
+                <Panel 
+                  defaultSize={isMobile ? 100 : 30} 
+                  minSize={isMobile ? 0 : 20}
+                  className={cn(
+                    "flex flex-col transition-all duration-300",
+                    isMobile && currentView !== 'chat' && "hidden"
+                  )}
+                >
                   <ChatView 
                     activeChatId={activeChatId}
                     activeChat={activeChat}
@@ -1393,13 +1415,23 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     username={username}
                     projectId={projectId}
                   />
-                </div>
+                </Panel>
+
+                {!isMobile && (
+                  <PanelResizeHandle className="w-1.5 bg-bg-primary hover:bg-accent-primary/20 transition-colors cursor-col-resize flex items-center justify-center group border-x border-border-primary">
+                    <div className="w-[1px] h-8 bg-border-primary group-hover:bg-accent-primary transition-colors" />
+                  </PanelResizeHandle>
+                )}
 
                 {/* Right Panel: Workspace */}
-                <div className={cn(
-                  "flex-1 flex flex-col overflow-hidden min-w-0",
-                  isMobile && currentView === 'chat' && "hidden"
-                )}>
+                <Panel 
+                  defaultSize={isMobile ? 100 : 70} 
+                  minSize={isMobile ? 0 : 30}
+                  className={cn(
+                    "flex flex-col overflow-hidden min-w-0",
+                    isMobile && currentView === 'chat' && "hidden"
+                  )}
+                >
                   <WorkspaceView 
                     refreshTrigger={workspaceRefreshTrigger} 
                     socket={socketRef.current} 
@@ -1408,8 +1440,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     projectId={projectId || undefined}
                     onInstallDependencies={handleInstallDependencies}
                   />
-                </div>
-              </div>
+                </Panel>
+              </PanelGroup>
             ) : (
               <>
                 {currentView === 'chat' && (
@@ -1485,6 +1517,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     saveSettings={saveSettings}
                     connectionStatus={connectionStatus}
                     username={username}
+                    theme={theme}
+                    setTheme={setTheme}
                   />
                 )}
               </>

@@ -14,7 +14,10 @@ import {
   Activity,
   Cpu,
   Hash,
-  Info
+  Info,
+  Sun,
+  Moon,
+  Monitor
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectionStatus, Memory, ModelParameters } from '../types';
@@ -34,6 +37,8 @@ interface SettingsViewProps {
   saveSettings: () => void;
   connectionStatus: ConnectionStatus;
   username?: string | null;
+  theme: 'dark' | 'light' | 'system';
+  setTheme: (theme: 'dark' | 'light' | 'system') => void;
 }
 
 type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'stats';
@@ -47,7 +52,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   clearMemory,
   saveSettings,
   connectionStatus,
-  username
+  username,
+  theme,
+  setTheme
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
@@ -178,7 +185,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           className="max-w-4xl mx-auto pb-12"
         >
           {activeTab === 'general' && (
-            <div className="bg-bg-secondary p-6 rounded-3xl border border-border-primary shadow-sm space-y-6 flex flex-col">
+            <div className="bg-bg-secondary p-6 rounded-xl border border-border-primary shadow-sm space-y-8 flex flex-col">
               <div className="space-y-4 flex-1">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-bold text-text-primary flex items-center gap-2">
@@ -207,7 +214,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </p>
               </div>
 
-              <div className="p-4 bg-accent-primary/10 rounded-2xl border border-accent-primary/20 space-y-3">
+              {/* Theme Selection */}
+              <div className="space-y-4 pt-6 border-t border-border-primary">
+                <label className="text-sm font-bold text-text-primary flex items-center gap-2">
+                  <Sun size={16} className="text-accent-primary" />
+                  Appearance Theme
+                </label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { id: 'light', label: 'Light', icon: Sun },
+                    { id: 'dark', label: 'Dark', icon: Moon },
+                    { id: 'system', label: 'System', icon: Monitor }
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTheme(t.id as any)}
+                      className={cn(
+                        "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
+                        theme === t.id 
+                          ? "bg-accent-primary/10 border-accent-primary text-accent-primary shadow-sm" 
+                          : "bg-bg-primary border-border-primary text-text-secondary hover:border-text-secondary/30"
+                      )}
+                    >
+                      <t.icon size={20} />
+                      <span className="text-xs font-bold">{t.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 bg-accent-primary/10 rounded-xl border border-accent-primary/20 space-y-3">
                 <div className="flex items-center gap-2 text-accent-primary font-bold text-sm">
                   <Terminal size={16} />
                   Server-Side Logic
@@ -217,7 +253,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </p>
               </div>
 
-              <div className="p-4 bg-red-500/10 rounded-2xl border border-red-500/20 space-y-3">
+              <div className="p-4 bg-red-500/10 rounded-xl border border-red-500/20 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
                     <Power size={16} />

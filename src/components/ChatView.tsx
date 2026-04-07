@@ -117,11 +117,11 @@ const ToolCallRenderer = ({ toolCall, isFinished }: { toolCall: any, isFinished:
     }
 
     return (
-      <div className="my-4 bg-bg-secondary border border-border-primary rounded-xl overflow-hidden shadow-sm">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border-primary bg-bg-tertiary/30">
-          <FileText size={16} className="text-text-secondary" />
-          <span className="text-sm font-bold text-text-primary">Action history</span>
-        </div>
+    <div className="my-4 bg-bg-secondary border border-border-primary rounded-lg overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border-primary bg-bg-tertiary/30">
+        <FileText size={16} className="text-text-secondary" />
+        <span className="text-sm font-bold text-text-primary">Action history</span>
+      </div>
         <div className="p-4 space-y-3">
           <div className="flex items-start gap-3">
             <div className="mt-1">
@@ -569,7 +569,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                   msg.role === 'user' ? "flex-row-reverse" : "flex-row"
                 )}>
                   <div className={cn(
-                    "flex-1 min-w-0 max-w-[90%] p-5 rounded-3xl relative group/msg",
+                    "flex-1 min-w-0 max-w-[90%] p-5 rounded-xl relative group/msg",
                     msg.role === 'user' 
                       ? "bg-bg-tertiary border border-border-primary text-text-primary" 
                       : "text-text-primary"
@@ -682,7 +682,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
             )}
             
             <div className={cn(
-              "relative flex flex-col bg-bg-secondary border border-border-primary rounded-3xl overflow-hidden transition-all focus-within:border-accent-primary/50 focus-within:ring-1 focus-within:ring-accent-primary/50",
+              "relative flex flex-col bg-bg-secondary border border-border-primary rounded-xl overflow-hidden transition-all focus-within:border-accent-primary/50 focus-within:ring-1 focus-within:ring-accent-primary/50",
               (!activeChatId || isLoading || isAiTypingGlobally || isGloballyBusy) && "opacity-50"
             )}>
               <textarea
