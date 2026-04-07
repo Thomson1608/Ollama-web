@@ -21,7 +21,10 @@ import { toast } from 'sonner';
 
 interface SystemStats {
   cpu: { currentLoad: number };
-  mem: { total: number; free: number; used: number; active: number; available: number };
+  mem: { 
+    total: number; free: number; used: number; active: number; available: number;
+    swapTotal: number; swapUsed: number; swapFree: number;
+  };
   fsSize: { fs: string; type: string; size: number; used: number; available: number; use: number; mount: string }[];
 }
 
@@ -54,11 +57,115 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [currentUser, setCurrentUser] = useState<string>('unknown');
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState<'monitor' | 'processes' | 'services' | 'terminal'>('monitor');
+  const [activeSection, setActiveSection] = useState<'monitor' | 'processes' | 'services' | 'terminal' | 'swap'>('monitor');
   const [processSearch, setProcessSearch] = useState('');
   const [sortColumn, setSortColumn] = useState<string>('state');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const terminalEndRef = useRef<HTMLDivElement>(null);
+
+  // Swap Management State
+  const [swapConfig, setSwapConfig] = useState<{ swappiness: number; swapDevices: any[] } | null>(null);
+  const [newSwappiness, setNewSwappiness] = useState<number>(60);
+  const [newSwapSize, setNewSwapSize] = useState<number>(2);
+  const [isUpdatingSwap, setIsUpdatingSwap] = useState(false);
+
+  const fetchSwapConfig = async () => {
+    if (!username) return;
+    try {
+      const res = await fetch('/api/system/swap/config', {
+        headers: { 'x-username': username }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSwapConfig(data);
+        setNewSwappiness(data.swappiness);
+      }
+    } catch (e) {
+      console.error('Failed to fetch swap config', e);
+    }
+  };
+
+  const updateSwappiness = async () => {
+    if (!username) return;
+    setIsUpdatingSwap(true);
+    try {
+      const res = await fetch('/api/system/swap/swappiness', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({ value: newSwappiness })
+      });
+      if (res.ok) {
+        toast.success('Swappiness updated successfully');
+        fetchSwapConfig();
+      } else {
+        const data = await res.json();
+        toast.error(`Failed to update swappiness: ${data.error}`);
+      }
+    } catch (e) {
+      toast.error('Failed to update swappiness');
+    } finally {
+      setIsUpdatingSwap(false);
+    }
+  };
+
+  const setupSwapFile = async () => {
+    if (!username) return;
+    if (!confirm(`Create a ${newSwapSize}GB swap file? This may take a moment.`)) return;
+    setIsUpdatingSwap(true);
+    try {
+      const res = await fetch('/api/system/swap/setup', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({ sizeGB: newSwapSize })
+      });
+      if (res.ok) {
+        toast.success('Swap file created and enabled');
+        fetchSwapConfig();
+        fetchStats();
+      } else {
+        const data = await res.json();
+        toast.error(`Failed to setup swap: ${data.error}`);
+      }
+    } catch (e) {
+      toast.error('Failed to setup swap');
+    } finally {
+      setIsUpdatingSwap(false);
+    }
+  };
+
+  const removeSwapFile = async (path: string) => {
+    if (!username) return;
+    if (!confirm(`Are you sure you want to remove swap at ${path}?`)) return;
+    setIsUpdatingSwap(true);
+    try {
+      const res = await fetch('/api/system/swap/remove', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-username': username
+        },
+        body: JSON.stringify({ path })
+      });
+      if (res.ok) {
+        toast.success('Swap file removed');
+        fetchSwapConfig();
+        fetchStats();
+      } else {
+        const data = await res.json();
+        toast.error(`Failed to remove swap: ${data.error}`);
+      }
+    } catch (e) {
+      toast.error('Failed to remove swap');
+    } finally {
+      setIsUpdatingSwap(false);
+    }
+  };
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -142,7 +249,7 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
   useEffect(() => {
     const init = async () => {
       setLoading(true);
-      await Promise.all([fetchStats(), fetchProcesses(), fetchServices(), fetchCurrentUser()]);
+      await Promise.all([fetchStats(), fetchProcesses(), fetchServices(), fetchCurrentUser(), fetchSwapConfig()]);
       setLoading(false);
     };
     init();
@@ -311,6 +418,7 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
             { id: 'monitor', label: 'Monitor', icon: Activity },
             { id: 'processes', label: 'Processes', icon: Cpu },
             { id: 'services', label: 'Services', icon: Database },
+            { id: 'swap', label: 'Swap', icon: HardDrive },
             { id: 'terminal', label: 'Terminal', icon: TerminalIcon },
           ].map(section => (
             <button
@@ -380,6 +488,28 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
             <div className="flex justify-between text-[10px] text-gray-500 font-medium">
               <span>Used: {formatBytes(stats.mem.used)}</span>
               <span>Total: {formatBytes(stats.mem.total)}</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-gray-700 font-bold text-sm">
+                <RotateCcw size={16} className="text-indigo-500" />
+                Swap Usage
+              </div>
+              <span className="text-xl font-bold text-indigo-600">
+                {stats.mem.swapTotal > 0 ? ((stats.mem.swapUsed / stats.mem.swapTotal) * 100).toFixed(1) : '0'}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+              <div 
+                className="bg-indigo-500 h-full transition-all duration-500" 
+                style={{ width: `${stats.mem.swapTotal > 0 ? (stats.mem.swapUsed / stats.mem.swapTotal) * 100 : 0}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-500 font-medium">
+              <span>Used: {formatBytes(stats.mem.swapUsed)}</span>
+              <span>Total: {formatBytes(stats.mem.swapTotal)}</span>
             </div>
           </div>
 
@@ -558,6 +688,144 @@ export const SystemControl: React.FC<SystemControlProps> = ({ username }) => {
         </div>
       )}
 
+      {activeSection === 'swap' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
+              <div className="flex items-center gap-2 text-gray-800 font-bold">
+                <Activity size={18} className="text-indigo-500" />
+                Swappiness Configuration
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Swappiness controls how aggressively the kernel moves processes out of physical memory and onto the swap disk. 
+                Lower values (e.g., 10) prioritize RAM usage, while higher values (e.g., 60+) use swap more frequently.
+              </p>
+              <div className="space-y-3">
+                <div className="flex justify-between text-xs font-bold text-gray-700">
+                  <span>Current Swappiness</span>
+                  <span className="text-indigo-600">{swapConfig?.swappiness ?? '...'}</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={newSwappiness}
+                  onChange={(e) => setNewSwappiness(parseInt(e.target.value))}
+                  className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                />
+                <div className="flex justify-between text-[10px] text-gray-400 font-medium">
+                  <span>0 (Prioritize RAM)</span>
+                  <span>100 (Aggressive Swap)</span>
+                </div>
+              </div>
+              <button
+                onClick={updateSwappiness}
+                disabled={isUpdatingSwap || newSwappiness === swapConfig?.swappiness}
+                className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-sm"
+              >
+                {isUpdatingSwap ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Apply Swappiness'}
+              </button>
+            </div>
+
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
+              <div className="flex items-center gap-2 text-gray-800 font-bold">
+                <HardDrive size={18} className="text-orange-500" />
+                Create New Swap File
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                If your system is running out of memory, you can create a temporary swap file. 
+                This will use disk space as virtual memory.
+              </p>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-700">Swap Size (GB)</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 4, 8].map(size => (
+                      <button
+                        key={size}
+                        onClick={() => setNewSwapSize(size)}
+                        className={cn(
+                          "flex-1 py-2 rounded-lg text-xs font-bold border transition-all",
+                          newSwapSize === size 
+                            ? "bg-orange-50 border-orange-200 text-orange-600" 
+                            : "bg-white border-gray-100 text-gray-500 hover:bg-gray-50"
+                        )}
+                      >
+                        {size}GB
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={setupSwapFile}
+                  disabled={isUpdatingSwap}
+                  className="w-full py-2.5 bg-orange-500 text-white rounded-xl text-xs font-bold hover:bg-orange-600 transition-all disabled:opacity-50 shadow-sm"
+                >
+                  {isUpdatingSwap ? <Loader2 size={14} className="animate-spin mx-auto" /> : 'Create & Enable Swap'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-50 bg-gray-50/50">
+              <h4 className="text-sm font-bold text-gray-700">Active Swap Devices</h4>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 text-gray-500 font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="px-4 py-3">Device/File</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">Size</th>
+                    <th className="px-4 py-3">Used</th>
+                    <th className="px-4 py-3">Priority</th>
+                    <th className="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {swapConfig?.swapDevices.map((dev, i) => (
+                    <tr key={i} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-mono text-gray-600">{dev.name}</td>
+                      <td className="px-4 py-3 text-gray-500 uppercase">{dev.type}</td>
+                      <td className="px-4 py-3">{formatBytes(dev.size)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                            <div 
+                              className="bg-indigo-500 h-full" 
+                              style={{ width: `${(dev.used / dev.size) * 100}%` }}
+                            />
+                          </div>
+                          <span>{((dev.used / dev.size) * 100).toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">{dev.priority}</td>
+                      <td className="px-4 py-3 text-right">
+                        {dev.name.includes('swapfile') && (
+                          <button
+                            onClick={() => removeSwapFile(dev.name)}
+                            className="text-red-500 hover:text-red-700 font-bold text-[10px] uppercase tracking-wider"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {(!swapConfig?.swapDevices || swapConfig.swapDevices.length === 0) && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-gray-400 italic">
+                        No active swap devices found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
       {activeSection === 'terminal' && (
         <div className="bg-gray-900 rounded-2xl border border-gray-800 shadow-2xl overflow-hidden flex flex-col h-[400px] md:h-[500px]">
           <div className="p-3 border-b border-gray-800 bg-gray-800/50 flex items-center justify-between">

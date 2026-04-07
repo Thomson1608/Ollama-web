@@ -289,6 +289,10 @@ class "WorkspaceController" as WC {
 class "SystemController" as SC {
   + getStats(req, res)
   + getProcesses(req, res)
+  + getSwapConfig(req, res)
+  + setSwappiness(req, res)
+  + setupSwapFile(req, res)
+  + removeSwapFile(req, res)
 }
 
 class "OllamaService" as OS {

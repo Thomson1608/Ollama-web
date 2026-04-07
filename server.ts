@@ -918,7 +918,7 @@ async function startServer() {
     }
   });
 
-  // API: Get system stats (CPU, Memory, Disk)
+  // API: Get system stats (CPU, Memory, Disk, Swap)
   app.get('/api/system/stats', async (req, res) => {
     try {
       const [cpu, mem, fsSize] = await Promise.all([
@@ -926,7 +926,17 @@ async function startServer() {
         si.mem(),
         si.fsSize()
       ]);
-      res.json({ cpu, mem, fsSize });
+      res.json({ 
+        cpu, 
+        mem: {
+          ...mem,
+          // Ensure swap info is explicitly included if needed by frontend
+          swapTotal: mem.swaptotal,
+          swapUsed: mem.swapused,
+          swapFree: mem.swapfree
+        }, 
+        fsSize 
+      });
     } catch (error) {
       logger.error('Failed to get system stats', error);
       res.status(500).json({ error: 'Failed to get system stats' });
@@ -969,6 +979,105 @@ async function startServer() {
       });
     } catch (error) {
       res.status(500).json({ error: 'Failed to kill process' });
+    }
+  });
+
+  // API: Get swap configuration
+  app.get('/api/system/swap/config', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    try {
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) return res.status(403).json({ error: 'Admin privileges required' });
+
+      const [swappiness, swapDevices] = await Promise.all([
+        execAsync('cat /proc/sys/vm/swappiness').then(r => parseInt(r.stdout.trim())).catch(() => 60),
+        execAsync('swapon --show --bytes --noheadings').then(r => {
+          return r.stdout.trim().split('\n').filter(l => l).map(line => {
+            const parts = line.split(/\s+/);
+            return {
+              name: parts[0],
+              type: parts[1],
+              size: parseInt(parts[2]),
+              used: parseInt(parts[3]),
+              priority: parseInt(parts[4])
+            };
+          });
+        }).catch(() => [])
+      ]);
+
+      res.json({ swappiness, swapDevices });
+    } catch (error) {
+      logger.error('Failed to get swap config', error);
+      res.status(500).json({ error: 'Failed to get swap config' });
+    }
+  });
+
+  // API: Set swappiness
+  app.post('/api/system/swap/swappiness', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const { value } = req.body;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (typeof value !== 'number' || value < 0 || value > 100) return res.status(400).json({ error: 'Invalid swappiness value (0-100)' });
+
+    try {
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) return res.status(403).json({ error: 'Admin privileges required' });
+
+      await execAsync(`sudo sysctl vm.swappiness=${value}`);
+      res.json({ success: true, swappiness: value });
+    } catch (error: any) {
+      logger.error('Failed to set swappiness', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Setup swap file
+  app.post('/api/system/swap/setup', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const { sizeGB, path = '/swapfile' } = req.body;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!sizeGB || sizeGB <= 0) return res.status(400).json({ error: 'Invalid swap size' });
+
+    try {
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) return res.status(403).json({ error: 'Admin privileges required' });
+
+      logger.release(`Setting up ${sizeGB}GB swap file at ${path} for ${username}...`);
+      
+      // Sequence of commands to create and enable swap
+      await execAsync(`sudo fallocate -l ${sizeGB}G ${path}`);
+      await execAsync(`sudo chmod 600 ${path}`);
+      await execAsync(`sudo mkswap ${path}`);
+      await execAsync(`sudo swapon ${path}`);
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      logger.error('Failed to setup swap', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Remove swap file
+  app.post('/api/system/swap/remove', async (req, res) => {
+    const username = req.headers['x-username'] as string;
+    const { path } = req.body;
+    if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!path) return res.status(400).json({ error: 'Missing swap path' });
+
+    try {
+      const isUserAdmin = await isAdmin(username);
+      if (!isUserAdmin) return res.status(403).json({ error: 'Admin privileges required' });
+
+      logger.release(`Removing swap file at ${path} for ${username}...`);
+      
+      await execAsync(`sudo swapoff ${path}`);
+      await execAsync(`sudo rm ${path}`);
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      logger.error('Failed to remove swap', error);
+      res.status(500).json({ error: error.message });
     }
   });
 

@@ -76,7 +76,10 @@ Cấu trúc phân cấp chi tiết:
   - File system operations (CRUD file/folder). Tối ưu hóa việc liệt kê file bằng cách bỏ qua các thư mục nặng (`node_modules`, `.git`, `dist`, v.v.).
   - **Batch Auto-commit:** Tối ưu hóa lịch sử Git bằng cách gom nhóm các thay đổi từ AI vào một commit duy nhất sau khi kết thúc phiên chat, thay vì commit lẻ tẻ cho từng file.
   - **App Runner:** Khởi chạy ứng dụng trong workspace (Node.js/Vite) và proxy cổng ra ngoài.
-- **System Module:** Thu thập thông số hệ thống, quản lý process và service sử dụng `systeminformation`.
+- **System Module:** 
+  - Thu thập thông số hệ thống (CPU, RAM, Disk, Swap) sử dụng `systeminformation`.
+  - Quản lý Swap: Cấu hình `swappiness` (độ ưu tiên dùng RAM/Swap) và quản lý tệp tin Swap (tạo/xóa).
+  - Quản lý process và service.
 - **Terminal Module:** Thực thi lệnh shell, hỗ trợ tab-completion bằng `bash compgen`.
 
 ---
