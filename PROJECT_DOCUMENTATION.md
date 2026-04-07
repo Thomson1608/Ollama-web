@@ -44,30 +44,40 @@ Hệ thống được thiết kế theo kiến trúc Client-Server:
   - `runningModels` (Array of RunningModel).
 - **Models View:** `models` (danh sách model đã cài), `runningModels` (model đang chạy).
 - **Pull View:** `pullingModel` (trạng thái tải model: `progress`, `status`).
-- **Workspace View:** `files` (Array of WorkspaceFile: `name`, `isDirectory`, `size`, `mtime`), `terminalOutput` (lịch sử lệnh).
-- **Settings View:** `systemPrompt` (string), `globalParameters` (temperature, topP, topK, maxTokens).
+- **Workspace View:** `files` (Array of WorkspaceFile: `name`, `isDirectory`, `size`, `mtime`), `terminalOutput` (lịch sử lệnh), `history` (Git log).
+- **Settings View:** `systemPrompt` (string), `globalParameters` (temperature, topP, topK, maxTokens, jsonMode).
 - **System Control View:** `stats` (CPU, RAM, Disk), `processes` (PID, Name, Status, CPU%, MEM%, User), `services`.
 
 ### 2.3 Data Schema (Firebase Firestore)
 
-Dựa trên `firebase-blueprint.json`:
-- **User:** `/users/{userId}` -> `{ id, username, role }`
-- **Config:** `/users/{userId}/configs/default` -> `{ userId, systemPrompt, parameters }`
-- **Project:** `/projects/{projectId}` -> `{ id, userId, name, description, createdAt }`
-- **Chat:** `/projects/{projectId}/chats/{chatId}` -> `{ id, projectId, title, model, createdAt, systemPrompt }`
-- **Message:** `/projects/{projectId}/chats/{chatId}/messages/{messageId}` -> `{ id, chatId, role, content, timestamp }`
-- **Memory:** `/projects/{projectId}/memories/{memoryId}` -> `{ id, userId, content, timestamp }`
-- **Stat:** `/stats/{statKey}` -> `{ key, value }`
+Cấu trúc phân cấp chi tiết:
+- **Users Collection:** `/users/{userId}`
+  - `{ id, username, role }`
+  - **Configs Sub-collection:** `/users/{userId}/configs/default` -> `{ userId, systemPrompt, parameters }`
+- **Projects Collection:** `/projects/{projectId}`
+  - `{ id, userId, name, details, createdAt, lastPackageJsonHash }`
+  - **Chats Sub-collection:** `/projects/{projectId}/chats/{chatId}`
+    - `{ id, projectId, title, model, createdAt, systemPrompt, isClosed }`
+    - **Messages Sub-collection:** `/projects/{projectId}/chats/{chatId}/messages/{messageId}`
+      - `{ id, chatId, role, content, timestamp, images }`
+  - **Memories Sub-collection:** `/projects/{projectId}/memories/{memoryId}`
+    - `{ id, projectId, content, timestamp }`
+- **Stats Collection:** `/stats/{statKey}` -> `{ key, value }` (e.g., `sent`, `success`, `fail`)
 
 ### 2.4 Module Backend
 
-- **User & Auth Module:** Quản lý đăng nhập (dựa trên username), phân quyền (admin/user).
-- **Project Module:** CRUD dự án, khởi tạo thư mục workspace và git repo tương ứng.
-- **Chat Module:** Quản lý phiên chat, lưu trữ tin nhắn.
-- **Ollama/AI Module:** Giao tiếp với Ollama API (chat, pull, tags, ps) và Claude API. Xử lý streaming response.
-- **Workspace Module:** Đọc/ghi file, quản lý thư mục, thực thi lệnh shell (Terminal), quản lý Git commit.
-- **System Module:** Thu thập thông số hệ thống (CPU, RAM, Disk, Processes) sử dụng thư viện `systeminformation`.
-- **Config & Memory Module:** Quản lý cấu hình AI (System Prompt, Parameters) và bộ nhớ dài hạn.
+- **User & Auth Module:** Quản lý đăng nhập (username), phân quyền (admin/user). Chỉ admin mới có quyền chạy terminal hệ thống hoặc kill process.
+- **Project Module:** CRUD dự án, khởi tạo thư mục workspace và git repo. Theo dõi hash của `package.json` để tự động `npm install`.
+- **Chat Module:** Quản lý phiên chat, lưu trữ tin nhắn. Tích hợp logic **Memory Extraction** sau mỗi phiên chat để tóm tắt thông tin quan trọng.
+- **AI Engine Module:**
+  - Giao tiếp với Ollama API (chat, pull, tags, ps).
+  - **Tool Execution:** Tự động phát hiện và thực thi các yêu cầu thao tác file (`write_file`, `read_file`, v.v.) từ AI thông qua thẻ `<tool_call>` hoặc heuristic code blocks.
+- **Workspace Module:** 
+  - File system operations (CRUD file/folder).
+  - **Auto-commit:** Tự động commit vào Git sau mỗi lần thay đổi file.
+  - **App Runner:** Khởi chạy ứng dụng trong workspace (Node.js/Vite) và proxy cổng ra ngoài.
+- **System Module:** Thu thập thông số hệ thống, quản lý process và service sử dụng `systeminformation`.
+- **Terminal Module:** Thực thi lệnh shell, hỗ trợ tab-completion bằng `bash compgen`.
 
 ---
 
@@ -79,78 +89,62 @@ Dựa trên `firebase-blueprint.json`:
 - **ProjectListView:** Hiển thị danh sách dự án dưới dạng thẻ (card). Có nút tạo mới và xóa dự án.
 - **ChatView:**
   - **Header:** Chọn model, hiển thị trạng thái kết nối, model đang chạy.
-  - **Sidebar:** Danh sách lịch sử chat, các nút điều hướng (Models, Workspace, Settings...).
-  - **Main Area:** Hiển thị tin nhắn (hỗ trợ Markdown), ô nhập liệu (hỗ trợ đa dòng, gửi ảnh).
-- **ModelsView:** Lưới (grid) hiển thị các model đã cài đặt. Có tab lọc (Local/Cloud), thanh tìm kiếm, badge phân loại (Chat Support / Image Model), và nút xóa model.
-- **PullView:** Ô nhập tên model từ thư viện Ollama, thanh tiến trình (progress bar) hiển thị % tải xuống.
+  - **Sidebar:** Danh sách lịch sử chat, các nút điều hướng.
+  - **Main Area:** Hiển thị tin nhắn (Markdown), ô nhập liệu (đa dòng, gửi ảnh), hiển thị trạng thái "AI is thinking/executing".
+- **ModelsView:** Lưới hiển thị các model. Có tab lọc (Local/Cloud), thanh tìm kiếm, badge phân loại, và nút xóa model.
+- **PullView:** Ô nhập tên model từ thư viện Ollama, thanh tiến trình hiển thị % tải xuống.
 - **WorkspaceView:**
   - **Trái:** Cây thư mục (File Explorer).
-  - **Phải (Trên):** Trình soạn thảo mã nguồn (Code Editor) hoặc Diff Viewer.
-  - **Phải (Dưới):** Terminal tích hợp để chạy lệnh.
-- **SystemControl:** Các tab Monitor (Biểu đồ CPU/RAM/Disk), Processes (Bảng tiến trình có thể sort theo cột), Services, Terminal hệ thống.
+  - **Phải (Trên):** Code Editor / Diff Viewer / Preview App (Iframe).
+  - **Phải (Dưới):** Terminal tích hợp.
+- **SystemControl:** Monitor (CPU/RAM/Disk), Processes (Bảng có thể sort/kill), Services (Start/Stop), Terminal hệ thống.
 
-### 3.2 State Transition Table (Frontend State)
+### 3.2 Tool Calling & Agent Logic
 
-| State | Initial Value | Trigger / Action | Next Value |
-| :--- | :--- | :--- | :--- |
-| `username` | `localStorage` hoặc `null` | Login thành công | `string` (username) |
-| `projectId` | `localStorage` hoặc `null` | Chọn project / Tạo project | `string` (projectId) |
-| `currentView` | `chat` | Click menu Sidebar | `models`, `workspace`, `settings`, v.v. |
-| `chats` | `[]` | `fetchChats()` hoặc Socket `chats:updated` | `Chat[]` |
-| `activeChatId` | `localStorage` hoặc `null` | Chọn chat / Tạo chat mới | `string` (chatId) |
-| `connectionStatus` | `checking` | `checkConnection()` thành công/thất bại | `connected` / `disconnected` |
-| `isLoading` | `false` | Gửi tin nhắn -> Nhận xong | `true` -> `false` |
+Hệ thống biến AI thành một "Agent" thực thụ thông qua:
+1. **System Prompt:** Cung cấp hướng dẫn về cách sử dụng công cụ.
+2. **Tool Parsing:** Backend lắng nghe stream từ AI, nếu thấy thẻ `<tool_call>` sẽ tạm dừng stream, thực thi công cụ và gửi kết quả về cho AI (hoặc hiển thị lên UI).
+3. **Danh sách công cụ:**
+   - `list_files`: Liệt kê tệp tin.
+   - `read_file`: Đọc nội dung tệp.
+   - `write_file`: Ghi/Cập nhật tệp (kèm auto-commit).
+   - `delete_file`: Xóa tệp.
+   - `run_command`: Thực thi lệnh trong workspace.
 
-### 3.3 Function Detail Design
+### 3.3 Memory Extraction Logic
 
-- **`checkConnection()` (Frontend):** Gọi API `/api/ollama/tags`. Nếu thành công, set `connectionStatus` là `connected` và cập nhật danh sách `models`. Nếu lỗi, set `disconnected` và hiện Toast.
-- **`handleSendMessage(content, images)` (Frontend):**
-  - Thêm tin nhắn của User vào UI ngay lập tức.
-  - Gọi POST `/api/ollama/chat` với `chatId`, `model`, `messages`.
-  - Lắng nghe sự kiện Socket.IO `chat:chunk` để cập nhật tin nhắn của Assistant theo kiểu streaming (từng chữ một).
-- **`fetchChats(projectId)` (Frontend):** Gọi GET `/api/chats?projectId=...`. Cập nhật state `chats`. Đảm bảo dữ liệu trả về luôn là mảng để tránh lỗi `chats.find is not a function`.
-- **`handleSort(column)` (SystemControl):** Thay đổi `sortColumn` và `sortDirection` (asc/desc). Hàm `sort` trong render sẽ sắp xếp mảng `processes.list` dựa trên state này.
-- **`Terminal Execution` (Backend):** POST `/api/workspace/exec`. Sử dụng `child_process.exec` để chạy lệnh trong thư mục dự án. Trả về `stdout` và `stderr`.
+Sau khi kết thúc một phiên chat, backend sẽ:
+1. Lấy 6 tin nhắn cuối cùng.
+2. Gửi đến AI với prompt yêu cầu trích xuất các sự thật (facts), sở thích (preferences) hoặc mục tiêu dự án mới.
+3. Hợp nhất với bộ nhớ hiện tại, loại bỏ trùng lặp.
+4. Lưu lại vào Firestore để sử dụng làm ngữ cảnh cho các lần chat sau.
 
-### 3.4 Library Detail Design
+### 3.4 Function Detail Design
 
-**Frontend Dependencies:**
-- `react`, `react-dom`: Thư viện lõi xây dựng UI.
-- `socket.io-client`: Kết nối WebSocket để nhận streaming text và real-time updates.
-- `sonner`: Hiển thị thông báo (Toast) đẹp mắt.
-- `lucide-react`: Bộ icon SVG nhẹ và nhất quán.
-- `motion` (Framer Motion): Tạo hiệu ứng animation (ví dụ: mở rộng/thu gọn Sidebar).
-- `recharts`: Vẽ biểu đồ (Line chart, Bar chart) cho System Monitor.
-- `react-markdown`: Render nội dung tin nhắn AI từ Markdown sang HTML.
-- `tailwindcss`: Utility-first CSS framework để style giao diện nhanh chóng.
+- **`autoCommit(username, message)`:** Sử dụng `simple-git` để `add .` và `commit`. Emit sự kiện `workspace:history_updated`.
+- **`handleSendMessage`:** Gửi tin nhắn, lắng nghe Socket `chat:chunk`. Nếu AI gọi tool, kết quả tool sẽ được hiển thị qua `toast.info`.
+- **`Terminal Completion`:** Gửi từ cuối cùng của lệnh lên backend, backend dùng `compgen` để trả về danh sách gợi ý.
+- **`Fix Permissions`:** Chạy `chmod -R 777` trên thư mục workspace của user để giải quyết lỗi truy cập.
 
-**Backend Dependencies:**
-- `express`: Web framework xử lý REST API.
-- `socket.io`: WebSocket server.
-- `firebase`, `firebase-admin`: SDK kết nối và tương tác với Firestore Database.
-- `simple-git`: Thực thi các lệnh git (init, add, commit) bằng code Node.js.
-- `systeminformation`: Lấy thông số phần cứng và OS (CPU, RAM, Disk, Processes).
-- `http-proxy-middleware`: Proxy các request từ Frontend thẳng đến Ollama API nội bộ.
-- `@google/genai`, `@anthropic-ai/sdk`: SDK gọi API của các LLM Cloud (Gemini, Claude).
+### 3.5 Library Detail Design
 
-### 3.5 Model Controller Design (Detail Back End)
+**Frontend:** `react`, `socket.io-client`, `sonner`, `lucide-react`, `motion`, `recharts`, `react-markdown`, `tailwindcss`.
+**Backend:** `express`, `socket.io`, `firebase`, `simple-git`, `systeminformation`, `http-proxy-middleware`, `node-fetch`.
 
-- **`GET /api/projects`**:
-  - Truy vấn Firestore collection `projects`.
-  - Lọc theo `userId` (nếu cần).
-  - Trả về mảng các dự án.
+---
+
+## 4. Model Controller Design (Detail Back End)
+
 - **`POST /api/ollama/chat`**:
-  - Nhận `chatId`, `projectId`, `model`, `messages`.
-  - Lưu tin nhắn của User vào Firestore.
-  - Khởi tạo kết nối tới Ollama (hoặc Claude API tùy model).
-  - Sử dụng `responseType: 'stream'`. Khi nhận được từng chunk data từ LLM, dùng `io.emit('chat:chunk', ...)` để gửi về Frontend.
-  - Khi hoàn thành, lưu tin nhắn của Assistant vào Firestore và emit `chats:updated`.
-- **`GET /api/system/processes`**:
-  - Gọi `si.processes()`.
-  - Map dữ liệu trả về định dạng `{ pid, name, cpu, mem, user, state }`.
-  - Trả về JSON cho Frontend hiển thị bảng.
-- **`POST /api/workspace/write`**:
-  - Nhận `projectId`, `filePath`, `content`.
-  - Dùng `fs.promises.writeFile` để ghi file vào thư mục `data/users/{username}/workspaces/{projectId}/{filePath}`.
-  - Dùng `simpleGit` để tự động `git add` và `git commit` thay đổi.
-  - Emit sự kiện Socket.IO để báo hiệu file đã thay đổi.
+  - Làm giàu tin nhắn bằng System Prompt và Memory Context.
+  - Stream dữ liệu từ Ollama.
+  - Xử lý Tool Calling thời gian thực.
+  - Lưu tin nhắn Assistant khi kết thúc.
+  - Kích hoạt `extractMemory` và `autoCommit`.
+- **`POST /api/workspace/run`**:
+  - Kiểm tra `package.json`.
+  - Chạy `npm install` nếu cần.
+  - `spawn` tiến trình mới (`npm run dev` hoặc `npm start`).
+  - Gán cổng (port) động và lưu vào `WORKSPACE_PORTS`.
+  - Stream log của tiến trình qua Socket.IO.
+- **`GET /api/system/stats`**: Trả về dữ liệu từ `si.currentLoad()`, `si.mem()`, `si.fsSize()`.

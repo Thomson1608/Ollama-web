@@ -1110,6 +1110,11 @@ async function startServer() {
   async function getAllFiles(dirPath: string, baseDir: string): Promise<any[]> {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const files = await Promise.all(entries.map(async (entry) => {
+      // Skip heavy directories
+      if (['node_modules', '.git', 'dist', '.next', 'build'].includes(entry.name)) {
+        return [];
+      }
+      
       const fullPath = path.join(dirPath, entry.name);
       const relativePath = path.relative(baseDir, fullPath);
       
@@ -1165,6 +1170,7 @@ async function startServer() {
   app.post('/api/workspace/write', async (req, res) => {
     const username = req.headers['x-username'] as string;
     const projectId = req.query.projectId as string;
+    const skipCommit = req.query.skipCommit === 'true';
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const { name, content } = req.body;
@@ -1181,17 +1187,19 @@ async function startServer() {
       io.emit(`workspace:updated:${username}`);
       res.json({ success: true });
       
-      // Auto commit after writing
-      const git = simpleGit(paths.workspace);
-      try {
-        await git.add('.');
-        const status = await git.status();
-        if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
-          await git.commit(`Update ${safeName}`);
-          io.emit(`workspace:history_updated:${username}`);
+      // Auto commit after writing (unless skipped)
+      if (!skipCommit) {
+        const git = simpleGit(paths.workspace);
+        try {
+          await git.add('.');
+          const status = await git.status();
+          if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
+            await git.commit(`Update ${safeName}`);
+            io.emit(`workspace:history_updated:${username}`);
+          }
+        } catch (e) {
+          logger.error('Auto commit failed', e);
         }
-      } catch (e) {
-        logger.error('Auto commit failed', e);
       }
     } catch (error) {
       logger.error('Failed to write file', error);
@@ -1203,6 +1211,7 @@ async function startServer() {
   app.delete('/api/workspace/delete', async (req, res) => {
     const username = req.headers['x-username'] as string;
     const projectId = req.query.projectId as string;
+    const skipCommit = req.query.skipCommit === 'true';
     if (!username) return res.status(400).json({ error: 'Username header required' });
     try {
       const fileName = req.query.name as string;
@@ -1214,17 +1223,19 @@ async function startServer() {
       io.emit(`workspace:updated:${username}`);
       res.json({ success: true });
       
-      // Auto commit after deleting
-      const git = simpleGit(paths.workspace);
-      try {
-        await git.add('.');
-        const status = await git.status();
-        if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
-          await git.commit(`Delete ${safeName}`);
-          io.emit(`workspace:history_updated:${username}`);
+      // Auto commit after deleting (unless skipped)
+      if (!skipCommit) {
+        const git = simpleGit(paths.workspace);
+        try {
+          await git.add('.');
+          const status = await git.status();
+          if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
+            await git.commit(`Delete ${safeName}`);
+            io.emit(`workspace:history_updated:${username}`);
+          }
+        } catch (e) {
+          logger.error('Auto commit failed', e);
         }
-      } catch (e) {
-        logger.error('Auto commit failed', e);
       }
     } catch (error) {
       logger.error('Failed to delete file or folder', error);
@@ -2001,6 +2012,19 @@ async function startServer() {
             }
           }
           break;
+        case 'run_command':
+          if (call.args.command) {
+            try {
+              const { stdout, stderr } = await execAsync(call.args.command, { cwd: paths.workspace });
+              const result = stdout || stderr || 'Command executed successfully (no output)';
+              io.emit(`tool:result:${username}`, { chatId, tool: 'run_command', result });
+              logger.release(`Tool run_command success for ${username}: ${call.args.command}`);
+            } catch (e: any) {
+              logger.error(`Tool run_command failed for ${username}: ${call.args.command}`, e);
+              io.emit(`tool:result:${username}`, { chatId, tool: 'run_command', result: `Error: ${e.message}` });
+            }
+          }
+          break;
       }
     } catch (error) {
       logger.error(`Tool execution failed (${call.tool}) for ${chatId} (${username})`, error);
@@ -2087,8 +2111,11 @@ async function startServer() {
     try {
       const paths = getUserPaths(username);
       logger.release(`Fixing workspace permissions for ${username}...`);
-      // Use chmod -R 777 as a broad fix for permission issues in the workspace
-      await execAsync(`chmod -R 777 ${paths.workspace}`);
+      
+      // Use a more standard fix: 755 for directories, 644 for files
+      await execAsync(`find ${paths.workspace} -type d -exec chmod 755 {} +`);
+      await execAsync(`find ${paths.workspace} -type f -exec chmod 644 {} +`);
+      
       res.json({ success: true });
     } catch (error: any) {
       logger.error(`Failed to fix permissions for ${username}`, error);

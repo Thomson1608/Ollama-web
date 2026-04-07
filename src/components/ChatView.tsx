@@ -78,47 +78,12 @@ const ToolCallRenderer = ({ toolCall, username, projectId, isFinished }: { toolC
   const executedRef = useRef(false);
 
   useEffect(() => {
-    if (isFinished && !executedRef.current && projectId && (toolCall.tool === 'write_file' || toolCall.tool === 'delete_file' || toolCall.tool === 'run_command')) {
-      const execute = async () => {
-        setStatus('working');
-        try {
-          let endpoint = '';
-          let method = 'POST';
-          let body = undefined;
-
-          if (toolCall.tool === 'write_file') {
-            endpoint = `/api/workspace/write?projectId=${projectId}`;
-            body = JSON.stringify({ name: toolCall.args.name, content: toolCall.args.content });
-          } else if (toolCall.tool === 'delete_file') {
-            endpoint = `/api/workspace/delete?name=${encodeURIComponent(toolCall.args.name)}&projectId=${projectId}`;
-            method = 'DELETE';
-          } else if (toolCall.tool === 'run_command') {
-            endpoint = `/api/workspace/exec?projectId=${projectId}`;
-            body = JSON.stringify({ command: toolCall.args.command });
-          }
-
-          const res = await fetch(endpoint, {
-            method,
-            headers: { 
-              'Content-Type': 'application/json',
-              'x-username': username || ''
-            },
-            body
-          });
-          
-          if (res.ok) {
-            setStatus('completed');
-            executedRef.current = true;
-          } else {
-            setStatus('error');
-          }
-        } catch (e) {
-          setStatus('error');
-        }
-      };
-      execute();
+    // Tool execution is now handled primarily by the backend during streaming.
+    // The frontend only displays the status based on socket events or initial state.
+    if (isFinished && status === 'idle') {
+      setStatus('completed');
     }
-  }, [isFinished, toolCall, username]);
+  }, [isFinished, status]);
 
   try {
     const tool = toolCall.tool;
@@ -175,43 +140,12 @@ const FileCodeBlock = ({ filename, code, username, isFinished }: { filename: str
   const lastCodeRef = useRef(code);
 
   useEffect(() => {
-    // Reset if code changes significantly
-    if (code !== lastCodeRef.current) {
-      lastCodeRef.current = code;
-      if (status === 'saved') {
-        writtenRef.current = false;
-        setStatus('idle');
-      }
+    // File writing from code blocks is now handled by the backend heuristic.
+    // The frontend only displays the status.
+    if (isFinished && status === 'idle') {
+      setStatus('saved');
     }
-
-    // Auto-save when finished
-    if (isFinished && !writtenRef.current && status === 'idle' && code.trim()) {
-      const writeFile = async () => {
-        setStatus('writing');
-        try {
-          const res = await fetch('/api/workspace/write', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'x-username': username || ''
-            },
-            body: JSON.stringify({ name: filename, content: code })
-          });
-          if (res.ok) {
-            setStatus('saved');
-            writtenRef.current = true;
-          } else {
-            console.error('Failed to save file:', filename);
-            setStatus('error');
-          }
-        } catch (err) {
-          console.error('Error saving file:', err);
-          setStatus('error');
-        }
-      };
-      writeFile();
-    }
-  }, [isFinished, filename, code, username, status]);
+  }, [isFinished, status]);
 
   return (
     <div className="my-4 p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between group shadow-sm hover:shadow-md transition-all">
