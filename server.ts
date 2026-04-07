@@ -2302,10 +2302,12 @@ async function startServer() {
             try {
               const { stdout, stderr } = await execAsync(call.args.command, { cwd: paths.workspace });
               const result = stdout || stderr || 'Command executed successfully (no output)';
+              io.emit(`workspace:updated:${username}`);
               io.emit(`tool:result:${username}`, { chatId, tool: 'run_command', result });
               logger.release(`Tool run_command success for ${username}: ${call.args.command}`);
             } catch (e: any) {
               logger.error(`Tool run_command failed for ${username}: ${call.args.command}`, e);
+              io.emit(`workspace:updated:${username}`);
               io.emit(`tool:result:${username}`, { chatId, tool: 'run_command', result: `Error: ${e.message}` });
             }
           }
