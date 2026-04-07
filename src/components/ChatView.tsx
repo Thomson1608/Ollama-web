@@ -85,8 +85,9 @@ const ToolCallRenderer = ({ toolCall, isFinished }: { toolCall: any, isFinished:
   }, [isFinished, status]);
 
   try {
-    const tool = toolCall.tool;
-    const args = toolCall.args;
+    console.log("ToolCallRenderer received:", toolCall);
+    const tool = toolCall.tool || toolCall.name;
+    const args = toolCall.args || toolCall.arguments || toolCall;
     
     let icon = <FileEdit size={16} className="text-text-secondary" />;
     let title = 'Action';

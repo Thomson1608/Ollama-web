@@ -480,6 +480,9 @@ async function startServer() {
   const PORT = 3000;
   logger.release(`Server configuration: PORT=${PORT}, LOG_LEVEL=${LOG_LEVEL}`);
 
+  // Fix dubious ownership issue for git
+  exec('git config --global --add safe.directory "*"');
+
   async function autoCommit(username: string, message: string, projectId?: string) {
     try {
       const paths = getUserPaths(username, projectId);
@@ -1919,8 +1922,10 @@ async function startServer() {
                 jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
               }
               const call = JSON.parse(jsonString);
-              if (call.tool && call.args) {
-                executeToolCall(chatId, call, username, projectId);
+              const toolName = call.tool || call.name;
+              const toolArgs = call.args || call.arguments || call;
+              if (toolName) {
+                executeToolCall(chatId, { tool: toolName, args: toolArgs }, username, projectId);
               }
             } catch (e) {
               logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
@@ -2001,8 +2006,10 @@ async function startServer() {
                     jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
                   }
                   const call = JSON.parse(jsonString);
-                  if (call.tool && call.args) {
-                    executeToolCall(chatId, call, username, projectId);
+                  const toolName = call.tool || call.name;
+                  const toolArgs = call.args || call.arguments || call;
+                  if (toolName) {
+                    executeToolCall(chatId, { tool: toolName, args: toolArgs }, username, projectId);
                   }
                 } catch (e) {
                   logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
