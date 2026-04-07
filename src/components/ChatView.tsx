@@ -51,10 +51,10 @@ const ThoughtBlock = ({ children }: { children: React.ReactNode }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   
   return (
-    <div className="my-4 border border-blue-100 bg-blue-50/30 rounded-xl overflow-hidden transition-all shadow-sm">
+    <div className="my-4 border border-border-primary bg-bg-secondary rounded-xl overflow-hidden transition-all shadow-sm">
       <button 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-bold text-blue-600 uppercase tracking-widest hover:bg-blue-50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-bold text-accent-primary uppercase tracking-widest hover:bg-bg-tertiary transition-colors"
       >
         <div className="flex items-center gap-2">
           <Cpu size={14} className={cn(isExpanded && "animate-pulse")} />
@@ -67,7 +67,7 @@ const ThoughtBlock = ({ children }: { children: React.ReactNode }) => {
         animate={{ height: isExpanded ? 'auto' : 0, opacity: isExpanded ? 1 : 0 }}
         className="overflow-hidden"
       >
-        <div className="px-4 pb-4 text-xs text-blue-800/70 italic leading-relaxed border-t border-blue-100/50 pt-2">
+        <div className="px-4 pb-4 text-xs text-text-primary/80 italic leading-relaxed border-t border-border-primary pt-2">
           {children}
         </div>
       </motion.div>
@@ -159,21 +159,21 @@ const FileCodeBlock = ({ filename, code, username, isFinished }: { filename: str
   }, [isFinished, status]);
 
   return (
-    <div className="my-4 p-3 bg-white border border-gray-200 rounded-xl flex items-center justify-between group shadow-sm hover:shadow-md transition-all">
+    <div className="my-4 p-3 bg-bg-secondary border border-border-primary rounded-xl flex items-center justify-between group shadow-sm hover:shadow-md transition-all">
       <div className="flex items-center gap-3 overflow-hidden">
         <div className={cn(
           "w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-          status === 'saved' ? "bg-green-50 text-green-600" : 
-          status === 'error' ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
+          status === 'saved' ? "bg-green-500/10 text-green-500" : 
+          status === 'error' ? "bg-red-500/10 text-red-500" : "bg-accent-primary/10 text-accent-primary"
         )}>
           {status === 'writing' ? <Loader2 size={20} className="animate-spin" /> : <FileEdit size={20} />}
         </div>
         <div className="flex flex-col overflow-hidden text-left">
-          <span className="text-sm font-bold text-gray-800 truncate">{filename}</span>
+          <span className="text-sm font-bold text-text-primary truncate">{filename}</span>
           <span className={cn(
             "text-[10px] font-bold uppercase tracking-widest",
             status === 'saved' ? "text-green-500" : 
-            status === 'error' ? "text-red-500" : "text-gray-400"
+            status === 'error' ? "text-red-500" : "text-text-secondary"
           )}>
             {status === 'writing' ? 'Đang lưu vào workspace...' : 
              status === 'saved' ? 'Đã lưu vào workspace' : 
@@ -188,7 +188,7 @@ const FileCodeBlock = ({ filename, code, username, isFinished }: { filename: str
             navigator.clipboard.writeText(code);
             toast.success('Đã sao chép mã code');
           }}
-          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+          className="p-2 text-text-secondary hover:text-accent-primary hover:bg-accent-primary/10 rounded-lg transition-all"
           title="Copy code"
         >
           <Copy size={16} />
