@@ -1576,13 +1576,16 @@ async function startServer() {
 
   async function killPort(port: number) {
     try {
-      // Kill any process using the port
+      logger.debug(`Workspace: Killing any process on port ${port}...`);
+      // Use npx kill-port for a more cross-platform/reliable way
+      await execAsync(`npx -y kill-port ${port}`).catch(() => {});
+      // Also try traditional ways just in case
       await execAsync(`fuser -k ${port}/tcp`).catch(() => {});
       await execAsync(`lsof -ti:${port} | xargs kill -9`).catch(() => {});
       // Wait a bit for the port to be released
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (e) {
-      // Ignore
+      logger.error(`Workspace: Failed to kill port ${port}`, e);
     }
   }
 
