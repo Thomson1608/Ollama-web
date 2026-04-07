@@ -24,6 +24,7 @@ import { ConnectionStatus, Memory, ModelParameters } from '../types';
 import { StatsView } from './StatsView';
 import { MemoryEditor } from './MemoryEditor';
 import { SystemControl } from './SystemControl';
+import { SystemLogView } from './SystemLogView';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 
@@ -122,67 +123,68 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { id: 'prompt', label: 'System Prompt', icon: UserCircle },
     { id: 'model', label: 'Model Defaults', icon: Cpu },
     { id: 'stats', label: 'Chat Statistics', icon: BarChart },
+    { id: 'logs', label: 'System Logs', icon: Terminal },
   ] as const;
+
+  type TabType = typeof tabs[number]['id'];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-bg-primary">
-      {/* Header - Fixed at top */}
-      <div className="bg-bg-primary/80 backdrop-blur-md border-b border-border-primary px-4 md:px-8 py-4 md:py-6 z-10 shrink-0">
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3 md:gap-4">
-            <div className="w-10 h-10 md:w-12 md:h-12 bg-accent-primary/10 rounded-xl md:rounded-2xl flex items-center justify-center text-accent-primary shadow-sm shrink-0">
-              <Settings size={20} className="md:hidden" />
-              <Settings size={24} className="hidden md:block" />
+      {/* Header - Fixed at top, Compact */}
+      <div className="bg-bg-primary/80 backdrop-blur-md border-b border-border-primary px-4 py-2 z-10 shrink-0">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-accent-primary/10 rounded-lg flex items-center justify-center text-accent-primary shadow-sm shrink-0">
+              <Settings size={18} />
             </div>
-            <div className="min-w-0">
-              <h2 className="text-xl md:text-2xl font-bold text-text-primary truncate">Settings</h2>
-              <p className="text-[10px] md:text-sm text-text-secondary truncate">Configure AI behavior</p>
+            <div className="min-w-0 flex items-baseline gap-2">
+              <h2 className="text-lg font-bold text-text-primary truncate">Settings</h2>
+              <p className="text-xs text-text-secondary truncate hidden md:block">Configure AI behavior</p>
             </div>
           </div>
+          
+          {/* Tabs inline with header on desktop */}
+          <div className="flex overflow-x-auto hide-scrollbar gap-1 flex-1 md:justify-center">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap shrink-0",
+                  activeTab === tab.id 
+                    ? "bg-accent-primary/10 text-accent-primary border border-accent-primary/20" 
+                    : "text-text-secondary hover:bg-bg-tertiary border border-transparent"
+                )}
+              >
+                <tab.icon size={14} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
           <button 
             onClick={handleSave}
             disabled={!hasChanges}
-            className={`flex items-center justify-center gap-2 px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all shadow-lg w-full md:w-auto ${
+            className={`flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm shrink-0 ${
               hasChanges 
                 ? "bg-accent-primary hover:bg-accent-primary/90 text-white shadow-accent-primary/20 cursor-pointer" 
                 : "bg-bg-tertiary text-text-secondary cursor-not-allowed shadow-none"
             }`}
           >
-            <Save size={16} className="md:hidden" />
-            <Save size={18} className="hidden md:block" />
-            Save Changes
+            <Save size={14} />
+            Save
           </button>
-        </div>
-        
-        {/* Tabs */}
-        <div className="max-w-4xl mx-auto mt-4 md:mt-6 flex overflow-x-auto hide-scrollbar gap-1.5 md:gap-2 pb-1">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-xl text-[11px] md:text-sm font-medium transition-colors whitespace-nowrap shrink-0",
-                activeTab === tab.id 
-                  ? "bg-accent-primary/10 text-accent-primary border border-accent-primary/20" 
-                  : "text-text-secondary hover:bg-bg-tertiary border border-transparent"
-              )}
-            >
-              <tab.icon size={14} className="md:hidden" />
-              <tab.icon size={16} className="hidden md:block" />
-              {tab.label}
-            </button>
-          ))}
         </div>
       </div>
 
-      {/* Body - Scrollable */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 no-scrollbar">
+      {/* Body - Scrollable, Full Width, Top-Left Aligned */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 no-scrollbar">
         <motion.div 
           key={activeTab}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
-          className="max-w-4xl mx-auto pb-12"
+          className="w-full pb-12"
         >
           {activeTab === 'general' && (
             <div className="bg-bg-secondary p-6 rounded-xl border border-border-primary shadow-sm space-y-8 flex flex-col">
@@ -474,6 +476,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="bg-bg-secondary rounded-3xl border border-border-primary shadow-sm overflow-hidden">
               <StatsView />
             </div>
+          )}
+
+          {activeTab === 'logs' && (
+            <SystemLogView />
           )}
         </motion.div>
       </div>

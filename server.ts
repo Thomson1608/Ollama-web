@@ -891,9 +891,27 @@ async function startServer() {
         filteredLogs = entries.filter(entry => entry.startsWith(prefix));
       }
       
-      res.json({ logs: filteredLogs.slice(-100) }); // Get last 100 entries
+      res.json({ logs: filteredLogs.slice(-2000) }); // Get last 2000 entries for better filtering
     } catch (error) {
       res.status(500).json({ error: 'Không thể đọc nhật ký' });
+    }
+  });
+
+  // API: Clear logs
+  app.delete('/api/logs', async (req, res) => {
+    try {
+      const { date } = req.query; // Optional date 'YYYY-MM-DD'
+      if (date) {
+        const data = await fs.readFile(SYSTEM_LOG_FILE, 'utf-8');
+        const entries = data.split(/(?=\[(?:DEBUG|ERROR|RELEASE)\])/);
+        const filteredLogs = entries.filter(entry => !entry.includes(`] ${date}`));
+        await fs.writeFile(SYSTEM_LOG_FILE, filteredLogs.join(''));
+      } else {
+        await fs.writeFile(SYSTEM_LOG_FILE, '');
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Không thể xóa nhật ký' });
     }
   });
 
