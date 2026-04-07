@@ -1556,93 +1556,18 @@ async function startServer() {
   });
 
   // API: Serve workspace files for preview
-  app.use('/preview/:username', (req, res, next) => {
-    const username = req.params.username;
-    const paths = getUserPaths(username);
+  app.use('/preview/:username/:projectId', (req, res, next) => {
+    const { username, projectId } = req.params;
+    const paths = getUserPaths(username, projectId);
     express.static(paths.workspace)(req, res, next);
   });
-  app.use('/preview/:username', (req, res) => {
+  app.use('/preview/:username/:projectId', (req, res) => {
     res.status(404).send('File not found in workspace');
   });
 
-  // API: Delete workspace file
-  app.delete('/api/workspace/delete', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    try {
-      const fileName = req.query.name as string;
-      if (!fileName) return res.status(400).json({ error: 'Missing filename' });
-      const paths = getUserPaths(username);
-      const safeName = path.normalize(fileName).replace(/^(\.\.[\/\\])+/, '');
-      const filePath = path.join(paths.workspace, safeName);
-      await fs.rm(filePath, { recursive: true, force: true });
-      io.emit(`workspace:updated:${username}`);
-      res.json({ success: true });
-      
-      // Auto commit after deleting
-      const git = simpleGit(paths.workspace);
-      try {
-        await git.add('.');
-        const status = await git.status();
-        if (status.staged.length > 0 || status.modified.length > 0 || status.deleted.length > 0 || status.not_added.length > 0) {
-          await git.commit(`Delete ${safeName}`);
-          io.emit(`workspace:history_updated:${username}`);
-        }
-      } catch (e) {
-        logger.error('Auto commit failed', e);
-      }
-    } catch (error) {
-      logger.error('Failed to delete file or folder', error);
-      res.status(500).json({ error: 'Failed to delete file or folder' });
-    }
-  });
+  // Removed duplicate APIs
 
-  // API: Get commit details
-  app.get('/api/workspace/commit-details', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    try {
-      const hash = req.query.hash as string;
-      if (!hash) return res.status(400).json({ error: 'Missing hash' });
-      const paths = getUserPaths(username);
-      const git = simpleGit(paths.workspace);
-      
-      let files = [];
-      try {
-        const diffSummary = await git.diffSummary([`${hash}^`, hash]);
-        files = await Promise.all(diffSummary.files.map(async (f) => {
-          let oldContent = '';
-          let newContent = '';
-          try { oldContent = await git.show([`${hash}^:${f.file}`]); } catch (e) {}
-          try { newContent = await git.show([`${hash}:${f.file}`]); } catch (e) {}
-          return { name: f.file, oldContent, newContent };
-        }));
-      } catch (e) {
-        try {
-          const show = await git.show([hash, '--name-only', '--pretty=format:']);
-          const fileNames = show.split('\n').filter(Boolean);
-          files = await Promise.all(fileNames.map(async (f) => {
-            let newContent = '';
-            try { newContent = await git.show([`${hash}:${f}`]); } catch (e) {}
-            return { name: f, oldContent: '', newContent };
-          }));
-        } catch (innerError) {
-           logger.error('Failed to get first commit details', innerError);
-        }
-      }
-      res.json({ files });
-    } catch (error) {
-      logger.error('Failed to get commit details', error);
-      res.status(500).json({ error: 'Failed to get commit details' });
-    }
-  });
-
-  // API: Serve workspace files for preview
-  app.use('/preview/:username', (req, res, next) => {
-    const username = req.params.username;
-    const paths = getUserPaths(username);
-    express.static(paths.workspace)(req, res, next);
-  });
+  // Removed duplicate preview API
 
   const workspaceProcesses = new Map<string, ChildProcess>();
   const WORKSPACE_PORTS = new Map<string, number>();
@@ -1650,10 +1575,12 @@ async function startServer() {
 
   app.post('/api/workspace/run', async (req, res) => {
     const username = req.headers['x-username'] as string;
+    const projectId = req.query.projectId as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
+    if (!projectId) return res.status(400).json({ error: 'ProjectId required' });
     try {
-      const paths = getUserPaths(username);
-      logger.debug(`API: Running workspace for ${username}...`);
+      const paths = getUserPaths(username, projectId);
+      logger.debug(`API: Running workspace for ${username} in project ${projectId}...`);
       
       if (workspaceProcesses.has(username)) {
         logger.debug(`Killing existing workspace process for ${username}`);

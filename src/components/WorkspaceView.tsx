@@ -515,7 +515,7 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
               )}>
                 <iframe 
                   key={previewKey}
-                  src={previewType === 'node' ? `/workspace-preview/${username}/?t=${previewKey}` : (selectedFile?.endsWith('.html') ? `/preview/${username}/${selectedFile.split('/').map(encodeURIComponent).join('/')}?t=${previewKey}` : `/preview/${username}/index.html?t=${previewKey}`)} 
+                  src={previewType === 'node' ? `/workspace-preview/${username}/?t=${previewKey}` : (selectedFile?.endsWith('.html') ? `/preview/${username}/${projectId}/${selectedFile.split('/').map(encodeURIComponent).join('/')}?t=${previewKey}` : `/preview/${username}/${projectId}/index.html?t=${previewKey}`)} 
                   className="w-full h-full border-none"
                   title="Web Preview"
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
