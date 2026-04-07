@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { cn } from '../lib/utils';
 import { Panel, Group, Separator } from 'react-resizable-panels';
+import Editor from '@monaco-editor/react';
 
 import { Socket } from 'socket.io-client';
 
@@ -470,12 +471,22 @@ export const WorkspaceView: React.FC<WorkspaceViewProps> = ({ refreshTrigger, so
                     </div>
                   </div>
                   <div className="flex-1 overflow-hidden">
-                    <textarea 
+                    <Editor
+                      height="100%"
+                      defaultLanguage="typescript"
+                      language={selectedFile.split('.').pop() === 'js' ? 'javascript' : selectedFile.split('.').pop() === 'ts' ? 'typescript' : selectedFile.split('.').pop() === 'tsx' ? 'typescript' : selectedFile.split('.').pop() === 'html' ? 'html' : selectedFile.split('.').pop() === 'css' ? 'css' : selectedFile.split('.').pop() === 'json' ? 'json' : 'plaintext'}
+                      theme="vs-dark"
                       value={fileContent}
-                      onChange={(e) => setFileContent(e.target.value)}
-                      readOnly={!isEditing}
-                      className="w-full h-full p-6 font-mono text-sm bg-transparent text-text-primary focus:outline-none resize-none no-scrollbar"
-                      placeholder="Start coding..."
+                      onChange={(value) => setFileContent(value || '')}
+                      options={{
+                        readOnly: !isEditing,
+                        minimap: { enabled: false },
+                        fontSize: 14,
+                        wordWrap: 'on',
+                        scrollBeyondLastLine: false,
+                        automaticLayout: true,
+                        padding: { top: 16 }
+                      }}
                     />
                   </div>
                 </>
