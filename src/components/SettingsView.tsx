@@ -35,8 +35,10 @@ interface SettingsViewProps {
   setParameters: (params: ModelParameters) => void;
   ollamaUrl: string;
   setOllamaUrl: (url: string) => void;
-  ollamaApiKey: string;
-  setOllamaApiKey: (key: string) => void;
+  ollamaAccounts: { name: string; apiKey: string }[];
+  setOllamaAccounts: (accounts: { name: string; apiKey: string }[]) => void;
+  activeOllamaAccount: string;
+  setActiveOllamaAccount: (name: string) => void;
   memory: Memory;
   clearMemory: () => void;
   saveSettings: () => void;
@@ -55,8 +57,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setParameters,
   ollamaUrl,
   setOllamaUrl,
-  ollamaApiKey,
-  setOllamaApiKey,
+  ollamaAccounts,
+  setOllamaAccounts,
+  activeOllamaAccount,
+  setActiveOllamaAccount,
   memory,
   clearMemory,
   saveSettings,
@@ -69,31 +73,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const [localParameters, setLocalParameters] = useState<ModelParameters>(parameters);
   const [localOllamaUrl, setLocalOllamaUrl] = useState(ollamaUrl);
-  const [localOllamaApiKey, setLocalOllamaApiKey] = useState(ollamaApiKey);
+  const [localAccounts, setLocalAccounts] = useState(ollamaAccounts);
+  const [localActiveAccount, setLocalActiveAccount] = useState(activeOllamaAccount);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
   const [isConfirmingShutdown, setIsConfirmingShutdown] = useState(false);
   
   const hasChanges = 
     localPrompt !== systemPrompt || 
     localOllamaUrl !== ollamaUrl ||
-    localOllamaApiKey !== ollamaApiKey ||
+    JSON.stringify(localAccounts) !== JSON.stringify(ollamaAccounts) ||
+    localActiveAccount !== activeOllamaAccount ||
     JSON.stringify(localMemory) !== JSON.stringify(memory.facts) ||
     JSON.stringify(localParameters) !== JSON.stringify(parameters);
 
-  // Update local state if parent state changes (e.g. on initial load)
+  // Update local state if parent state changes
   useEffect(() => {
     setLocalPrompt(systemPrompt);
     setLocalMemory(memory.facts);
     setLocalParameters(parameters);
     setLocalOllamaUrl(ollamaUrl);
-    setLocalOllamaApiKey(ollamaApiKey);
-  }, [systemPrompt, memory, parameters, ollamaUrl, ollamaApiKey]);
+    setLocalAccounts(ollamaAccounts);
+    setLocalActiveAccount(activeOllamaAccount);
+  }, [systemPrompt, memory, parameters, ollamaUrl, ollamaAccounts, activeOllamaAccount]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
     setParameters(localParameters);
     setOllamaUrl(localOllamaUrl);
-    setOllamaApiKey(localOllamaApiKey);
+    setOllamaAccounts(localAccounts);
+    setActiveOllamaAccount(localActiveAccount);
     // Update memory via API
     fetch('/api/memory', {
       method: 'POST',
@@ -242,15 +250,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-text-secondary">Ollama API Key</label>
+                  <label className="text-xs font-semibold text-text-secondary">Ollama Account</label>
                   <div className="flex gap-2">
-                    <input 
-                      type="password"
-                      value={localOllamaApiKey}
-                      onChange={(e) => setLocalOllamaApiKey(e.target.value)}
-                      placeholder="Nhập API Key..."
+                    <select
+                      value={localActiveAccount}
+                      onChange={(e) => setLocalActiveAccount(e.target.value)}
                       className="flex-1 bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
-                    />
+                    >
+                      {localAccounts.map(account => (
+                        <option key={account.name} value={account.name}>{account.name}</option>
+                      ))}
+                    </select>
+                    <button className="bg-accent-primary text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-accent-primary/90">
+                      Add Account
+                    </button>
+                    <button 
+                      className="bg-bg-tertiary border border-border-primary text-text-primary px-3 py-2 rounded-lg text-sm font-medium hover:bg-bg-secondary"
+                      onClick={async () => {
+                        // Logic test connection
+                        const activeAccount = localAccounts.find(a => a.name === localActiveAccount);
+                        if (activeAccount) {
+                          // Call backend to test connection
+                          console.log('Testing connection for:', activeAccount.name);
+                        }
+                      }}
+                    >
+                      Test
+                    </button>
                   </div>
                 </div>
 

@@ -141,7 +141,11 @@ If the user asks you to write code, you should provide it in a markdown code blo
   });
 
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
-  const [ollamaApiKey, setOllamaApiKey] = useState(() => localStorage.getItem('ollama_api_key') || '');
+  const [ollamaAccounts, setOllamaAccounts] = useState<{ name: string; apiKey: string }[]>(() => {
+    const saved = localStorage.getItem('ollama_accounts');
+    return saved ? JSON.parse(saved) : [{ name: 'Default', apiKey: '' }];
+  });
+  const [activeOllamaAccount, setActiveOllamaAccount] = useState(() => localStorage.getItem('active_ollama_account') || 'Default');
   const [workspaceHost, setWorkspaceHost] = useState(() => localStorage.getItem('workspace_host') || 'localhost');
 
   // Update system prompt when username changes
@@ -1541,10 +1545,15 @@ If the user asks you to write code, you should provide it in a markdown code blo
                       setOllamaUrl(url);
                       localStorage.setItem('ollama_url', url);
                     }}
-                    ollamaApiKey={ollamaApiKey}
-                    setOllamaApiKey={(key) => {
-                      setOllamaApiKey(key);
-                      localStorage.setItem('ollama_api_key', key);
+                    ollamaAccounts={ollamaAccounts}
+                    setOllamaAccounts={(accounts) => {
+                      setOllamaAccounts(accounts);
+                      localStorage.setItem('ollama_accounts', JSON.stringify(accounts));
+                    }}
+                    activeOllamaAccount={activeOllamaAccount}
+                    setActiveOllamaAccount={(name) => {
+                      setActiveOllamaAccount(name);
+                      localStorage.setItem('active_ollama_account', name);
                     }}
                     memory={memory}
                     clearMemory={clearMemory}
