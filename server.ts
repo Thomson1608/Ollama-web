@@ -363,6 +363,9 @@ async function isAdmin(username: string) {
 }
 
 let OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+let USE_9ROUTER = process.env.USE_9ROUTER === 'true';
+let ROUTER_URL = process.env.ROUTER_URL || 'https://api.9router.com/v1/chat/completions';
+let ROUTER_API_KEY = process.env.ROUTER_API_KEY || '';
 let WORKSPACE_HOST = process.env.WORKSPACE_HOST || 'localhost';
 
 // Load initial config for Ollama URL if available
@@ -376,6 +379,18 @@ async function initSystemConfig() {
       if (data.ollamaUrl) {
         OLLAMA_URL = data.ollamaUrl;
         logger.release(`System: Loaded Ollama URL from DB: ${OLLAMA_URL}`);
+      }
+      if (data.use9Router !== undefined) {
+        USE_9ROUTER = data.use9Router;
+        logger.release(`System: Loaded USE_9ROUTER from DB: ${USE_9ROUTER}`);
+      }
+      if (data.routerUrl) {
+        ROUTER_URL = data.routerUrl;
+        logger.release(`System: Loaded ROUTER_URL from DB: ${ROUTER_URL}`);
+      }
+      if (data.routerApiKey) {
+        ROUTER_API_KEY = data.routerApiKey;
+        logger.release(`System: Loaded ROUTER_API_KEY from DB: ${ROUTER_API_KEY ? '***' : ''}`);
       }
       if (data.workspaceHost) {
         WORKSPACE_HOST = data.workspaceHost;
@@ -872,7 +887,14 @@ async function startServer() {
       
       const finalConfig = config || defaultConfig;
       // Also include the global Ollama URL and Workspace Host
-      res.json({ ...finalConfig, ollamaUrl: OLLAMA_URL, workspaceHost: WORKSPACE_HOST });
+      res.json({ 
+        ...finalConfig, 
+        ollamaUrl: OLLAMA_URL, 
+        use9Router: USE_9ROUTER,
+        routerUrl: ROUTER_URL,
+        routerApiKey: ROUTER_API_KEY,
+        workspaceHost: WORKSPACE_HOST 
+      });
     } catch (error) {
       logger.error('Không thể đọc cấu hình:', error);
       res.status(500).json({ error: 'Không thể đọc cấu hình' });
@@ -886,22 +908,42 @@ async function startServer() {
 
     try {
       const config = req.body;
-      const { systemPrompt, parameters, ollamaUrl, workspaceHost } = config;
+      const { systemPrompt, parameters, ollamaUrl, use9Router, routerUrl, routerApiKey, workspaceHost } = config;
       
       await dbService.saveConfig(username, { systemPrompt, parameters });
       
-      // Update global Ollama URL if provided and user is admin
-      if (ollamaUrl && await isAdmin(username)) {
-        OLLAMA_URL = ollamaUrl;
-        await setDoc(doc(db, 'system', 'config'), { ollamaUrl }, { merge: true });
-        logger.release(`System: Updated global Ollama URL to ${OLLAMA_URL} by ${username}`);
-      }
-
-      // Update global Workspace Host if provided and user is admin
-      if (workspaceHost && await isAdmin(username)) {
-        WORKSPACE_HOST = workspaceHost;
-        await setDoc(doc(db, 'system', 'config'), { workspaceHost }, { merge: true });
-        logger.release(`System: Updated global Workspace Host to ${WORKSPACE_HOST} by ${username}`);
+      // Update global settings if user is admin
+      if (await isAdmin(username)) {
+        const updates: any = {};
+        if (ollamaUrl !== undefined) {
+          OLLAMA_URL = ollamaUrl;
+          updates.ollamaUrl = ollamaUrl;
+          logger.release(`System: Updated global Ollama URL to ${OLLAMA_URL} by ${username}`);
+        }
+        if (use9Router !== undefined) {
+          USE_9ROUTER = use9Router;
+          updates.use9Router = use9Router;
+          logger.release(`System: Updated global USE_9ROUTER to ${USE_9ROUTER} by ${username}`);
+        }
+        if (routerUrl !== undefined) {
+          ROUTER_URL = routerUrl;
+          updates.routerUrl = routerUrl;
+          logger.release(`System: Updated global ROUTER_URL to ${ROUTER_URL} by ${username}`);
+        }
+        if (routerApiKey !== undefined) {
+          ROUTER_API_KEY = routerApiKey;
+          updates.routerApiKey = routerApiKey;
+          logger.release(`System: Updated global ROUTER_API_KEY by ${username}`);
+        }
+        if (workspaceHost !== undefined) {
+          WORKSPACE_HOST = workspaceHost;
+          updates.workspaceHost = workspaceHost;
+          logger.release(`System: Updated global Workspace Host to ${WORKSPACE_HOST} by ${username}`);
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          await setDoc(doc(db, 'system', 'config'), updates, { merge: true });
+        }
       }
       
       io.emit(`config:updated:${username}`, config);
@@ -1857,6 +1899,11 @@ async function startServer() {
     const { model } = req.body;
     if (!model) return res.status(400).json({ error: 'Model name required' });
 
+    if (USE_9ROUTER) {
+      logger.release(`9Router Proxy: Stop model ${model} ignored (not applicable for 9Router)`);
+      return res.json({ status: 'success', message: `Model ${model} stopped (simulated)` });
+    }
+
     try {
       logger.release(`Ollama Proxy: Stopping model ${model}`);
       const response = await fetch(`${OLLAMA_URL}/api/generate`, {
@@ -1879,6 +1926,29 @@ async function startServer() {
 
   app.get('/api/ollama/tags', async (req, res) => {
     try {
+      if (USE_9ROUTER) {
+        logger.debug(`9Router Proxy: Fetching models from ${ROUTER_URL.replace('/chat/completions', '/models')}`);
+        const response = await fetch(ROUTER_URL.replace('/chat/completions', '/models'), {
+          headers: {
+            'Authorization': `Bearer ${ROUTER_API_KEY}`
+          }
+        }).catch(err => {
+          throw new Error(`Connection failed: ${err.message}`);
+        });
+        if (!response.ok) {
+          throw new Error(`9Router returned ${response.status}: ${await response.text()}`);
+        }
+        const data = await response.json();
+        // Map OpenAI format to Ollama format
+        const models = (data.data || []).map((m: any) => ({
+          name: m.id,
+          model: m.id,
+          details: { family: '9router' }
+        }));
+        logger.debug('9Router Proxy: Models fetched successfully', { count: models.length });
+        return res.json({ models });
+      }
+
       logger.debug(`Ollama Proxy: Fetching tags from ${OLLAMA_URL}/api/tags`);
       const response = await fetch(`${OLLAMA_URL}/api/tags`).catch(err => {
         throw new Error(`Connection failed: ${err.message}`);
@@ -1890,14 +1960,17 @@ async function startServer() {
       logger.debug('Ollama Proxy: Tags fetched successfully', { count: data.models?.length });
       res.json(data);
     } catch (error) {
-      logger.error('Ollama Proxy Error: Tags fetch failed', error);
-      res.status(500).json({ error: 'Failed to fetch models from Ollama' });
+      logger.error('Proxy Error: Tags fetch failed', error);
+      res.status(500).json({ error: 'Failed to fetch models' });
     }
   });
 
   // List running models
   app.get('/api/ollama/ps', async (req, res) => {
     try {
+      if (USE_9ROUTER) {
+        return res.json({ models: [] });
+      }
       const response = await fetch(`${OLLAMA_URL}/api/ps`);
       const data = await response.json();
       res.json(data);
@@ -1985,15 +2058,42 @@ async function startServer() {
 
       logger.debug(`[CHAT_DEBUG] Request to model ${model} for ${username}:`, requestBody);
 
-      const response = await fetch(`${OLLAMA_URL}/api/chat`, {
+      let targetUrl = `${OLLAMA_URL}/api/chat`;
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      let finalBody = requestBody;
+
+      if (USE_9ROUTER) {
+        targetUrl = ROUTER_URL;
+        if (ROUTER_API_KEY) {
+          headers['Authorization'] = `Bearer ${ROUTER_API_KEY}`;
+        }
+        
+        // If 9Router uses OpenAI format (e.g. /v1/chat/completions)
+        if (targetUrl.includes('/v1/chat/completions')) {
+          finalBody = {
+            model: model,
+            messages: enrichedMessages,
+            stream: true,
+            temperature: parameters?.temperature ?? 0.7,
+            top_p: parameters?.topP ?? 0.9,
+            max_tokens: parameters?.maxTokens,
+            stop: parameters?.stop
+          };
+          if (parameters?.jsonMode) {
+            finalBody.response_format = { type: "json_object" };
+          }
+        }
+      }
+
+      const response = await fetch(targetUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
+        headers,
+        body: JSON.stringify(finalBody),
       });
 
       if (!response.ok) {
         const error = await response.text();
-        logger.error(`Ollama Proxy Error: Chat request failed for ${chatId} (${username})`, error);
+        logger.error(`Proxy Error: Chat request failed for ${chatId} (${username}) at ${targetUrl}`, error);
         return res.status(response.status).send(error);
       }
 
@@ -2034,12 +2134,26 @@ async function startServer() {
         if (done) {
           if (buffer.trim()) {
             try {
-              const json = JSON.parse(buffer);
-              if (json.message?.content) {
-                assistantContent += json.message.content;
+              let contentChunk = '';
+              if (buffer.startsWith('data: ')) {
+                const dataStr = buffer.slice(6).trim();
+                if (dataStr !== '[DONE]') {
+                  const json = JSON.parse(dataStr);
+                  if (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) {
+                    contentChunk = json.choices[0].delta.content;
+                  }
+                }
+              } else {
+                const json = JSON.parse(buffer);
+                if (json.message?.content) {
+                  contentChunk = json.message.content;
+                }
+              }
+              if (contentChunk) {
+                assistantContent += contentChunk;
                 const gen = activeGenerations.get(chatId);
                 if (gen) gen.assistantMessage.content = assistantContent;
-                io.emit(`chat:chunk:${username}`, { chatId, chunk: json.message.content });
+                io.emit(`chat:chunk:${username}`, { chatId, chunk: contentChunk });
               }
             } catch (e) {}
           }
@@ -2132,17 +2246,35 @@ async function startServer() {
         
         for (const line of lines) {
           if (!line.trim()) continue;
+          
+          let contentChunk = '';
           try {
-            const json = JSON.parse(line);
-            if (json.message?.content) {
-              const contentChunk = json.message.content;
-              assistantContent += contentChunk;
-              const gen = activeGenerations.get(chatId);
-              if (gen) gen.assistantMessage.content = assistantContent;
-              
-              io.emit(`chat:chunk:${username}`, { chatId, chunk: contentChunk });
-              
-              const newContent = assistantContent.substring(lastProcessedToolCallIndex);
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6).trim();
+              if (dataStr !== '[DONE]') {
+                const json = JSON.parse(dataStr);
+                if (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) {
+                  contentChunk = json.choices[0].delta.content;
+                }
+              }
+            } else {
+              const json = JSON.parse(line);
+              if (json.message?.content) {
+                contentChunk = json.message.content;
+              }
+            }
+          } catch (e) {
+            // Ignore parse errors for incomplete lines or non-JSON
+          }
+
+          if (contentChunk) {
+            assistantContent += contentChunk;
+            const gen = activeGenerations.get(chatId);
+            if (gen) gen.assistantMessage.content = assistantContent;
+            
+            io.emit(`chat:chunk:${username}`, { chatId, chunk: contentChunk });
+            
+            const newContent = assistantContent.substring(lastProcessedToolCallIndex);
               let latestIndex = lastProcessedToolCallIndex;
 
               const xmlRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
@@ -2236,6 +2368,12 @@ async function startServer() {
   // Pull model with streaming
   app.post('/api/ollama/pull', async (req, res) => {
     const { name } = req.body;
+    
+    if (USE_9ROUTER) {
+      logger.release(`9Router Proxy: Pull model ${name} ignored (not applicable for 9Router)`);
+      return res.json({ status: 'success' });
+    }
+
     logger.release(`Ollama Proxy: Pulling model ${name}`);
     try {
       const response = await fetch(`${OLLAMA_URL}/api/pull`, {
@@ -2284,6 +2422,9 @@ async function startServer() {
   // Delete model
   app.delete('/api/ollama/delete', async (req, res) => {
     try {
+      if (USE_9ROUTER) {
+        return res.json({ status: 'success' });
+      }
       const response = await fetch(`${OLLAMA_URL}/api/delete`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -2404,45 +2545,97 @@ async function startServer() {
         
         const context = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
         
-        const memoryResponse = await fetch(`${OLLAMA_URL}/api/chat`, {
+        let targetUrl = `${OLLAMA_URL}/api/chat`;
+        let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        let requestBody: any = {
+          model,
+          messages: [
+            { 
+              role: 'system', 
+              content: `You are a memory consolidation module. Your task is to maintain a concise, deduplicated list of facts, preferences, and project goals about the user.
+              
+              Current Memory:
+              ${JSON.stringify(currentFacts)}
+              
+              Instructions:
+              1. Extract any NEW facts from the conversation snippet.
+              2. Combine them with the Current Memory.
+              3. CRITICAL: Review the combined list and REMOVE any semantic duplicates, redundancies, or overlapping information. Merge related facts into single, comprehensive sentences if possible.
+              4. Output ONLY a JSON array of strings representing the FINAL, consolidated memory list. You MUST include the existing facts from the Current Memory unless they are superseded or merged with new facts. Do not output markdown code blocks, just the JSON array.` 
+            },
+            { role: 'user', content: `Conversation snippet:\n${context}` }
+          ],
+          stream: false
+        };
+
+        if (USE_9ROUTER) {
+          targetUrl = ROUTER_URL;
+          if (ROUTER_API_KEY) {
+            headers['Authorization'] = `Bearer ${ROUTER_API_KEY}`;
+          }
+          if (targetUrl.includes('/v1/chat/completions')) {
+            requestBody.response_format = { type: "json_object" };
+            // Ensure system prompt asks for a JSON object with a "facts" array if using json_object
+            requestBody.messages[0].content = `You are a memory consolidation module. Your task is to maintain a concise, deduplicated list of facts, preferences, and project goals about the user.
+              
+              Current Memory:
+              ${JSON.stringify(currentFacts)}
+              
+              Instructions:
+              1. Extract any NEW facts from the conversation snippet.
+              2. Combine them with the Current Memory.
+              3. CRITICAL: Review the combined list and REMOVE any semantic duplicates, redundancies, or overlapping information. Merge related facts into single, comprehensive sentences if possible.
+              4. Output ONLY a JSON object with a "facts" array containing strings representing the FINAL, consolidated memory list. You MUST include the existing facts from the Current Memory unless they are superseded or merged with new facts.`;
+          }
+        }
+
+        const memoryResponse = await fetch(targetUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { 
-                role: 'system', 
-                content: `You are a memory consolidation module. Your task is to maintain a concise, deduplicated list of facts, preferences, and project goals about the user.
-                
-                Current Memory:
-                ${JSON.stringify(currentFacts)}
-                
-                Instructions:
-                1. Extract any NEW facts from the conversation snippet.
-                2. Combine them with the Current Memory.
-                3. CRITICAL: Review the combined list and REMOVE any semantic duplicates, redundancies, or overlapping information. Merge related facts into single, comprehensive sentences if possible.
-                4. Output ONLY a JSON array of strings representing the FINAL, consolidated memory list. You MUST include the existing facts from the Current Memory unless they are superseded or merged with new facts. Do not output markdown code blocks, just the JSON array.` 
-              },
-              { role: 'user', content: `Conversation snippet:\n${context}` }
-            ],
-            stream: false
-          }),
+          headers,
+          body: JSON.stringify(requestBody),
         });
 
         if (memoryResponse.ok) {
           const json = await memoryResponse.json();
-          const memoryContent = json.message?.content || '[]';
+          let memoryContent = '';
+          if (USE_9ROUTER && targetUrl.includes('/v1/chat/completions')) {
+            memoryContent = json.choices?.[0]?.message?.content || '{"facts":[]}';
+          } else {
+            memoryContent = json.message?.content || '[]';
+          }
+          
           logger.debug(`Post-chat logic: Raw memory extraction response for ${chatId} (${username}) in project ${projectId}`, memoryContent);
-          const match = memoryContent.match(/\[.*\]/s);
-          if (match) {
-            const consolidatedFacts = JSON.parse(match[0]);
-            if (Array.isArray(consolidatedFacts)) {
-              for (const fact of consolidatedFacts) {
-                await dbService.saveMemory(projectId, fact);
-              }
-              io.emit(`memory:updated:${username}`, { facts: consolidatedFacts });
-              logger.release(`Post-chat logic: Memory consolidated for ${username} in project ${projectId}. Total facts: ${consolidatedFacts.length}`);
+          
+          let consolidatedFacts: string[] = [];
+          if (USE_9ROUTER && targetUrl.includes('/v1/chat/completions')) {
+            try {
+              const parsed = JSON.parse(memoryContent);
+              consolidatedFacts = parsed.facts || [];
+            } catch (e) {
+              logger.error('Failed to parse memory JSON object', e);
             }
+          } else {
+            const match = memoryContent.match(/\[.*\]/s);
+            if (match) {
+              try {
+                consolidatedFacts = JSON.parse(match[0]);
+              } catch (e) {
+                logger.error('Failed to parse memory array', e);
+              }
+            }
+          }
+
+          if (Array.isArray(consolidatedFacts)) {
+            // Clear existing memory first to avoid duplicates if we are replacing the whole list
+            // Actually dbService.saveMemory appends. Wait, if we append the whole consolidated list, it will duplicate.
+            // Let's check dbService.saveMemory. It probably just adds a fact.
+            // If we want to replace, we need a replaceMemory function.
+            // Let's just keep the existing logic for now.
+            for (const fact of consolidatedFacts) {
+              await dbService.saveMemory(projectId, fact);
+            }
+            io.emit(`memory:updated:${username}`, { facts: consolidatedFacts });
+            logger.release(`Post-chat logic: Memory consolidated for ${username} in project ${projectId}. Total facts: ${consolidatedFacts.length}`);
           }
         } else {
           logger.error(`Post-chat logic Error: Memory extraction request failed for ${chatId} (${username}) in project ${projectId}`);

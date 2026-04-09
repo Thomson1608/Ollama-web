@@ -17,7 +17,8 @@ import {
   Info,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  Network
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectionStatus, Memory, ModelParameters } from '../types';
@@ -35,6 +36,12 @@ interface SettingsViewProps {
   setParameters: (params: ModelParameters) => void;
   ollamaUrl: string;
   setOllamaUrl: (url: string) => void;
+  use9Router: boolean;
+  setUse9Router: (val: boolean) => void;
+  routerUrl: string;
+  setRouterUrl: (url: string) => void;
+  routerApiKey: string;
+  setRouterApiKey: (key: string) => void;
   ollamaAccounts: { name: string; apiKey: string }[];
   setOllamaAccounts: (accounts: { name: string; apiKey: string }[]) => void;
   activeOllamaAccount: string;
@@ -48,7 +55,7 @@ interface SettingsViewProps {
   setTheme: (theme: 'dark' | 'light' | 'system') => void;
 }
 
-type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'stats';
+type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'stats' | 'logs';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   systemPrompt,
@@ -57,6 +64,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setParameters,
   ollamaUrl,
   setOllamaUrl,
+  use9Router,
+  setUse9Router,
+  routerUrl,
+  setRouterUrl,
+  routerApiKey,
+  setRouterApiKey,
   ollamaAccounts,
   setOllamaAccounts,
   activeOllamaAccount,
@@ -73,6 +86,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const [localParameters, setLocalParameters] = useState<ModelParameters>(parameters);
   const [localOllamaUrl, setLocalOllamaUrl] = useState(ollamaUrl);
+  const [localUse9Router, setLocalUse9Router] = useState(use9Router);
+  const [localRouterUrl, setLocalRouterUrl] = useState(routerUrl);
+  const [localRouterApiKey, setLocalRouterApiKey] = useState(routerApiKey);
   const [localAccounts, setLocalAccounts] = useState(ollamaAccounts);
   const [localActiveAccount, setLocalActiveAccount] = useState(activeOllamaAccount);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
@@ -81,6 +97,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const hasChanges = 
     localPrompt !== systemPrompt || 
     localOllamaUrl !== ollamaUrl ||
+    localUse9Router !== use9Router ||
+    localRouterUrl !== routerUrl ||
+    localRouterApiKey !== routerApiKey ||
     JSON.stringify(localAccounts) !== JSON.stringify(ollamaAccounts) ||
     localActiveAccount !== activeOllamaAccount ||
     JSON.stringify(localMemory) !== JSON.stringify(memory.facts) ||
@@ -92,14 +111,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLocalMemory(memory.facts);
     setLocalParameters(parameters);
     setLocalOllamaUrl(ollamaUrl);
+    setLocalUse9Router(use9Router);
+    setLocalRouterUrl(routerUrl);
+    setLocalRouterApiKey(routerApiKey);
     setLocalAccounts(ollamaAccounts);
     setLocalActiveAccount(activeOllamaAccount);
-  }, [systemPrompt, memory, parameters, ollamaUrl, ollamaAccounts, activeOllamaAccount]);
+  }, [systemPrompt, memory, parameters, ollamaUrl, use9Router, routerUrl, routerApiKey, ollamaAccounts, activeOllamaAccount]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
     setParameters(localParameters);
     setOllamaUrl(localOllamaUrl);
+    setUse9Router(localUse9Router);
+    setRouterUrl(localRouterUrl);
+    setRouterApiKey(localRouterApiKey);
     setOllamaAccounts(localAccounts);
     setActiveOllamaAccount(localActiveAccount);
     // Update memory via API
@@ -278,6 +303,78 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       Test
                     </button>
                   </div>
+                </div>
+
+                {/* 9Router Settings */}
+                <div className="space-y-4 pt-6 border-t border-border-primary">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-bold text-text-primary flex items-center gap-2">
+                      <Network size={16} className="text-accent-primary" />
+                      9Router Integration
+                    </label>
+                    <button 
+                      onClick={() => setLocalUse9Router(!localUse9Router)}
+                      className={cn(
+                        "w-10 h-5 rounded-full transition-all relative",
+                        localUse9Router ? "bg-accent-primary" : "bg-bg-tertiary border border-border-primary"
+                      )}
+                    >
+                      <div className={cn(
+                        "absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all",
+                        localUse9Router ? "left-5" : "left-0.5"
+                      )} />
+                    </button>
+                  </div>
+                  
+                  {localUse9Router && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      className="space-y-4"
+                    >
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-text-secondary">9Router API URL</label>
+                        <input 
+                          type="text"
+                          value={localRouterUrl}
+                          onChange={(e) => setLocalRouterUrl(e.target.value)}
+                          placeholder="https://api.9router.com/v1/chat/completions"
+                          className="w-full bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-text-secondary">9Router API Key</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="password"
+                            value={localRouterApiKey}
+                            onChange={(e) => setLocalRouterApiKey(e.target.value)}
+                            placeholder="sk-..."
+                            className="flex-1 bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                          />
+                          <button 
+                            className="bg-bg-tertiary border border-border-primary text-text-primary px-3 py-2 rounded-lg text-sm font-medium hover:bg-bg-secondary"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch('/api/ollama/tags', {
+                                  headers: { 'x-username': username || '' }
+                                });
+                                if (res.ok) {
+                                  toast.success('Successfully connected to 9Router!');
+                                } else {
+                                  toast.error('Failed to connect to 9Router. Please check your URL and API Key.');
+                                }
+                              } catch (e) {
+                                toast.error('Error connecting to server.');
+                              }
+                            }}
+                          >
+                            Test
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
 
                 <p className="text-xs text-text-secondary leading-relaxed">

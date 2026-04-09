@@ -141,6 +141,9 @@ If the user asks you to write code, you should provide it in a markdown code blo
   });
 
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
+  const [use9Router, setUse9Router] = useState(() => localStorage.getItem('use_9router') === 'true');
+  const [routerUrl, setRouterUrl] = useState(() => localStorage.getItem('router_url') || 'https://api.9router.com/v1/chat/completions');
+  const [routerApiKey, setRouterApiKey] = useState(() => localStorage.getItem('router_api_key') || '');
   const [ollamaAccounts, setOllamaAccounts] = useState<{ name: string; apiKey: string }[]>(() => {
     const saved = localStorage.getItem('ollama_accounts');
     return saved ? JSON.parse(saved) : [{ name: 'Default', apiKey: '' }];
@@ -613,6 +616,18 @@ If the user asks you to write code, you should provide it in a markdown code blo
             setOllamaUrl(data.ollamaUrl);
             localStorage.setItem('ollama_url', data.ollamaUrl);
           }
+          if (data.use9Router !== undefined) {
+            setUse9Router(data.use9Router);
+            localStorage.setItem('use_9router', data.use9Router.toString());
+          }
+          if (data.routerUrl) {
+            setRouterUrl(data.routerUrl);
+            localStorage.setItem('router_url', data.routerUrl);
+          }
+          if (data.routerApiKey) {
+            setRouterApiKey(data.routerApiKey);
+            localStorage.setItem('router_api_key', data.routerApiKey);
+          }
           if (data.workspaceHost) {
             setWorkspaceHost(data.workspaceHost);
             localStorage.setItem('workspace_host', data.workspaceHost);
@@ -680,6 +695,9 @@ If the user asks you to write code, you should provide it in a markdown code blo
             systemPrompt, 
             parameters: globalParameters,
             ollamaUrl,
+            use9Router,
+            routerUrl,
+            routerApiKey,
             workspaceHost 
           }),
         });
@@ -1544,6 +1562,21 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     setOllamaUrl={(url) => {
                       setOllamaUrl(url);
                       localStorage.setItem('ollama_url', url);
+                    }}
+                    use9Router={use9Router}
+                    setUse9Router={(val) => {
+                      setUse9Router(val);
+                      localStorage.setItem('use_9router', val.toString());
+                    }}
+                    routerUrl={routerUrl}
+                    setRouterUrl={(url) => {
+                      setRouterUrl(url);
+                      localStorage.setItem('router_url', url);
+                    }}
+                    routerApiKey={routerApiKey}
+                    setRouterApiKey={(key) => {
+                      setRouterApiKey(key);
+                      localStorage.setItem('router_api_key', key);
                     }}
                     ollamaAccounts={ollamaAccounts}
                     setOllamaAccounts={(accounts) => {
