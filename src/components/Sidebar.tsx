@@ -100,7 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-4 flex items-center justify-between border-b border-border-primary">
         <div className="flex items-center gap-2 font-semibold text-text-primary">
           <Terminal size={20} className="text-accent-primary" />
-          <span>Ollama UI</span>
+          <span>AI Studio</span>
         </div>
         <div className="flex items-center gap-1">
           <button 
@@ -262,7 +262,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
                   currentView === 'pull' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
                 )}
-                title="Pull"
+                title="Update"
               >
                 <Download size={16} />
               </button>

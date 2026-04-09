@@ -8,11 +8,11 @@ import {
   Loader2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { OllamaModel, RunningModel, ConnectionStatus } from '../types';
+import { AIModel, ActiveModel, ConnectionStatus } from '../types';
 
 interface ModelsViewProps {
-  models: OllamaModel[];
-  runningModels: RunningModel[];
+  models: AIModel[];
+  runningModels: ActiveModel[];
   connectionStatus: ConnectionStatus;
   modelSearchQuery: string;
   setModelSearchQuery: (query: string) => void;
@@ -63,7 +63,7 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
               : "text-text-secondary hover:text-text-primary"
           )}
         >
-          Local Models (Ollama)
+          AI Models
         </button>
         <button
           onClick={() => setModelFilter('cloud-local')}
@@ -81,12 +81,12 @@ export const ModelsView: React.FC<ModelsViewProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-bg-secondary p-6 rounded-3xl border border-border-primary">
         <div className="space-y-1">
           <h2 className="text-xl font-bold text-text-primary">
-            {modelFilter === 'local' ? 'Installed Local Models' : 'Available Cloud Models'}
+            {modelFilter === 'local' ? 'Installed Models' : 'Available Cloud Models'}
           </h2>
           <p className="text-sm text-text-secondary">
             {modelFilter === 'local' 
-              ? 'Manage your locally downloaded Ollama models' 
-              : 'Access Ollama cloud models'}
+              ? 'Manage your available AI models' 
+              : 'Access cloud-based AI models'}
           </p>
         </div>
         {modelFilter === 'local' && (

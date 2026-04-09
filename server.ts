@@ -407,12 +407,12 @@ function getTagAndMessage(message: string): { tag: string, msg: string } {
     'Project:': 'PROJECT',
     'Workspace:': 'WORKSPACE',
     'Terminal:': 'WORKSPACE',
-    'Ollama Proxy:': 'CHAT',
-    'Ollama Proxy Error:': 'CHAT',
-    'Ollama Chat Error:': 'CHAT',
-    'Ollama Pull Error:': 'CHAT',
-    'Ollama Delete Error:': 'CHAT',
-    'Ollama PS Error:': 'CHAT',
+    'AI Proxy:': 'CHAT',
+    'AI Proxy Error:': 'CHAT',
+    'AI Chat Error:': 'CHAT',
+    'AI Pull Error:': 'CHAT',
+    'AI Delete Error:': 'CHAT',
+    'AI Active Models Error:': 'CHAT',
     'API:': 'API',
     'Tool': 'TOOL',
     'Post-chat logic': 'CHAT',
@@ -1916,20 +1916,20 @@ async function startServer() {
     next();
   });
 
-  // --- Ollama Proxy Endpoints ---
+  // --- AI Proxy Endpoints ---
 
-  // List models
-  app.post('/api/ollama/stop', async (req, res) => {
+  // Stop model
+  app.post('/api/ai/stop', async (req, res) => {
     const { model } = req.body;
     if (!model) return res.status(400).json({ error: 'Model name required' });
 
-    logger.release(`9Router Proxy: Stop model ${model} ignored (not applicable for 9Router)`);
+    logger.release(`AI Proxy: Stop model ${model} ignored (not applicable for this proxy)`);
     return res.json({ status: 'success', message: `Model ${model} stopped (simulated)` });
   });
 
-  app.get('/api/ollama/tags', async (req, res) => {
+  app.get('/api/ai/models', async (req, res) => {
     try {
-      logger.debug(`9Router Proxy: Fetching models from ${ROUTER_URL.replace('/chat/completions', '/models')}`);
+      logger.debug(`AI Proxy: Fetching models from ${ROUTER_URL.replace('/chat/completions', '/models')}`);
       const response = await fetch(ROUTER_URL.replace('/chat/completions', '/models'), {
         headers: {
           'Authorization': `Bearer ${ROUTER_API_KEY}`
@@ -1938,35 +1938,35 @@ async function startServer() {
         throw new Error(`Connection failed: ${err.message}`);
       });
       if (!response.ok) {
-        throw new Error(`9Router returned ${response.status}: ${await response.text()}`);
+        throw new Error(`AI Proxy returned ${response.status}: ${await response.text()}`);
       }
       const data = await response.json();
-      // Map OpenAI format to Ollama format
+      // Map OpenAI format to generic format
       const models = (data.data || []).map((m: any) => ({
         name: m.id,
         model: m.id,
-        details: { family: '9router' }
+        details: { family: 'ai-proxy' }
       }));
-      logger.debug('9Router Proxy: Models fetched successfully', { count: models.length });
+      logger.debug('AI Proxy: Models fetched successfully', { count: models.length });
       return res.json({ models });
     } catch (error) {
-      logger.error('Proxy Error: Tags fetch failed', error);
+      logger.error('Proxy Error: Models fetch failed', error);
       res.status(500).json({ error: 'Failed to fetch models' });
     }
   });
 
-  // List running models
-  app.get('/api/ollama/ps', async (req, res) => {
+  // List active models
+  app.get('/api/ai/active', async (req, res) => {
     try {
       return res.json({ models: [] });
     } catch (error) {
-      logger.error('Ollama PS Error:', error);
-      res.status(500).json({ error: 'Failed to fetch running models from Ollama' });
+      logger.error('AI Active Models Error:', error);
+      res.status(500).json({ error: 'Failed to fetch active models' });
     }
   });
 
   // Chat with streaming
-  app.post('/api/ollama/chat', async (req, res) => {
+  app.post('/api/ai/chat', async (req, res) => {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Username header required' });
 
@@ -2308,7 +2308,7 @@ async function startServer() {
       activeGenerations.delete(chatId);
       io.emit(`chat:end:${username}`, { chatId, finalContent: assistantContent });
       io.emit(`chat:status:${username}`, { loading: false, chatId });
-      logger.release(`Ollama Proxy: Chat session complete for ${chatId} (${username}) in project ${projectId}`);
+      logger.release(`AI Proxy: Chat session complete for ${chatId} (${username}) in project ${projectId}`);
       
       // Save assistant message to DB
       await dbService.addMessage(projectId, chatId, { role: 'assistant', content: assistantContent, timestamp: Date.now() });
@@ -2323,34 +2323,34 @@ async function startServer() {
       
     } catch (error) {
       activeGenerations.delete(chatId);
-      logger.error('Ollama Chat Error:', error);
+      logger.error('AI Chat Error:', error);
       await updateStats('fail');
       io.emit(`chat:status:${username}`, { loading: false, chatId });
-      res.status(500).json({ error: 'Failed to communicate with Ollama' });
+      res.status(500).json({ error: 'Failed to communicate with AI Proxy' });
     }
   });
 
   // Pull model with streaming
-  app.post('/api/ollama/pull', async (req, res) => {
+  app.post('/api/ai/pull', async (req, res) => {
     try {
       return res.json({ status: 'success' });
     } catch (error) {
-      logger.error('Ollama Pull Error:', error);
-      res.status(500).json({ error: 'Failed to pull model from Ollama' });
+      logger.error('AI Pull Error:', error);
+      res.status(500).json({ error: 'Failed to pull model' });
     }
   });
 
   // Delete model
-  app.delete('/api/ollama/delete', async (req, res) => {
+  app.delete('/api/ai/delete', async (req, res) => {
     try {
       return res.json({ status: 'success' });
     } catch (error) {
-      logger.error('Ollama Delete Error:', error);
-      res.status(500).json({ error: 'Failed to delete model from Ollama' });
+      logger.error('AI Delete Error:', error);
+      res.status(500).json({ error: 'Failed to delete model' });
     }
   });
 
-  // --- End Ollama Proxy Endpoints ---
+  // --- End AI Proxy Endpoints ---
 
   async function executeToolCall(chatId: string, call: any, username: string, projectId: string) {
     try {

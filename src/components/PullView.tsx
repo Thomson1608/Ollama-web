@@ -49,7 +49,7 @@ export const PullView: React.FC<PullViewProps> = ({
             modelFilter === 'local' ? 'bg-bg-primary text-accent-primary shadow-sm' : 'text-text-secondary hover:text-text-primary'
           }`}
         >
-          Local Models (Ollama)
+          AI Models
         </button>
         <button
           onClick={() => setModelFilter('cloud-local')}
@@ -64,10 +64,10 @@ export const PullView: React.FC<PullViewProps> = ({
       <div className="bg-bg-secondary p-8 rounded-3xl border border-border-primary shadow-sm space-y-6">
         <div className="space-y-2">
           <h2 className="text-2xl font-bold text-text-primary">
-            Pull New Model
+            Update AI Model
           </h2>
           <p className="text-text-secondary">
-            Enter a model name from the Ollama library to download it to your machine.
+            Enter a model name from the AI library to update or add it to your configuration.
           </p>
         </div>
         
@@ -121,7 +121,7 @@ export const PullView: React.FC<PullViewProps> = ({
             className="bg-accent-primary hover:bg-accent-primary/90 disabled:bg-bg-tertiary text-white px-8 py-4 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-accent-primary/20 disabled:shadow-none"
           >
             {pullingModel ? <RefreshCw size={20} className="animate-spin" /> : <Plus size={20} />}
-            {pullingModel ? 'Pulling...' : 'Pull Model'}
+            {pullingModel ? 'Updating...' : 'Update Model'}
           </button>
         </div>
 
@@ -133,7 +133,7 @@ export const PullView: React.FC<PullViewProps> = ({
                   <RefreshCw size={20} className="animate-spin" />
                 </div>
                 <div>
-                  <p className="font-bold text-text-primary">Downloading {pullingModel.name}</p>
+                  <p className="font-bold text-text-primary">Updating {pullingModel.name}</p>
                   <p className="text-xs text-accent-primary">{pullingModel.status}</p>
                 </div>
               </div>
@@ -162,10 +162,10 @@ export const PullView: React.FC<PullViewProps> = ({
       <div className="space-y-6">
         <div className="flex items-center justify-between px-2">
           <h3 className="text-lg font-bold text-text-primary">
-            Popular Local Models
+            Popular Models
           </h3>
           <a 
-            href="https://ollama.com/library" 
+            href="https://9router.com/models" 
             target="_blank" 
             rel="noopener noreferrer"
             className="text-sm text-accent-primary hover:underline flex items-center gap-1"

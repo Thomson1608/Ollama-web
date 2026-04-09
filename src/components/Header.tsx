@@ -9,7 +9,7 @@ import {
   Settings,
   ChevronDown
 } from 'lucide-react';
-import { OllamaModel, RunningModel, ViewType, ConnectionStatus } from '../types';
+import { AIModel, ActiveModel, ViewType, ConnectionStatus } from '../types';
 import { cn } from '../lib/utils';
 
 interface HeaderProps {
@@ -18,8 +18,8 @@ interface HeaderProps {
   currentView: ViewType;
   selectedModel: string;
   setSelectedModel: (model: string) => void;
-  models: OllamaModel[];
-  runningModels: RunningModel[];
+  models: AIModel[];
+  runningModels: ActiveModel[];
   connectionStatus: ConnectionStatus;
   checkConnection: () => void;
   workspaceHost: string;
@@ -100,20 +100,20 @@ export const Header: React.FC<HeaderProps> = ({
                   <option value="">No models found</option>
                 ) : (
                   <>
-                    <optgroup label="Local Models (Ollama)" className="bg-bg-secondary text-text-primary">
-                      {models.filter(m => 
-                        !m.name.toLowerCase().includes('flux') && 
-                        !m.name.toLowerCase().includes('stable-diffusion') &&
-                        !m.name.toLowerCase().includes('sdxl')
-                      ).map(m => {
-                        const isRunning = runningModels.some(rm => rm.name === m.name || rm.model === m.name);
-                        return (
-                          <option key={m.name} value={m.name}>
-                            {m.name} {isRunning ? ' (Running)' : ''}
-                          </option>
-                        );
-                      })}
-                    </optgroup>
+                  <optgroup label="AI Models" className="bg-bg-secondary text-text-primary">
+                    {models.filter(m => 
+                      !m.name.toLowerCase().includes('flux') && 
+                      !m.name.toLowerCase().includes('stable-diffusion') &&
+                      !m.name.toLowerCase().includes('sdxl')
+                    ).map(m => {
+                      const isRunning = runningModels.some(rm => rm.name === m.name || rm.model === m.name);
+                      return (
+                        <option key={m.name} value={m.name}>
+                          {m.name} {isRunning ? ' (Active)' : ''}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
                   </>
                 )}
               </select>
@@ -140,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
         ) : currentView === 'models' ? (
           <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Models</span>
         ) : currentView === 'pull' ? (
-          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Pull</span>
+          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Update</span>
         ) : currentView === 'workspace' ? (
           <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Workspace</span>
         ) : currentView === 'project-list' ? (
@@ -226,7 +226,7 @@ export const Header: React.FC<HeaderProps> = ({
       {connectionStatus === 'disconnected' && (
         <div className="absolute top-full left-0 right-0 bg-red-600 text-white px-4 py-2 text-xs font-medium flex items-center justify-center gap-2 z-20">
           <AlertCircle size={14} />
-          <span className="truncate max-w-[200px] md:max-w-none">Ollama is unreachable. Check server status.</span>
+          <span className="truncate max-w-[200px] md:max-w-none">AI Proxy is unreachable. Check configuration.</span>
           <button 
             onClick={() => setShowSettings(true)}
             className="underline font-bold hover:text-red-100 transition-colors ml-2 shrink-0"

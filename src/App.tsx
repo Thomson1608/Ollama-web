@@ -21,7 +21,7 @@ import {
   Group, 
   Separator 
 } from 'react-resizable-panels';
-import { Chat, Message, OllamaModel, RunningModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
+import { Chat, Message, AIModel, ActiveModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
 import { cn } from './lib/utils';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -143,11 +143,11 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [use9Router, setUse9Router] = useState(() => localStorage.getItem('use_9router') === 'true');
   const [routerUrl, setRouterUrl] = useState(() => localStorage.getItem('router_url') || 'https://api.9router.com/v1/chat/completions');
   const [routerApiKey, setRouterApiKey] = useState(() => localStorage.getItem('router_api_key') || '');
-  const [ollamaAccounts, setOllamaAccounts] = useState<{ name: string; apiKey: string }[]>(() => {
-    const saved = localStorage.getItem('ollama_accounts');
+  const [aiAccounts, setAiAccounts] = useState<{ name: string; apiKey: string }[]>(() => {
+    const saved = localStorage.getItem('ai_accounts');
     return saved ? JSON.parse(saved) : [{ name: 'Default', apiKey: '' }];
   });
-  const [activeOllamaAccount, setActiveOllamaAccount] = useState(() => localStorage.getItem('active_ollama_account') || 'Default');
+  const [activeAiAccount, setActiveAiAccount] = useState(() => localStorage.getItem('active_ai_account') || 'Default');
   const [workspaceHost, setWorkspaceHost] = useState(() => localStorage.getItem('workspace_host') || 'localhost');
 
   // Update system prompt when username changes
@@ -175,8 +175,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [isLoading, setIsLoading] = useState(false);
   const [generatingChatIds, setGeneratingChatIds] = useState<Set<string>>(new Set());
   const [pullingModel, setPullingModel] = useState<{ name: string; progress: number; status: string } | null>(null);
-  const [models, setModels] = useState<OllamaModel[]>([]);
-  const [runningModels, setRunningModels] = useState<RunningModel[]>([]);
+  const [models, setModels] = useState<AIModel[]>([]);
+  const [runningModels, setRunningModels] = useState<ActiveModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ollama_selected_model') || '');
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -189,7 +189,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
   const [modelFilter, setModelFilter] = useState<'local' | 'cloud-local'>('local');
 
-  const allOllamaModels = [
+  const allAIModels = [
     'llama3.2', 'llama3.1', 'llama3', 'llama2', 'mistral', 'mistral-nemo', 'mixtral',
     'phi3', 'phi3.5', 'gemma2', 'gemma', 'qwen2.5', 'qwen2', 'deepseek-v2', 'deepseek-coder',
     'codellama', 'llava', 'dolphin-mistral', 'dolphin-llama3', 'orca-mini', 'vicuna',
@@ -200,17 +200,17 @@ If the user asks you to write code, you should provide it in a markdown code blo
   ];
 
   const popularModels = [
-    { name: 'llama3.2', description: 'Meta\'s latest lightweight model', type: 'local' },
-    { name: 'llama3.1', description: 'Meta\'s most capable open model', type: 'local' },
+    { name: 'llama3.2', description: 'Lightweight and efficient', type: 'local' },
+    { name: 'llama3.1', description: 'Most capable open model', type: 'local' },
     { name: 'mistral', description: 'High performance 7B model', type: 'local' },
     { name: 'phi3', description: 'Microsoft\'s efficient small model', type: 'local' },
     { name: 'gemma2', description: 'Google\'s lightweight open model', type: 'local' },
     { name: 'qwen2.5', description: 'Alibaba\'s powerful language model', type: 'local' },
     { name: 'deepseek-v2', description: 'Strong reasoning and coding model', type: 'local' },
     { name: 'codellama', description: 'Specialized for code generation', type: 'local' },
-    { name: 'claude-3-5-sonnet-20240620', description: 'Anthropic\'s most intelligent model', type: 'claude' },
-    { name: 'claude-3-opus-20240229', description: 'Anthropic\'s most powerful model', type: 'claude' },
-    { name: 'claude-3-haiku-20240307', description: 'Anthropic\'s fastest model', type: 'claude' },
+    { name: 'claude-3-5-sonnet-20240620', description: 'Anthropic\'s most intelligent model', type: 'cloud' },
+    { name: 'claude-3-opus-20240229', description: 'Anthropic\'s most powerful model', type: 'cloud' },
+    { name: 'claude-3-haiku-20240307', description: 'Anthropic\'s fastest model', type: 'cloud' },
   ];
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -538,13 +538,13 @@ If the user asks you to write code, you should provide it in a markdown code blo
       setWorkspaceRefreshTrigger(prev => prev + 1);
     });
 
-    socket.on('ollama:pull:progress', (data) => {
+    socket.on('ai:pull:progress', (data) => {
       if (data.status) {
         const progress = data.completed && data.total ? (data.completed / data.total) * 100 : 0;
         setPullingModel({ name: data.name, status: data.status, progress });
         
         if (data.status === 'success') {
-          toast.success(`Model ${data.name} pulled successfully!`);
+          toast.success(`Model ${data.name} updated successfully!`);
           setPullingModel(null);
           checkConnection();
         }
@@ -787,7 +787,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const checkConnection = async () => {
     setConnectionStatus('checking');
     try {
-      const response = await fetch('/api/ollama/tags');
+      const response = await fetch('/api/ai/models');
       if (response.ok) {
         const data = await response.json();
         const fetchedModels = data.models || [];
@@ -811,7 +811,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     } catch (error) {
       console.error('Connection error:', error);
       setConnectionStatus('disconnected');
-      toast.error('Cannot connect to Ollama via backend. Please check if Ollama is running on the server.', {
+      toast.error('Cannot connect to AI Proxy via backend. Please check your configuration.', {
         id: 'connection-error',
         duration: 5000,
       });
@@ -820,7 +820,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   const fetchRunningModels = async () => {
     try {
-      const response = await fetch('/api/ollama/ps');
+      const response = await fetch('/api/ai/active');
       if (response.ok) {
         const data = await response.json();
         setRunningModels(data.models || []);
@@ -833,7 +833,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const stopModel = async (name: string) => {
     setIsStoppingModel(name);
     try {
-      const response = await fetch('/api/ollama/stop', {
+      const response = await fetch('/api/ai/stop', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: name }),
@@ -869,7 +869,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   useEffect(() => {
     if (newModelName.trim().length > 0) {
-      const filtered = allOllamaModels
+      const filtered = allAIModels
         .filter(m => m.toLowerCase().includes(newModelName.toLowerCase()))
         .filter(m => !models.some(installed => installed.name.split(':')[0] === m))
         .slice(0, 10);
@@ -879,7 +879,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       setSuggestions([]);
       setShowSuggestions(false);
     }
-  }, [newModelName, models]);
+  }, [newModelName, models, allAIModels]);
 
   const pullModel = async (nameOverride?: string) => {
     const modelName = (nameOverride || newModelName).trim();
@@ -892,8 +892,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
     pullAbortController.current = new AbortController();
 
     try {
-      // We just initiate the pull, Socket.io handles the progress updates
-      const response = await fetch('/api/ollama/pull', {
+      // We just initiate the update, Socket.io handles the progress updates
+      const response = await fetch('/api/ai/pull', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: modelName }),
@@ -926,7 +926,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       } else {
         const message = error.message || `Failed to pull model ${modelName}`;
         if (message.includes('usage limit')) {
-          toast.error('Ollama Cloud Limit Reached: You have reached your weekly usage limit for cloud models. Please upgrade your Ollama account or try again later.', {
+          toast.error('AI Cloud Limit Reached: You have reached your weekly usage limit for cloud models. Please upgrade your account or try again later.', {
             duration: 6000
           });
         } else {
@@ -950,7 +950,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     if (!confirm(`Are you sure you want to delete ${name}?`)) return;
 
     try {
-      const response = await fetch('/api/ollama/delete', {
+      const response = await fetch('/api/ai/delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -1180,7 +1180,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     chatAbortController.current = new AbortController();
 
     try {
-      const response = await fetch('/api/ollama/chat', {
+      const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -1229,7 +1229,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       
       const message = error.message || 'Failed to connect to AI service. Please check your connection.';
       if (message.includes('usage limit')) {
-        toast.error('Ollama Cloud Limit Reached: You have reached your weekly usage limit for cloud models. Please switch to a local model or upgrade your Ollama account.', {
+        toast.error('AI Proxy Limit Reached: You have reached your usage limit. Please switch to a different model or upgrade your account.', {
           duration: 6000
         });
       } else {
@@ -1567,15 +1567,15 @@ If the user asks you to write code, you should provide it in a markdown code blo
                       setRouterApiKey(key);
                       localStorage.setItem('router_api_key', key);
                     }}
-                    ollamaAccounts={ollamaAccounts}
-                    setOllamaAccounts={(accounts) => {
-                      setOllamaAccounts(accounts);
-                      localStorage.setItem('ollama_accounts', JSON.stringify(accounts));
+                    aiAccounts={aiAccounts}
+                    setAiAccounts={(accounts) => {
+                      setAiAccounts(accounts);
+                      localStorage.setItem('ai_accounts', JSON.stringify(accounts));
                     }}
-                    activeOllamaAccount={activeOllamaAccount}
-                    setActiveOllamaAccount={(name) => {
-                      setActiveOllamaAccount(name);
-                      localStorage.setItem('active_ollama_account', name);
+                    activeAiAccount={activeAiAccount}
+                    setActiveAiAccount={(name) => {
+                      setActiveAiAccount(name);
+                      localStorage.setItem('active_ai_account', name);
                     }}
                     memory={memory}
                     clearMemory={clearMemory}

@@ -40,10 +40,10 @@ interface SettingsViewProps {
   setRouterUrl: (url: string) => void;
   routerApiKey: string;
   setRouterApiKey: (key: string) => void;
-  ollamaAccounts: { name: string; apiKey: string }[];
-  setOllamaAccounts: (accounts: { name: string; apiKey: string }[]) => void;
-  activeOllamaAccount: string;
-  setActiveOllamaAccount: (name: string) => void;
+  aiAccounts: { name: string; apiKey: string }[];
+  setAiAccounts: (accounts: { name: string; apiKey: string }[]) => void;
+  activeAiAccount: string;
+  setActiveAiAccount: (name: string) => void;
   memory: Memory;
   clearMemory: () => void;
   saveSettings: () => void;
@@ -66,10 +66,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setRouterUrl,
   routerApiKey,
   setRouterApiKey,
-  ollamaAccounts,
-  setOllamaAccounts,
-  activeOllamaAccount,
-  setActiveOllamaAccount,
+  aiAccounts,
+  setAiAccounts,
+  activeAiAccount,
+  setActiveAiAccount,
   memory,
   clearMemory,
   saveSettings,
@@ -84,8 +84,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [localUse9Router, setLocalUse9Router] = useState(use9Router);
   const [localRouterUrl, setLocalRouterUrl] = useState(routerUrl);
   const [localRouterApiKey, setLocalRouterApiKey] = useState(routerApiKey);
-  const [localAccounts, setLocalAccounts] = useState(ollamaAccounts);
-  const [localActiveAccount, setLocalActiveAccount] = useState(activeOllamaAccount);
+  const [localAccounts, setLocalAccounts] = useState(aiAccounts);
+  const [localActiveAccount, setLocalActiveAccount] = useState(activeAiAccount);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
   const [isConfirmingShutdown, setIsConfirmingShutdown] = useState(false);
   
@@ -94,8 +94,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     localUse9Router !== use9Router ||
     localRouterUrl !== routerUrl ||
     localRouterApiKey !== routerApiKey ||
-    JSON.stringify(localAccounts) !== JSON.stringify(ollamaAccounts) ||
-    localActiveAccount !== activeOllamaAccount ||
+    JSON.stringify(localAccounts) !== JSON.stringify(aiAccounts) ||
+    localActiveAccount !== activeAiAccount ||
     JSON.stringify(localMemory) !== JSON.stringify(memory.facts) ||
     JSON.stringify(localParameters) !== JSON.stringify(parameters);
 
@@ -107,9 +107,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLocalUse9Router(use9Router);
     setLocalRouterUrl(routerUrl);
     setLocalRouterApiKey(routerApiKey);
-    setLocalAccounts(ollamaAccounts);
-    setLocalActiveAccount(activeOllamaAccount);
-  }, [systemPrompt, memory, parameters, use9Router, routerUrl, routerApiKey, ollamaAccounts, activeOllamaAccount]);
+    setLocalAccounts(aiAccounts);
+    setLocalActiveAccount(activeAiAccount);
+  }, [systemPrompt, memory, parameters, use9Router, routerUrl, routerApiKey, aiAccounts, activeAiAccount]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
@@ -117,8 +117,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setUse9Router(localUse9Router);
     setRouterUrl(localRouterUrl);
     setRouterApiKey(localRouterApiKey);
-    setOllamaAccounts(localAccounts);
-    setActiveOllamaAccount(localActiveAccount);
+    setAiAccounts(localAccounts);
+    setActiveAiAccount(localActiveAccount);
     // Update memory via API
     fetch('/api/memory', {
       method: 'POST',
@@ -251,7 +251,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-text-secondary">9Router Account</label>
+                  <label className="text-xs font-semibold text-text-secondary">AI Account</label>
                   <div className="flex gap-2">
                     <select
                       value={localActiveAccount}
@@ -332,13 +332,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             className="bg-bg-tertiary border border-border-primary text-text-primary px-3 py-2 rounded-lg text-sm font-medium hover:bg-bg-secondary"
                             onClick={async () => {
                               try {
-                                const res = await fetch('/api/ollama/tags', {
+                                const res = await fetch('/api/ai/models', {
                                   headers: { 'x-username': username || '' }
                                 });
                                 if (res.ok) {
-                                  toast.success('Successfully connected to 9Router!');
+                                  toast.success('Successfully connected to AI Proxy!');
                                 } else {
-                                  toast.error('Failed to connect to 9Router. Please check your URL and API Key.');
+                                  toast.error('Failed to connect to AI Proxy. Please check your URL and API Key.');
                                 }
                               } catch (e) {
                                 toast.error('Error connecting to server.');

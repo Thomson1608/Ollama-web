@@ -68,7 +68,7 @@ export function LoginView({ onLogin }: LoginViewProps) {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-accent-primary/10 rounded-full mb-4">
             <User className="w-8 h-8 text-accent-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-text-primary">Welcome to Ollama Multi-User</h1>
+          <h1 className="text-2xl font-bold text-text-primary">Welcome to AI Studio</h1>
           <p className="text-text-secondary mt-2">Select your profile or create a new one</p>
         </div>
 

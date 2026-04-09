@@ -30,7 +30,7 @@ export interface Chat {
   isClosed?: boolean;
 }
 
-export interface OllamaModel {
+export interface AIModel {
   name: string;
   modified_at: string;
   size: number;
@@ -44,7 +44,7 @@ export interface OllamaModel {
   };
 }
 
-export interface RunningModel {
+export interface ActiveModel {
   name: string;
   model: string;
   size: number;
