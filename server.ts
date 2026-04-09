@@ -362,24 +362,19 @@ async function isAdmin(username: string) {
   }
 }
 
-let OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-let USE_9ROUTER = process.env.USE_9ROUTER === 'true';
+let USE_9ROUTER = true; // Force true for now, or just remove the toggle later
 let ROUTER_URL = process.env.ROUTER_URL || 'https://api.9router.com/v1/chat/completions';
 let ROUTER_API_KEY = process.env.ROUTER_API_KEY || '';
 let WORKSPACE_HOST = process.env.WORKSPACE_HOST || 'localhost';
 
-// Load initial config for Ollama URL if available
+// Load initial config for system if available
 async function initSystemConfig() {
   try {
-    // We'll use a global system config for Ollama URL and Workspace Host
+    // We'll use a global system config for Workspace Host
     const configRef = doc(db, 'system', 'config');
     const configSnap = await getDoc(configRef);
     if (configSnap.exists()) {
       const data = configSnap.data();
-      if (data.ollamaUrl) {
-        OLLAMA_URL = data.ollamaUrl;
-        logger.release(`System: Loaded Ollama URL from DB: ${OLLAMA_URL}`);
-      }
       if (data.use9Router !== undefined) {
         USE_9ROUTER = data.use9Router;
         logger.release(`System: Loaded USE_9ROUTER from DB: ${USE_9ROUTER}`);
@@ -886,10 +881,9 @@ async function startServer() {
       };
       
       const finalConfig = config || defaultConfig;
-      // Also include the global Ollama URL and Workspace Host
+      // Also include the global Workspace Host
       res.json({ 
         ...finalConfig, 
-        ollamaUrl: OLLAMA_URL, 
         use9Router: USE_9ROUTER,
         routerUrl: ROUTER_URL,
         routerApiKey: ROUTER_API_KEY,
@@ -908,18 +902,13 @@ async function startServer() {
 
     try {
       const config = req.body;
-      const { systemPrompt, parameters, ollamaUrl, use9Router, routerUrl, routerApiKey, workspaceHost } = config;
+      const { systemPrompt, parameters, use9Router, routerUrl, routerApiKey, workspaceHost } = config;
       
       await dbService.saveConfig(username, { systemPrompt, parameters });
       
       // Update global settings if user is admin
       if (await isAdmin(username)) {
         const updates: any = {};
-        if (ollamaUrl !== undefined) {
-          OLLAMA_URL = ollamaUrl;
-          updates.ollamaUrl = ollamaUrl;
-          logger.release(`System: Updated global Ollama URL to ${OLLAMA_URL} by ${username}`);
-        }
         if (use9Router !== undefined) {
           USE_9ROUTER = use9Router;
           updates.use9Router = use9Router;
@@ -1934,66 +1923,32 @@ async function startServer() {
     const { model } = req.body;
     if (!model) return res.status(400).json({ error: 'Model name required' });
 
-    if (USE_9ROUTER) {
-      logger.release(`9Router Proxy: Stop model ${model} ignored (not applicable for 9Router)`);
-      return res.json({ status: 'success', message: `Model ${model} stopped (simulated)` });
-    }
-
-    try {
-      logger.release(`Ollama Proxy: Stopping model ${model}`);
-      const response = await fetch(`${OLLAMA_URL}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, keep_alive: 0 }),
-      });
-
-      if (response.ok) {
-        res.json({ status: 'success', message: `Model ${model} stopped` });
-      } else {
-        const error = await response.text();
-        res.status(response.status).send(error);
-      }
-    } catch (error) {
-      logger.error(`Ollama Proxy Error: Failed to stop model ${model}`, error);
-      res.status(500).json({ error: 'Failed to stop model' });
-    }
+    logger.release(`9Router Proxy: Stop model ${model} ignored (not applicable for 9Router)`);
+    return res.json({ status: 'success', message: `Model ${model} stopped (simulated)` });
   });
 
   app.get('/api/ollama/tags', async (req, res) => {
     try {
-      if (USE_9ROUTER) {
-        logger.debug(`9Router Proxy: Fetching models from ${ROUTER_URL.replace('/chat/completions', '/models')}`);
-        const response = await fetch(ROUTER_URL.replace('/chat/completions', '/models'), {
-          headers: {
-            'Authorization': `Bearer ${ROUTER_API_KEY}`
-          }
-        }).catch(err => {
-          throw new Error(`Connection failed: ${err.message}`);
-        });
-        if (!response.ok) {
-          throw new Error(`9Router returned ${response.status}: ${await response.text()}`);
+      logger.debug(`9Router Proxy: Fetching models from ${ROUTER_URL.replace('/chat/completions', '/models')}`);
+      const response = await fetch(ROUTER_URL.replace('/chat/completions', '/models'), {
+        headers: {
+          'Authorization': `Bearer ${ROUTER_API_KEY}`
         }
-        const data = await response.json();
-        // Map OpenAI format to Ollama format
-        const models = (data.data || []).map((m: any) => ({
-          name: m.id,
-          model: m.id,
-          details: { family: '9router' }
-        }));
-        logger.debug('9Router Proxy: Models fetched successfully', { count: models.length });
-        return res.json({ models });
-      }
-
-      logger.debug(`Ollama Proxy: Fetching tags from ${OLLAMA_URL}/api/tags`);
-      const response = await fetch(`${OLLAMA_URL}/api/tags`).catch(err => {
+      }).catch(err => {
         throw new Error(`Connection failed: ${err.message}`);
       });
       if (!response.ok) {
-        throw new Error(`Ollama returned ${response.status}: ${await response.text()}`);
+        throw new Error(`9Router returned ${response.status}: ${await response.text()}`);
       }
       const data = await response.json();
-      logger.debug('Ollama Proxy: Tags fetched successfully', { count: data.models?.length });
-      res.json(data);
+      // Map OpenAI format to Ollama format
+      const models = (data.data || []).map((m: any) => ({
+        name: m.id,
+        model: m.id,
+        details: { family: '9router' }
+      }));
+      logger.debug('9Router Proxy: Models fetched successfully', { count: models.length });
+      return res.json({ models });
     } catch (error) {
       logger.error('Proxy Error: Tags fetch failed', error);
       res.status(500).json({ error: 'Failed to fetch models' });
@@ -2003,12 +1958,7 @@ async function startServer() {
   // List running models
   app.get('/api/ollama/ps', async (req, res) => {
     try {
-      if (USE_9ROUTER) {
-        return res.json({ models: [] });
-      }
-      const response = await fetch(`${OLLAMA_URL}/api/ps`);
-      const data = await response.json();
-      res.json(data);
+      return res.json({ models: [] });
     } catch (error) {
       logger.error('Ollama PS Error:', error);
       res.status(500).json({ error: 'Failed to fetch running models from Ollama' });
@@ -2080,45 +2030,26 @@ async function startServer() {
         if (parameters.stop !== undefined) options.stop = parameters.stop;
       }
 
-      const requestBody: any = {
-        model,
+      let targetUrl = ROUTER_URL;
+      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (ROUTER_API_KEY) {
+        headers['Authorization'] = `Bearer ${ROUTER_API_KEY}`;
+      }
+      
+      let finalBody: any = {
+        model: model,
         messages: enrichedMessages,
         stream: true,
-        options,
+        temperature: parameters?.temperature ?? 0.7,
+        top_p: parameters?.topP ?? 0.9,
+        max_tokens: parameters?.maxTokens,
+        stop: parameters?.stop
       };
-
       if (parameters?.jsonMode) {
-        requestBody.format = 'json';
+        finalBody.response_format = { type: "json_object" };
       }
 
-      logger.debug(`[CHAT_DEBUG] Request to model ${model} for ${username}:`, requestBody);
-
-      let targetUrl = `${OLLAMA_URL}/api/chat`;
-      let headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      let finalBody = requestBody;
-
-      if (USE_9ROUTER) {
-        targetUrl = ROUTER_URL;
-        if (ROUTER_API_KEY) {
-          headers['Authorization'] = `Bearer ${ROUTER_API_KEY}`;
-        }
-        
-        // If 9Router uses OpenAI format (e.g. /v1/chat/completions)
-        if (targetUrl.includes('/v1/chat/completions')) {
-          finalBody = {
-            model: model,
-            messages: enrichedMessages,
-            stream: true,
-            temperature: parameters?.temperature ?? 0.7,
-            top_p: parameters?.topP ?? 0.9,
-            max_tokens: parameters?.maxTokens,
-            stop: parameters?.stop
-          };
-          if (parameters?.jsonMode) {
-            finalBody.response_format = { type: "json_object" };
-          }
-        }
-      }
+      logger.debug(`[CHAT_DEBUG] Request to model ${model} for ${username}:`, finalBody);
 
       const response = await fetch(targetUrl, {
         method: 'POST',
@@ -2401,52 +2332,8 @@ async function startServer() {
 
   // Pull model with streaming
   app.post('/api/ollama/pull', async (req, res) => {
-    const { name } = req.body;
-    
-    if (USE_9ROUTER) {
-      logger.release(`9Router Proxy: Pull model ${name} ignored (not applicable for 9Router)`);
-      return res.json({ status: 'success' });
-    }
-
-    logger.release(`Ollama Proxy: Pulling model ${name}`);
     try {
-      const response = await fetch(`${OLLAMA_URL}/api/pull`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, stream: true }),
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        logger.error(`Ollama Proxy Error: Pull failed for ${name}`, error);
-        return res.status(response.status).send(error);
-      }
-
-      res.setHeader('Content-Type', 'application/x-ndjson');
-      res.setHeader('Transfer-Encoding', 'chunked');
-
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No reader available');
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunkStr = new TextDecoder().decode(value);
-        const lines = chunkStr.split('\n');
-        
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const json = JSON.parse(line);
-            // Emit pull progress via Socket.io
-            io.emit('ollama:pull:progress', { name, ...json });
-          } catch (e) {}
-        }
-
-        res.write(value);
-      }
-      res.end();
+      return res.json({ status: 'success' });
     } catch (error) {
       logger.error('Ollama Pull Error:', error);
       res.status(500).json({ error: 'Failed to pull model from Ollama' });
@@ -2456,16 +2343,7 @@ async function startServer() {
   // Delete model
   app.delete('/api/ollama/delete', async (req, res) => {
     try {
-      if (USE_9ROUTER) {
-        return res.json({ status: 'success' });
-      }
-      const response = await fetch(`${OLLAMA_URL}/api/delete`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req.body),
-      });
-      const data = await response.json();
-      res.json(data);
+      return res.json({ status: 'success' });
     } catch (error) {
       logger.error('Ollama Delete Error:', error);
       res.status(500).json({ error: 'Failed to delete model from Ollama' });
@@ -2579,8 +2457,12 @@ async function startServer() {
         
         const context = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
         
-        let targetUrl = `${OLLAMA_URL}/api/chat`;
+        let targetUrl = ROUTER_URL;
         let headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (ROUTER_API_KEY) {
+          headers['Authorization'] = `Bearer ${ROUTER_API_KEY}`;
+        }
+        
         let requestBody: any = {
           model,
           messages: [
@@ -2602,25 +2484,19 @@ async function startServer() {
           stream: false
         };
 
-        if (USE_9ROUTER) {
-          targetUrl = ROUTER_URL;
-          if (ROUTER_API_KEY) {
-            headers['Authorization'] = `Bearer ${ROUTER_API_KEY}`;
-          }
-          if (targetUrl.includes('/v1/chat/completions')) {
-            requestBody.response_format = { type: "json_object" };
-            // Ensure system prompt asks for a JSON object with a "facts" array if using json_object
-            requestBody.messages[0].content = `You are a memory consolidation module. Your task is to maintain a concise, deduplicated list of facts, preferences, and project goals about the user.
-              
-              Current Memory:
-              ${JSON.stringify(currentFacts)}
-              
-              Instructions:
-              1. Extract any NEW facts from the conversation snippet.
-              2. Combine them with the Current Memory.
-              3. CRITICAL: Review the combined list and REMOVE any semantic duplicates, redundancies, or overlapping information. Merge related facts into single, comprehensive sentences if possible.
-              4. Output ONLY a JSON object with a "facts" array containing strings representing the FINAL, consolidated memory list. You MUST include the existing facts from the Current Memory unless they are superseded or merged with new facts.`;
-          }
+        if (targetUrl.includes('/v1/chat/completions')) {
+          requestBody.response_format = { type: "json_object" };
+          // Ensure system prompt asks for a JSON object with a "facts" array if using json_object
+          requestBody.messages[0].content = `You are a memory consolidation module. Your task is to maintain a concise, deduplicated list of facts, preferences, and project goals about the user.
+            
+            Current Memory:
+            ${JSON.stringify(currentFacts)}
+            
+            Instructions:
+            1. Extract any NEW facts from the conversation snippet.
+            2. Combine them with the Current Memory.
+            3. CRITICAL: Review the combined list and REMOVE any semantic duplicates, redundancies, or overlapping information. Merge related facts into single, comprehensive sentences if possible.
+            4. Output ONLY a JSON object with a "facts" array containing strings representing the FINAL, consolidated memory list. You MUST include the existing facts from the Current Memory unless they are superseded or merged with new facts.`;
         }
 
         const memoryResponse = await fetch(targetUrl, {
@@ -2632,7 +2508,7 @@ async function startServer() {
         if (memoryResponse.ok) {
           const json = await memoryResponse.json();
           let memoryContent = '';
-          if (USE_9ROUTER && targetUrl.includes('/v1/chat/completions')) {
+          if (targetUrl.includes('/v1/chat/completions')) {
             memoryContent = json.choices?.[0]?.message?.content || '{"facts":[]}';
           } else {
             memoryContent = json.message?.content || '[]';
@@ -2641,7 +2517,7 @@ async function startServer() {
           logger.debug(`Post-chat logic: Raw memory extraction response for ${chatId} (${username}) in project ${projectId}`, memoryContent);
           
           let consolidatedFacts: string[] = [];
-          if (USE_9ROUTER && targetUrl.includes('/v1/chat/completions')) {
+          if (targetUrl.includes('/v1/chat/completions')) {
             try {
               const parsed = JSON.parse(memoryContent);
               consolidatedFacts = parsed.facts || [];
