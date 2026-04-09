@@ -1929,8 +1929,12 @@ async function startServer() {
 
   app.get('/api/ai/models', async (req, res) => {
     try {
-      logger.debug(`AI Proxy: Fetching models from ${ROUTER_URL.replace('/chat/completions', '/models')}`);
-      const response = await fetch(ROUTER_URL.replace('/chat/completions', '/models'), {
+      const modelsUrl = ROUTER_URL.includes('/chat/completions') 
+        ? ROUTER_URL.replace('/chat/completions', '/models')
+        : (ROUTER_URL.endsWith('/') ? ROUTER_URL + 'models' : ROUTER_URL + '/models');
+
+      logger.debug(`AI Proxy: Fetching models from ${modelsUrl}`);
+      const response = await fetch(modelsUrl, {
         headers: {
           'Authorization': `Bearer ${ROUTER_API_KEY}`
         }
@@ -2030,7 +2034,10 @@ async function startServer() {
         if (parameters.stop !== undefined) options.stop = parameters.stop;
       }
 
-      let targetUrl = ROUTER_URL;
+      let targetUrl = ROUTER_URL.includes('/chat/completions')
+        ? ROUTER_URL
+        : (ROUTER_URL.endsWith('/') ? ROUTER_URL + 'chat/completions' : ROUTER_URL + '/chat/completions');
+        
       let headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (ROUTER_API_KEY) {
         headers['Authorization'] = `Bearer ${ROUTER_API_KEY}`;
@@ -2457,7 +2464,10 @@ async function startServer() {
         
         const context = messages.slice(-6).map(m => `${m.role}: ${m.content}`).join('\n');
         
-        let targetUrl = ROUTER_URL;
+        let targetUrl = ROUTER_URL.includes('/chat/completions')
+          ? ROUTER_URL
+          : (ROUTER_URL.endsWith('/') ? ROUTER_URL + 'chat/completions' : ROUTER_URL + '/chat/completions');
+          
         let headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (ROUTER_API_KEY) {
           headers['Authorization'] = `Bearer ${ROUTER_API_KEY}`;

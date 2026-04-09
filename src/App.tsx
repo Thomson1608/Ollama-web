@@ -702,7 +702,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     
     const timeoutId = setTimeout(syncConfig, 1000);
     return () => clearTimeout(timeoutId);
-  }, [systemPrompt, globalParameters, workspaceHost, isInitialized, username]);
+  }, [systemPrompt, globalParameters, use9Router, routerUrl, routerApiKey, workspaceHost, isInitialized, username]);
 
   useEffect(() => {
     checkConnection();
