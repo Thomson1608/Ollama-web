@@ -1742,23 +1742,30 @@ async function startServer() {
         
         let startCmd = '';
         const isVite = (pkg.dependencies?.vite || pkg.devDependencies?.vite);
+        const isNext = (pkg.dependencies?.next || pkg.devDependencies?.next);
 
         if (script && pkg.scripts?.[script]) {
           // Use the requested script
           startCmd = `npm run ${script}`;
           // If it's a dev/start script, try to inject port
           if (script === 'dev' || script === 'start') {
-             startCmd += ` -- --port ${port} --strictPort`;
              if (isVite) {
-               startCmd += ` --base /workspace-preview/${username}/`;
+               startCmd += ` -- --port ${port} --strictPort --base /workspace-preview/${username}/`;
+             } else if (isNext) {
+               startCmd += ` -- --port ${port}`;
+             } else {
+               startCmd += ` -- --port ${port}`;
              }
           }
         } else {
           // Default logic
           if (pkg.scripts?.dev) {
-            startCmd = `npm run dev -- --port ${port} --strictPort`;
             if (isVite) {
-              startCmd += ` --base /workspace-preview/${username}/`;
+              startCmd = `npm run dev -- --port ${port} --strictPort --base /workspace-preview/${username}/`;
+            } else if (isNext) {
+              startCmd = `npm run dev -- --port ${port}`;
+            } else {
+              startCmd = `npm run dev -- --port ${port}`;
             }
           } else if (pkg.scripts?.start) {
             startCmd = `npm start`;
@@ -1890,6 +1897,34 @@ async function startServer() {
         }
       }
     })(req, res, next);
+  });
+
+  // Fallback proxy for assets requested by the workspace preview (e.g. Next.js /_next/*)
+  app.use((req, res, next) => {
+    const referer = req.headers.referer;
+    if (referer && !req.path.startsWith('/api/') && !req.path.startsWith('/workspace-preview/')) {
+      const match = referer.match(/\/workspace-preview\/([^\/]+)/);
+      if (match) {
+        const username = match[1];
+        const port = WORKSPACE_PORTS.get(username);
+        if (port) {
+          return createProxyMiddleware({
+            target: `http://${WORKSPACE_HOST}:${port}`,
+            changeOrigin: true,
+            ws: true,
+            on: {
+              error: (err, req, res) => {
+                if ('writeHead' in res) {
+                  res.writeHead(500, { 'Content-Type': 'text/plain' });
+                  res.end('Workspace app is starting or not running.');
+                }
+              }
+            }
+          })(req, res, next);
+        }
+      }
+    }
+    next();
   });
 
   // --- Ollama Proxy Endpoints ---
@@ -2334,7 +2369,6 @@ async function startServer() {
 
               lastProcessedToolCallIndex = latestIndex;
             }
-          } catch (e) {}
         }
         
         res.write(value);
