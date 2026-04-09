@@ -34,8 +34,6 @@ interface SettingsViewProps {
   setSystemPrompt: (prompt: string) => void;
   parameters: ModelParameters;
   setParameters: (params: ModelParameters) => void;
-  ollamaUrl: string;
-  setOllamaUrl: (url: string) => void;
   use9Router: boolean;
   setUse9Router: (val: boolean) => void;
   routerUrl: string;
@@ -62,8 +60,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   setSystemPrompt,
   parameters,
   setParameters,
-  ollamaUrl,
-  setOllamaUrl,
   use9Router,
   setUse9Router,
   routerUrl,
@@ -85,7 +81,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
   const [localParameters, setLocalParameters] = useState<ModelParameters>(parameters);
-  const [localOllamaUrl, setLocalOllamaUrl] = useState(ollamaUrl);
   const [localUse9Router, setLocalUse9Router] = useState(use9Router);
   const [localRouterUrl, setLocalRouterUrl] = useState(routerUrl);
   const [localRouterApiKey, setLocalRouterApiKey] = useState(routerApiKey);
@@ -96,7 +91,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   
   const hasChanges = 
     localPrompt !== systemPrompt || 
-    localOllamaUrl !== ollamaUrl ||
     localUse9Router !== use9Router ||
     localRouterUrl !== routerUrl ||
     localRouterApiKey !== routerApiKey ||
@@ -110,18 +104,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLocalPrompt(systemPrompt);
     setLocalMemory(memory.facts);
     setLocalParameters(parameters);
-    setLocalOllamaUrl(ollamaUrl);
     setLocalUse9Router(use9Router);
     setLocalRouterUrl(routerUrl);
     setLocalRouterApiKey(routerApiKey);
     setLocalAccounts(ollamaAccounts);
     setLocalActiveAccount(activeOllamaAccount);
-  }, [systemPrompt, memory, parameters, ollamaUrl, use9Router, routerUrl, routerApiKey, ollamaAccounts, activeOllamaAccount]);
+  }, [systemPrompt, memory, parameters, use9Router, routerUrl, routerApiKey, ollamaAccounts, activeOllamaAccount]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
     setParameters(localParameters);
-    setOllamaUrl(localOllamaUrl);
     setUse9Router(localUse9Router);
     setRouterUrl(localRouterUrl);
     setRouterApiKey(localRouterApiKey);
@@ -235,13 +227,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           transition={{ duration: 0.2 }}
           className="w-full pb-12"
         >
-          {activeTab === 'general' && (
+            {activeTab === 'general' && (
             <div className="bg-bg-secondary p-6 rounded-xl border border-border-primary shadow-sm space-y-8 flex flex-col">
               <div className="space-y-4 flex-1">
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-bold text-text-primary flex items-center gap-2">
                     <Globe size={16} className="text-accent-primary" />
-                    Ollama Server Status
+                    9Router Proxy Status
                   </label>
                   <div className="flex items-center gap-1.5">
                     {connectionStatus === 'connected' ? (
@@ -259,23 +251,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
                 
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-text-secondary">Ollama API URL</label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text"
-                      value={localOllamaUrl}
-                      onChange={(e) => setLocalOllamaUrl(e.target.value)}
-                      placeholder="http://localhost:11434"
-                      className="flex-1 bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
-                    />
-                  </div>
-                  <p className="text-[10px] text-text-secondary">
-                    Địa chỉ URL của máy chủ Ollama. Mặc định là http://localhost:11434.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-text-secondary">Ollama Account</label>
+                  <label className="text-xs font-semibold text-text-secondary">9Router Account</label>
                   <div className="flex gap-2">
                     <select
                       value={localActiveAccount}
@@ -378,10 +354,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
 
                 <p className="text-xs text-text-secondary leading-relaxed">
-                  The application is configured to connect to Ollama via the backend server. 
+                  The application is configured to connect to AI models via 9Router proxy. 
                   {connectionStatus === 'connected' 
                     ? " The connection is currently active and healthy." 
-                    : " The backend is unable to reach Ollama. Please ensure Ollama is running on the server."}
+                    : " The backend is unable to reach 9Router. Please check your configuration."}
                 </p>
               </div>
 

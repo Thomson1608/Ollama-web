@@ -2593,7 +2593,8 @@ async function startServer() {
   httpServer.listen(PORT, '0.0.0.0', () => {
     logger.release(`Server status: Running on http://localhost:${PORT}`);
     logger.debug(`Server configuration:`, {
-      OLLAMA_URL,
+      USE_9ROUTER,
+      ROUTER_URL,
       LOG_LEVEL,
       DATA_DIR
     });

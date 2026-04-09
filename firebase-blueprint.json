@@ -113,6 +113,10 @@
     "/projects/{projectId}/memories/{memoryId}": {
       "schema": "Memory",
       "description": "Bộ nhớ dài hạn của dự án"
+    },
+    "/system/config": {
+      "schema": "object",
+      "description": "Cấu hình hệ thống toàn cục"
     }
   }
 }

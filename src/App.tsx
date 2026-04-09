@@ -140,7 +140,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
     return ADMIN_SYSTEM_PROMPT;
   });
 
-  const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem('ollama_url') || 'http://localhost:11434');
   const [use9Router, setUse9Router] = useState(() => localStorage.getItem('use_9router') === 'true');
   const [routerUrl, setRouterUrl] = useState(() => localStorage.getItem('router_url') || 'https://api.9router.com/v1/chat/completions');
   const [routerApiKey, setRouterApiKey] = useState(() => localStorage.getItem('router_api_key') || '');
@@ -612,10 +611,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
           if (data.parameters) {
             setGlobalParameters(data.parameters);
           }
-          if (data.ollamaUrl) {
-            setOllamaUrl(data.ollamaUrl);
-            localStorage.setItem('ollama_url', data.ollamaUrl);
-          }
           if (data.use9Router !== undefined) {
             setUse9Router(data.use9Router);
             localStorage.setItem('use_9router', data.use9Router.toString());
@@ -694,7 +689,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
           body: JSON.stringify({ 
             systemPrompt, 
             parameters: globalParameters,
-            ollamaUrl,
             use9Router,
             routerUrl,
             routerApiKey,
@@ -708,7 +702,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     
     const timeoutId = setTimeout(syncConfig, 1000);
     return () => clearTimeout(timeoutId);
-  }, [systemPrompt, globalParameters, ollamaUrl, workspaceHost, isInitialized, username]);
+  }, [systemPrompt, globalParameters, workspaceHost, isInitialized, username]);
 
   useEffect(() => {
     checkConnection();
@@ -1558,11 +1552,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     setSystemPrompt={setSystemPrompt}
                     parameters={globalParameters}
                     setParameters={setGlobalParameters}
-                    ollamaUrl={ollamaUrl}
-                    setOllamaUrl={(url) => {
-                      setOllamaUrl(url);
-                      localStorage.setItem('ollama_url', url);
-                    }}
                     use9Router={use9Router}
                     setUse9Router={(val) => {
                       setUse9Router(val);
