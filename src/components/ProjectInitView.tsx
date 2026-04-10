@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { Rocket, Layout, FileText, ArrowRight, Loader2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { cn } from '../lib/utils';
 
 interface ProjectInitViewProps {
-  onInit: (name: string, details: string) => void;
+  onInit: (name: string, details: string, type: 'research' | 'coding') => void;
   isLoading: boolean;
 }
 
 export const ProjectInitView: React.FC<ProjectInitViewProps> = ({ onInit, isLoading }) => {
   const [name, setName] = useState('');
   const [details, setDetails] = useState('');
+  const [type, setType] = useState<'research' | 'coding'>('coding');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim() && details.trim()) {
-      onInit(name, details);
+      onInit(name, details, type);
     }
   };
 
@@ -31,11 +33,46 @@ export const ProjectInitView: React.FC<ProjectInitViewProps> = ({ onInit, isLoad
           </div>
           <div>
             <h1 className="text-2xl font-bold text-text-primary">Khởi tạo Project mới</h1>
-            <p className="text-text-secondary">Hãy cho AI biết bạn muốn xây dựng điều gì.</p>
+            <p className="text-text-secondary">Hãy chọn loại Project và mô tả mục tiêu của bạn.</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setType('research')}
+              className={cn(
+                "flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all text-center",
+                type === 'research' 
+                  ? "border-accent-primary bg-accent-primary/5 text-accent-primary" 
+                  : "border-border-primary bg-bg-primary text-text-secondary hover:border-border-primary/80"
+              )}
+            >
+              <FileText size={24} />
+              <div>
+                <p className="font-bold text-sm">Nghiên cứu</p>
+                <p className="text-[10px] opacity-70">Chat thuần túy, nhiều đoạn hội thoại</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setType('coding')}
+              className={cn(
+                "flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all text-center",
+                type === 'coding' 
+                  ? "border-accent-primary bg-accent-primary/5 text-accent-primary" 
+                  : "border-border-primary bg-bg-primary text-text-secondary hover:border-border-primary/80"
+              )}
+            >
+              <Layout size={24} />
+              <div>
+                <p className="font-bold text-sm">Lập trình</p>
+                <p className="text-[10px] opacity-70">Workspace + Chat đơn nhất</p>
+              </div>
+            </button>
+          </div>
+
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm font-semibold text-text-secondary ml-1">
               <Layout size={16} className="text-accent-primary" />

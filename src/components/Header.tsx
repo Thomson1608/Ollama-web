@@ -7,7 +7,8 @@ import {
   User,
   LogOut,
   Settings,
-  ChevronDown
+  ChevronDown,
+  LayoutGrid
 } from 'lucide-react';
 import { AIModel, ViewType, ConnectionStatus } from '../types';
 import { cn } from '../lib/utils';
@@ -29,6 +30,8 @@ interface HeaderProps {
   onLogout?: () => void;
   mobileActiveTab?: 'chat' | 'workspace';
   setMobileActiveTab?: (tab: 'chat' | 'workspace') => void;
+  clearAllChats?: () => void;
+  onGoToProjects?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -47,7 +50,9 @@ export const Header: React.FC<HeaderProps> = ({
   username,
   onLogout,
   mobileActiveTab,
-  setMobileActiveTab
+  setMobileActiveTab,
+  clearAllChats,
+  onGoToProjects
 }) => {
   const [now, setNow] = React.useState(new Date());
   const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
@@ -66,6 +71,16 @@ export const Header: React.FC<HeaderProps> = ({
         >
           {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
         </button>
+        <div className="h-4 w-[1px] bg-border-primary mx-0.5 md:mx-1 shrink-0" />
+        
+        <button 
+          onClick={onGoToProjects}
+          className="p-2 hover:bg-bg-tertiary rounded-lg text-text-secondary transition-colors shrink-0"
+          title="Projects"
+        >
+          <LayoutGrid size={20} />
+        </button>
+
         <div className="h-4 w-[1px] bg-border-primary mx-0.5 md:mx-1 shrink-0" />
         {currentView === 'chat' ? (
           <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
@@ -137,10 +152,20 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
       
       <div className="flex items-center gap-2">
-        {connectionStatus === 'disconnected' && (
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-red-500/10 text-red-400 rounded-full text-xs font-bold border border-red-500/20">
+        {connectionStatus === 'connected' ? (
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-green-500/10 text-green-500 rounded-full text-[10px] font-bold border border-green-500/20">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            ONLINE
+          </div>
+        ) : connectionStatus === 'disconnected' ? (
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-red-500/10 text-red-400 rounded-full text-[10px] font-bold border border-red-500/20">
             <AlertCircle size={14} />
             OFFLINE
+          </div>
+        ) : (
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-bg-tertiary text-text-secondary rounded-full text-[10px] font-bold border border-border-primary">
+            <RefreshCw size={12} className="animate-spin" />
+            CHECKING
           </div>
         )}
         <button 
@@ -188,6 +213,19 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     <Settings size={16} />
                     <span>Common Settings</span>
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to clear all chats?')) {
+                        clearAllChats?.();
+                        setIsUserMenuOpen(false);
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <RefreshCw size={16} />
+                    <span>Clear All Chats</span>
                   </button>
 
                   <div className="h-[1px] bg-border-primary my-1" />

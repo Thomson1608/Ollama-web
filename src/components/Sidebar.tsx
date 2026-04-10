@@ -10,8 +10,7 @@ import {
   BarChart,
   LogOut,
   User,
-  Edit2,
-  LayoutGrid
+  Edit2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -30,11 +29,11 @@ interface SidebarProps {
   createNewChat: () => void;
   deleteChat: (id: string, e: React.MouseEvent) => void;
   onRenameChat: (id: string, newTitle: string) => void;
-  clearAllChats: () => void;
   isSyncing?: boolean;
   username?: string | null;
   onLogout?: () => void;
   onCloseChat?: (id: string) => void;
+  projectType?: 'research' | 'coding';
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -50,11 +49,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   createNewChat,
   deleteChat,
   onRenameChat,
-  clearAllChats,
   isSyncing,
   username,
   onLogout,
-  onCloseChat
+  onCloseChat,
+  projectType = 'coding'
 }) => {
   const [editingChatId, setEditingChatId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState('');
@@ -71,6 +70,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
     setEditingChatId(null);
   };
+
+  const showChatList = projectType === 'research';
 
   return (
     <>
@@ -101,25 +102,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>AI Studio</span>
         </div>
         <div className="flex items-center gap-1">
-          <button 
-            onClick={() => setCurrentView('project-list')}
-            className="p-1.5 hover:bg-bg-tertiary rounded-lg transition-colors text-text-secondary hover:text-text-primary"
-            title="Projects"
-          >
-            <LayoutGrid size={18} />
-          </button>
-          <button 
-            onClick={createNewChat}
-            className="p-1.5 hover:bg-bg-tertiary rounded-lg transition-colors text-text-secondary hover:text-text-primary"
-            title="New Chat"
-          >
-            <Plus size={20} />
-          </button>
+          {showChatList && (
+            <button 
+              onClick={createNewChat}
+              className="p-1.5 hover:bg-bg-tertiary rounded-lg transition-colors text-text-secondary hover:text-text-primary"
+              title="New Chat"
+            >
+              <Plus size={20} />
+            </button>
+          )}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-1 no-scrollbar">
-        {chats.length === 0 ? (
+        {!showChatList ? (
+          <div className="px-3 py-6 text-center space-y-4">
+            <div className="w-12 h-12 bg-accent-primary/10 rounded-2xl flex items-center justify-center mx-auto border border-accent-primary/20">
+              <Terminal size={24} className="text-accent-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-text-primary">Coding Mode</p>
+              <p className="text-[10px] text-text-secondary mt-1">Single chat process active with full workspace access.</p>
+            </div>
+          </div>
+        ) : chats.length === 0 ? (
           <div className="text-center py-10 text-text-secondary text-sm">
             No chats yet
           </div>
@@ -196,65 +202,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      <div className="p-4 border-t border-border-primary space-y-3">
-        <div className="flex items-center justify-between text-xs px-1">
-          <span className="text-text-secondary">Status</span>
-          <div className="flex items-center gap-1.5">
-            {isSyncing && (
-              <RefreshCw size={10} className="animate-spin text-accent-primary mr-1" />
-            )}
-            {connectionStatus === 'connected' ? (
-              <>
-                <div className="w-2 h-2 rounded-full bg-green-500" />
-                <span className="text-green-500 font-medium">Online</span>
-              </>
-            ) : connectionStatus === 'disconnected' ? (
-              <>
-                <div className="w-2 h-2 rounded-full bg-red-500" />
-                <span className="text-red-500 font-medium">Offline</span>
-              </>
-            ) : (
-              <>
-                <RefreshCw size={12} className="animate-spin text-text-secondary" />
-                <span className="text-text-secondary">Checking...</span>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-2">
-          <button 
-            onClick={() => {
-              setCurrentView('chat');
-              if (isMobile) setIsSidebarOpen(false);
-            }}
-            className={cn(
-              "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-              currentView === 'chat' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
-            )}
-            title="Chat"
-          >
-            <MessageSquare size={16} />
-          </button>
-        </div>
+      <div className="p-4 border-t border-border-primary">
         <button 
           onClick={() => {
-            setCurrentView('settings');
+            setCurrentView('chat');
             if (isMobile) setIsSidebarOpen(false);
           }}
           className={cn(
-            "w-full flex items-center gap-2 p-2 rounded-lg text-sm transition-colors",
-            currentView === 'settings' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
+            "w-full flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
+            currentView === 'chat' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
           )}
+          title="Chat"
         >
-          <Settings size={16} />
-          <span>Settings</span>
-        </button>
-        <button 
-          onClick={clearAllChats}
-          className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 transition-colors border border-red-500/20"
-        >
-          <Trash2 size={14} />
-          Clear All Chats
+          <MessageSquare size={16} />
+          <span>Chat</span>
         </button>
       </div>
     </motion.aside>

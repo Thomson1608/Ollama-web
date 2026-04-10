@@ -207,11 +207,11 @@ const dbService = {
       handleFirestoreError(error, OperationType.UPDATE, `projects/${id}`);
     }
   },
-  createProject: async (userId: string, name: string, details: string) => {
+  createProject: async (userId: string, name: string, details: string, type: 'research' | 'coding') => {
     try {
       const id = 'proj_' + Date.now().toString();
       await setDoc(doc(db, 'projects', id), {
-        id, userId, name, details, createdAt: Date.now()
+        id, userId, name, details, type, createdAt: Date.now()
       });
       return id;
     } catch (error) {
@@ -642,34 +642,36 @@ async function startServer() {
   app.post('/api/projects', async (req, res) => {
     const username = req.headers['x-username'] as string;
     if (!username) return res.status(400).json({ error: 'Yêu cầu header username' });
-    const { name, details } = req.body;
+    const { name, details, type } = req.body;
     try {
-      logger.release(`Project: Creating new project "${name}" for ${username}`);
+      logger.release(`Project: Creating new project "${name}" (${type}) for ${username}`);
       const user = await dbService.getUser(username);
       if (!user) {
         logger.error(`Project: User ${username} not found in DB`);
         return res.status(404).json({ error: 'Không tìm thấy người dùng' });
       }
-      const projectId = await dbService.createProject(user.id, name, details);
+      const projectId = await dbService.createProject(user.id, name, details, type || 'coding');
       logger.release(`Project: Created project ID ${projectId} in DB`);
       
       // Ensure project workspace exists
       const paths = getUserPaths(username, projectId);
-      logger.debug(`Project: Creating workspace directory at ${paths.workspace}`);
-      await fs.mkdir(paths.workspace, { recursive: true });
-      
-      // Init git for project
-      logger.debug(`Project: Initializing git in ${paths.workspace}`);
-      const git = simpleGit(paths.workspace);
-      await git.init();
-      await git.addConfig('user.name', username);
-      await git.addConfig('user.email', `${username}@9router.web`);
-      await fs.writeFile(path.join(paths.workspace, '.gitkeep'), '');
-      await git.add('.');
-      await git.commit('Initial project commit');
-      logger.release(`Project: Successfully initialized workspace and git for ${projectId}`);
+      if (type !== 'research') {
+        logger.debug(`Project: Creating workspace directory at ${paths.workspace}`);
+        await fs.mkdir(paths.workspace, { recursive: true });
+        
+        // Init git for project
+        logger.debug(`Project: Initializing git in ${paths.workspace}`);
+        const git = simpleGit(paths.workspace);
+        await git.init();
+        await git.addConfig('user.name', username);
+        await git.addConfig('user.email', `${username}@9router.web`);
+        await fs.writeFile(path.join(paths.workspace, '.gitkeep'), '');
+        await git.add('.');
+        await git.commit('Initial project commit');
+        logger.release(`Project: Successfully initialized workspace and git for ${projectId}`);
+      }
 
-      res.json({ id: projectId, name, details, createdAt: Date.now() });
+      res.json({ id: projectId, name, details, type: type || 'coding', createdAt: Date.now() });
     } catch (error) {
       logger.error('Không thể tạo dự án:', error);
       res.status(500).json({ error: 'Không thể tạo dự án' });

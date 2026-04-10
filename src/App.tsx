@@ -165,6 +165,17 @@ If the user asks you to write code, you should provide it in a markdown code blo
   });
   const [memory, setMemory] = useState<Memory>({ facts: [] });
   const [isSyncing, setIsSyncing] = useState(false);
+  const [projectType, setProjectType] = useState<'research' | 'coding'>('coding');
+
+  // Load project type on mount or when projectId changes
+  useEffect(() => {
+    if (projectId && projects.length > 0) {
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+        setProjectType(project.type);
+      }
+    }
+  }, [projectId, projects]);
   const isRemoteUpdate = useRef(false);
   const isRemoteConfigUpdate = useRef(false);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -264,10 +275,16 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   const handleSelectProject = (project: Project) => {
     setProjectId(project.id);
+    setProjectType(project.type);
     localStorage.setItem('9router_project_id', project.id);
     setCurrentView('chat');
     setActiveChatId(null);
     setChats([]);
+    if (project.type === 'coding') {
+      setIsSidebarOpen(false);
+    } else {
+      setIsSidebarOpen(true);
+    }
     toast.success(`Project ${project.name} selected`);
   };
 
@@ -1111,10 +1128,10 @@ If the user asks you to write code, you should provide it in a markdown code blo
     toast.info('Logged out');
   };
 
-  const handleInitProject = async (name: string, details: string) => {
+  const handleInitProject = async (name: string, details: string, type: 'research' | 'coding') => {
     if (!username) return;
     setIsLoading(true);
-    console.log(`[ProjectInit] Starting initialization for project: ${name}`);
+    console.log(`[ProjectInit] Starting initialization for project: ${name} (${type})`);
     try {
       const response = await fetch('/api/projects', {
         method: 'POST',
@@ -1122,7 +1139,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
           'Content-Type': 'application/json',
           'x-username': username
         },
-        body: JSON.stringify({ name, details }),
+        body: JSON.stringify({ name, details, type }),
       });
 
       if (!response.ok) {
@@ -1135,7 +1152,14 @@ If the user asks you to write code, you should provide it in a markdown code blo
       console.log('[ProjectInit] Project created successfully:', project.id);
       setProjects(prev => [project, ...prev]);
       setProjectId(project.id);
+      setProjectType(project.type);
       localStorage.setItem('9router_project_id', project.id);
+      
+      if (project.type === 'coding') {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+      }
       
       const newChatId = Date.now().toString();
       const userMessage: Message = {
@@ -1192,7 +1216,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
     <div className="flex h-[100dvh] w-full overflow-hidden bg-bg-primary text-text-primary">
       <Toaster position="top-center" theme="dark" />
       
-      {currentView !== 'project-list' && currentView !== 'project-init' && (
+      {currentView !== 'project-list' && currentView !== 'project-init' && (projectType === 'research' || isSidebarOpen) && (
         <Sidebar 
           isSidebarOpen={isSidebarOpen}
           setIsSidebarOpen={setIsSidebarOpen}
@@ -1206,10 +1230,10 @@ If the user asks you to write code, you should provide it in a markdown code blo
           createNewChat={createNewChat}
           deleteChat={deleteChat}
           onRenameChat={handleRenameChat}
-          clearAllChats={clearAllChats}
           isSyncing={isSyncing}
           username={username}
           onLogout={handleLogout}
+          projectType={projectType}
         />
       )}
 
@@ -1234,6 +1258,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
           onLogout={handleLogout}
           mobileActiveTab={mobileActiveTab}
           setMobileActiveTab={setMobileActiveTab}
+          clearAllChats={clearAllChats}
+          onGoToProjects={() => setCurrentView('project-list')}
         />
 
         <div className="flex-1 flex overflow-hidden">
@@ -1252,16 +1278,64 @@ If the user asks you to write code, you should provide it in a markdown code blo
             )}
 
             {currentView === 'chat' && projectId ? (
-              <Group orientation="horizontal" className="flex h-full w-full overflow-hidden">
-                {/* Left Panel: Chat */}
-                <Panel 
-                  defaultSize={isMobile ? 100 : 30} 
-                  minSize={isMobile ? 0 : 20}
-                  className={cn(
-                    "flex flex-col transition-all duration-300 min-w-[200px]",
-                    isMobile && mobileActiveTab !== 'chat' && "hidden"
+              projectType === 'coding' ? (
+                <Group orientation="horizontal" className="flex h-full w-full overflow-hidden">
+                  {/* Left Panel: Chat */}
+                  <Panel 
+                    defaultSize={isMobile ? 100 : 30} 
+                    minSize={isMobile ? 0 : 20}
+                    className={cn(
+                      "flex flex-col transition-all duration-300 min-w-[200px]",
+                      isMobile && mobileActiveTab !== 'chat' && "hidden"
+                    )}
+                  >
+                    <ChatView 
+                      activeChatId={activeChatId}
+                      activeChat={activeChat}
+                      isLoading={isLoading || (activeChatId ? generatingChatIds.has(activeChatId) : false)}
+                      isAiTypingGlobally={activeChatId ? generatingChatIds.has(activeChatId) && !isLoading : false}
+                      isGloballyBusy={generatingChatIds.size > 0}
+                      input={input}
+                      setInput={setInput}
+                      handleSendMessage={handleSendMessage}
+                      createNewChat={createNewChat}
+                      connectionStatus={connectionStatus}
+                      generationStatus={generationStatus}
+                      messagesEndRef={messagesEndRef}
+                      onUpdateSystemPrompt={(prompt) => activeChatId && updateChatSystemPrompt(activeChatId, prompt)}
+                      username={username}
+                      projectId={projectId}
+                    />
+                  </Panel>
+
+                  {!isMobile && (
+                    <Separator className="w-1.5 bg-bg-primary hover:bg-accent-primary/20 transition-colors cursor-col-resize flex items-center justify-center group border-x border-border-primary">
+                      <div className="w-[1px] h-8 bg-border-primary group-hover:bg-accent-primary transition-colors" />
+                    </Separator>
                   )}
-                >
+
+                  {/* Right Panel: Workspace */}
+                  <Panel 
+                    defaultSize={isMobile ? 100 : 70} 
+                    minSize={isMobile ? 0 : 30}
+                    className={cn(
+                      "flex flex-col overflow-hidden min-w-0",
+                      isMobile && mobileActiveTab !== 'workspace' && "hidden"
+                    )}
+                  >
+                    <WorkspaceView 
+                      refreshTrigger={workspaceRefreshTrigger} 
+                      socket={socketRef.current} 
+                      isMobile={isMobile}
+                      username={username}
+                      projectId={projectId || undefined}
+                      workspaceHost={workspaceHost}
+                      onInstallDependencies={handleInstallDependencies}
+                    />
+                  </Panel>
+                </Group>
+              ) : (
+                <div className="flex-1 flex flex-col h-full overflow-hidden">
                   <ChatView 
                     activeChatId={activeChatId}
                     activeChat={activeChat}
@@ -1279,34 +1353,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     username={username}
                     projectId={projectId}
                   />
-                </Panel>
-
-                {!isMobile && (
-                  <Separator className="w-1.5 bg-bg-primary hover:bg-accent-primary/20 transition-colors cursor-col-resize flex items-center justify-center group border-x border-border-primary">
-                    <div className="w-[1px] h-8 bg-border-primary group-hover:bg-accent-primary transition-colors" />
-                  </Separator>
-                )}
-
-                {/* Right Panel: Workspace */}
-                <Panel 
-                  defaultSize={isMobile ? 100 : 70} 
-                  minSize={isMobile ? 0 : 30}
-                  className={cn(
-                    "flex flex-col overflow-hidden min-w-0",
-                    isMobile && mobileActiveTab !== 'workspace' && "hidden"
-                  )}
-                >
-                  <WorkspaceView 
-                    refreshTrigger={workspaceRefreshTrigger} 
-                    socket={socketRef.current} 
-                    isMobile={isMobile}
-                    username={username}
-                    projectId={projectId || undefined}
-                    workspaceHost={workspaceHost}
-                    onInstallDependencies={handleInstallDependencies}
-                  />
-                </Panel>
-              </Group>
+                </div>
+              )
             ) : (
               <>
                 {currentView === 'chat' && (
