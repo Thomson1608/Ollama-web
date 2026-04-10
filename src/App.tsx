@@ -179,6 +179,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
+  const [mobileActiveTab, setMobileActiveTab] = useState<'chat' | 'workspace'>('chat');
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatAbortController = useRef<AbortController | null>(null);
@@ -208,7 +209,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   // Redirect to project list if no project is selected
   useEffect(() => {
-    if (isInitialized && username && !projectId && (currentView === 'chat' || currentView === 'workspace')) {
+    if (isInitialized && username && !projectId && currentView === 'chat') {
       setCurrentView('project-list');
       toast.error('Please select a project first');
     }
@@ -1230,6 +1231,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
           isBusy={isLoading || generatingChatIds.size > 0}
           username={username}
           onLogout={handleLogout}
+          mobileActiveTab={mobileActiveTab}
+          setMobileActiveTab={setMobileActiveTab}
         />
 
         <div className="flex-1 flex overflow-hidden">
@@ -1247,7 +1250,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
               <ProjectInitView onInit={handleInitProject} isLoading={isLoading} />
             )}
 
-            {(currentView === 'chat' || currentView === 'workspace') && projectId ? (
+            {currentView === 'chat' && projectId ? (
               <Group orientation="horizontal" className="flex h-full w-full overflow-hidden">
                 {/* Left Panel: Chat */}
                 <Panel 
@@ -1255,7 +1258,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                   minSize={isMobile ? 0 : 20}
                   className={cn(
                     "flex flex-col transition-all duration-300 min-w-[200px]",
-                    isMobile && currentView !== 'chat' && "hidden"
+                    isMobile && mobileActiveTab !== 'chat' && "hidden"
                   )}
                 >
                   <ChatView 
@@ -1289,7 +1292,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                   minSize={isMobile ? 0 : 30}
                   className={cn(
                     "flex flex-col overflow-hidden min-w-0",
-                    isMobile && currentView === 'chat' && "hidden"
+                    isMobile && mobileActiveTab !== 'workspace' && "hidden"
                   )}
                 >
                   <WorkspaceView 

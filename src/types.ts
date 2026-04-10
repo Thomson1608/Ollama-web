@@ -48,7 +48,7 @@ export interface Project {
   lastPackageJsonHash?: string;
 }
 
-export type ViewType = 'chat' | 'workspace' | 'settings' | 'project-init' | 'project-list';
+export type ViewType = 'chat' | 'settings' | 'project-init' | 'project-list';
 export type ConnectionStatus = 'connected' | 'disconnected' | 'checking';
 
 export interface Memory {

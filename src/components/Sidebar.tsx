@@ -221,7 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
         </div>
-        <div className={cn("grid gap-2", username === 'admin' ? "grid-cols-4" : "grid-cols-1")}>
+        <div className="grid grid-cols-1 gap-2">
           <button 
             onClick={() => {
               setCurrentView('chat');
@@ -235,24 +235,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <MessageSquare size={16} />
           </button>
-          
-          {username === 'admin' && (
-            <>
-              <button 
-                onClick={() => {
-                  setCurrentView('workspace');
-                  if (isMobile) setIsSidebarOpen(false);
-                }}
-                className={cn(
-                  "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-                  currentView === 'workspace' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
-                )}
-                title="Workspace"
-              >
-                <Folder size={16} />
-              </button>
-            </>
-          )}
         </div>
         <button 
           onClick={() => {

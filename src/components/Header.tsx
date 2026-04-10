@@ -27,6 +27,8 @@ interface HeaderProps {
   isBusy: boolean;
   username?: string | null;
   onLogout?: () => void;
+  mobileActiveTab?: 'chat' | 'workspace';
+  setMobileActiveTab?: (tab: 'chat' | 'workspace') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,7 +45,9 @@ export const Header: React.FC<HeaderProps> = ({
   setShowSettings,
   isBusy,
   username,
-  onLogout
+  onLogout,
+  mobileActiveTab,
+  setMobileActiveTab
 }) => {
   const [now, setNow] = React.useState(new Date());
   const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
@@ -65,7 +69,29 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="h-4 w-[1px] bg-border-primary mx-0.5 md:mx-1 shrink-0" />
         {currentView === 'chat' ? (
           <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
-            <div className="flex flex-col shrink-0">
+            {/* Mobile Tab Switcher */}
+            <div className="flex md:hidden items-center bg-bg-secondary rounded-lg p-1 border border-border-primary">
+              <button
+                onClick={() => setMobileActiveTab?.('chat')}
+                className={cn(
+                  "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
+                  mobileActiveTab === 'chat' ? "bg-accent-primary text-white shadow-sm" : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                CHAT
+              </button>
+              <button
+                onClick={() => setMobileActiveTab?.('workspace')}
+                className={cn(
+                  "px-3 py-1 rounded-md text-[10px] font-bold transition-all",
+                  mobileActiveTab === 'workspace' ? "bg-accent-primary text-white shadow-sm" : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                WORK
+              </button>
+            </div>
+
+            <div className="hidden md:flex flex-col shrink-0">
               <span className="text-[8px] md:text-[10px] font-medium text-text-secondary uppercase tracking-wider">Model</span>
               <select 
                 value={selectedModel}
@@ -93,7 +119,7 @@ export const Header: React.FC<HeaderProps> = ({
               </select>
             </div>
 
-            <div className="flex flex-col shrink-0 border-l border-border-primary pl-2 md:pl-4">
+            <div className="hidden md:flex flex-col shrink-0 border-l border-border-primary pl-2 md:pl-4">
               <span className="text-[8px] md:text-[10px] font-medium text-text-secondary uppercase tracking-wider">Host</span>
               <input
                 type="text"
@@ -103,8 +129,6 @@ export const Header: React.FC<HeaderProps> = ({
               />
             </div>
           </div>
-        ) : currentView === 'workspace' ? (
-          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Workspace</span>
         ) : currentView === 'project-list' ? (
           <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Projects</span>
         ) : (
