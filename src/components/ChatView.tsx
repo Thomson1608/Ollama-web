@@ -240,6 +240,26 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [showSuggestions, setShowSuggestions] = useState(() => localStorage.getItem('show_chat_suggestions') !== 'false');
+
+  const quickPrompts = [
+    { label: 'Giải thích code', icon: <Sparkles size={12} className="text-blue-400" /> },
+    { label: 'Tìm lỗi & Sửa', icon: <AlertCircle size={12} className="text-red-400" /> },
+    { label: 'Tối ưu hiệu suất', icon: <Cpu size={12} className="text-green-400" /> },
+    { label: 'Viết Unit Test', icon: <CheckCircle2 size={12} className="text-purple-400" /> }
+  ];
+
+  const handleQuickPrompt = (prompt: string) => {
+    setInput(prompt);
+    // Optional: auto-send
+    // setTimeout(() => onSendMessage(), 100);
+  };
+
+  const toggleSuggestions = (val: boolean) => {
+    setShowSuggestions(val);
+    localStorage.setItem('show_chat_suggestions', val.toString());
+  };
+
   const isLastMessageThinking = activeChat?.messages[activeChat.messages.length - 1]?.role === 'assistant' && 
     activeChat.messages[activeChat.messages.length - 1].content.includes('<thought>') && 
     !activeChat.messages[activeChat.messages.length - 1].content.includes('</thought>');
@@ -703,32 +723,34 @@ export const ChatView: React.FC<ChatViewProps> = ({
       <div className="p-4 bg-bg-primary border-t border-border-primary">
         <div className="max-w-3xl mx-auto space-y-4">
           {/* Suggestion Chips */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-            <button className="p-1.5 text-text-secondary hover:text-text-primary transition-colors shrink-0">
-              <Plus size={16} className="rotate-45" />
-            </button>
-            <div className="flex items-center gap-2">
-              {[
-                { label: 'AI Features', icon: <Sparkles size={12} className="text-blue-400" /> },
-                { label: 'Fetch Models', icon: null },
-                { label: 'Implement Pull Model', icon: null }
-              ].map((chip, idx) => (
-                <button 
-                  key={idx}
-                  className="flex items-center gap-2 px-4 py-2 bg-bg-secondary border border-border-primary rounded-full text-xs font-medium text-text-primary hover:bg-bg-tertiary transition-all whitespace-nowrap"
-                >
-                  {chip.icon && chip.icon}
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-            <button className="p-1.5 text-text-secondary hover:text-text-primary transition-colors shrink-0 ml-auto">
-              <ChevronDown size={16} className="-rotate-90" />
-            </button>
-            <button className="p-1.5 text-text-secondary hover:text-text-primary transition-colors shrink-0">
-              <X size={16} />
-            </button>
-          </div>
+          {showSuggestions && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, height: 0 }}
+              className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1"
+            >
+              <div className="flex items-center gap-2">
+                {quickPrompts.map((chip, idx) => (
+                  <button 
+                    key={idx}
+                    onClick={() => handleQuickPrompt(chip.label)}
+                    className="flex items-center gap-2 px-4 py-2 bg-bg-secondary border border-border-primary rounded-full text-xs font-medium text-text-primary hover:bg-bg-tertiary hover:border-accent-primary/50 transition-all whitespace-nowrap shadow-sm active:scale-95"
+                  >
+                    {chip.icon && chip.icon}
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+              <button 
+                onClick={() => toggleSuggestions(false)}
+                className="p-1.5 text-text-secondary hover:text-red-500 hover:bg-red-500/10 rounded-full transition-all shrink-0 ml-auto"
+                title="Ẩn gợi ý"
+              >
+                <X size={16} />
+              </button>
+            </motion.div>
+          )}
 
           <form onSubmit={onSendMessage} className="space-y-3">
             {selectedImage && (
@@ -773,6 +795,17 @@ export const ChatView: React.FC<ChatViewProps> = ({
               />
               
               <div className="flex items-center justify-end gap-2 px-4 pb-4">
+                <button
+                  type="button"
+                  onClick={() => toggleSuggestions(!showSuggestions)}
+                  className={cn(
+                    "p-2.5 rounded-xl transition-all border border-border-primary/50",
+                    showSuggestions ? "bg-accent-primary/10 text-accent-primary border-accent-primary/20" : "text-text-secondary hover:text-text-primary hover:bg-bg-tertiary"
+                  )}
+                  title={showSuggestions ? "Ẩn gợi ý" : "Hiện gợi ý"}
+                >
+                  <Sparkles size={18} />
+                </button>
                 <button
                   type="button"
                   className="p-2.5 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded-xl transition-all border border-border-primary/50"
