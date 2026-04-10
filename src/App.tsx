@@ -338,8 +338,9 @@ If the user asks you to write code, you should provide it in a markdown code blo
     });
     socketRef.current = socket;
 
-    socket.on(`chat:status:${username}`, ({ loading, chatId }) => {
-      console.log('Socket.io: chat:status event received:', loading, chatId);
+    socket.on(`chat:status:${username}`, ({ loading, chatId, status }) => {
+      console.log('Socket.io: chat:status event received:', loading, chatId, status);
+      if (status) setGenerationStatus(status);
       if (chatId) {
         setGeneratingChatIds(prev => {
           const next = new Set(prev);
@@ -392,6 +393,17 @@ If the user asks you to write code, you should provide it in a markdown code blo
           return [newChat, ...prev];
         }
       });
+    });
+
+    socket.on(`chat:error:${username}`, ({ chatId, error }) => {
+      console.error('Socket.io: chat:error event received:', chatId, error);
+      toast.error(`AI Error: ${error}`);
+      setGeneratingChatIds(prev => {
+        const next = new Set(prev);
+        if (chatId) next.delete(chatId);
+        return next;
+      });
+      setIsLoading(false);
     });
 
     socket.on(`chat:chunk:${username}`, ({ chatId, chunk }) => {

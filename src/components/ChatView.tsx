@@ -261,8 +261,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   const isLastMessageThinking = activeChat?.messages[activeChat.messages.length - 1]?.role === 'assistant' && 
-    activeChat.messages[activeChat.messages.length - 1].content.includes('<thought>') && 
-    !activeChat.messages[activeChat.messages.length - 1].content.includes('</thought>');
+    ((activeChat.messages[activeChat.messages.length - 1].content.includes('<thought>') && 
+    !activeChat.messages[activeChat.messages.length - 1].content.includes('</thought>')) ||
+    (activeChat.messages[activeChat.messages.length - 1].content.includes('<think>') && 
+    !activeChat.messages[activeChat.messages.length - 1].content.includes('</think>')));
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -384,11 +386,11 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   const renderMessage = (content: string, isStreaming: boolean) => {
     // Split by thought and tool calls
-    const parts = content.split(/(<thought>[\s\S]*?<\/thought>|<tool_call>[\s\S]*?<\/tool_call>)/g);
+    const parts = content.split(/(<thought>[\s\S]*?<\/thought>|<think>[\s\S]*?<\/think>|<tool_call>[\s\S]*?<\/tool_call>)/g);
     
     return parts.map((part, i) => {
-      if (part.startsWith('<thought>') && part.endsWith('</thought>')) {
-        const thought = part.match(/<thought>([\s\S]*?)<\/thought>/)?.[1] || '';
+      if ((part.startsWith('<thought>') && part.endsWith('</thought>')) || (part.startsWith('<think>') && part.endsWith('</think>'))) {
+        const thought = part.match(/<(?:thought|think)>([\s\S]*?)<\/(?:thought|think)>/)?.[1] || '';
         return <ThoughtBlock key={i} isStreaming={isStreaming && i === parts.length - 1}>{thought}</ThoughtBlock>;
       }
 
@@ -408,8 +410,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
       }
       
       // Handle incomplete tags during streaming
-      if (part.includes('<thought>') && !part.includes('</thought>')) {
-        const [textBefore, thought] = part.split('<thought>');
+      if ((part.includes('<thought>') && !part.includes('</thought>')) || (part.includes('<think>') && !part.includes('</think>'))) {
+        const [textBefore, thought] = part.split(/<(?:thought|think)>/);
         return (
           <React.Fragment key={i}>
             {textBefore && (

@@ -1857,9 +1857,24 @@ async function startServer() {
       });
       io.emit(`chat:status:${username}`, { loading: true, chatId });
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
+      let lastChunkTime = Date.now();
+      const heartbeatInterval = setInterval(() => {
+        const now = Date.now();
+        if (now - lastChunkTime > 5000) {
+          io.emit(`chat:status:${username}`, { 
+            loading: true, 
+            chatId, 
+            status: 'Model is still processing...',
+            isHeartbeat: true 
+          });
+        }
+      }, 5000);
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          lastChunkTime = Date.now();
+          if (done) {
           if (buffer.trim()) {
             try {
               let contentChunk = '';
@@ -2066,8 +2081,15 @@ async function startServer() {
         
         res.write(value);
       }
-
+    } catch (error) {
+      logger.error(`Stream Error for ${chatId}:`, error);
+      io.emit(`chat:error:${username}`, { chatId, error: error instanceof Error ? error.message : String(error) });
+      await updateStats('fail');
+    } finally {
+      clearInterval(heartbeatInterval);
       activeGenerations.delete(chatId);
+    }
+
       io.emit(`chat:end:${username}`, { chatId, finalContent: assistantContent });
       io.emit(`chat:status:${username}`, { loading: false, chatId });
       logger.release(`AI Proxy: Chat session complete for ${chatId} (${username}) in project ${projectId}`);
