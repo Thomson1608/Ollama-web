@@ -79,7 +79,7 @@ export default function App() {
 }
 
 function AppContent() {
-  const [username, setUsername] = useState<string | null>(() => localStorage.getItem('ollama_username'));
+  const [username, setUsername] = useState<string | null>(() => localStorage.getItem('9router_username'));
   const [theme, setTheme] = useState<'dark' | 'light' | 'system'>(() => (localStorage.getItem('theme') as any) || 'dark');
 
   useEffect(() => {
@@ -93,7 +93,7 @@ function AppContent() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem('ollama_project_id'));
+  const [projectId, setProjectId] = useState<string | null>(() => localStorage.getItem('9router_project_id'));
   const [projects, setProjects] = useState<Project[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const ADMIN_SYSTEM_PROMPT = `You are a world-class Senior Software Engineer and Local Developer Agent.
@@ -132,7 +132,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 `;
 
   const [systemPrompt, setSystemPrompt] = useState(() => {
-    const saved = localStorage.getItem('ollama_system_prompt');
+    const saved = localStorage.getItem('9router_system_prompt');
     if (saved) return saved;
     // Default to ADMIN_SYSTEM_PROMPT for all users to enable IDE-like features
     return ADMIN_SYSTEM_PROMPT;
@@ -150,7 +150,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   // Update system prompt when username changes
   useEffect(() => {
-    if (!localStorage.getItem('ollama_system_prompt')) {
+    if (!localStorage.getItem('9router_system_prompt')) {
       setSystemPrompt(ADMIN_SYSTEM_PROMPT);
     }
   }, [username]);
@@ -167,14 +167,14 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const isRemoteUpdate = useRef(false);
   const isRemoteConfigUpdate = useRef(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [activeChatId, setActiveChatId] = useState<string | null>(() => localStorage.getItem('ollama_active_chat_id'));
-  const [currentView, setCurrentView] = useState<ViewType>(() => (localStorage.getItem('ollama_current_view') as ViewType) || 'chat');
+  const [activeChatId, setActiveChatId] = useState<string | null>(() => localStorage.getItem('9router_active_chat_id'));
+  const [currentView, setCurrentView] = useState<ViewType>(() => (localStorage.getItem('9router_current_view') as ViewType) || 'chat');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<string>('');
   const [generatingChatIds, setGeneratingChatIds] = useState<Set<string>>(new Set());
   const [models, setModels] = useState<AIModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ollama_selected_model') || '');
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('9router_selected_model') || '');
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
@@ -195,15 +195,15 @@ If the user asks you to write code, you should provide it in a markdown code blo
   // Sync activeChatId to localStorage
   useEffect(() => {
     if (activeChatId) {
-      localStorage.setItem('ollama_active_chat_id', activeChatId);
+      localStorage.setItem('9router_active_chat_id', activeChatId);
     } else {
-      localStorage.removeItem('ollama_active_chat_id');
+      localStorage.removeItem('9router_active_chat_id');
     }
   }, [activeChatId]);
 
   // Sync currentView to localStorage
   useEffect(() => {
-    localStorage.setItem('ollama_current_view', currentView);
+    localStorage.setItem('9router_current_view', currentView);
   }, [currentView]);
 
   // Redirect to project list if no project is selected
@@ -262,7 +262,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   const handleSelectProject = (project: Project) => {
     setProjectId(project.id);
-    localStorage.setItem('ollama_project_id', project.id);
+    localStorage.setItem('9router_project_id', project.id);
     setCurrentView('chat');
     setActiveChatId(null);
     setChats([]);
@@ -1081,7 +1081,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   const handleLogin = (user: string) => {
     setUsername(user);
-    localStorage.setItem('ollama_username', user);
+    localStorage.setItem('9router_username', user);
     setCurrentView('project-list');
     toast.success(`Welcome, ${user}!`);
   };
@@ -1089,8 +1089,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const handleLogout = () => {
     setUsername(null);
     setProjectId(null);
-    localStorage.removeItem('ollama_username');
-    localStorage.removeItem('ollama_project_id');
+    localStorage.removeItem('9router_username');
+    localStorage.removeItem('9router_project_id');
     setChats([]);
     setProjects([]);
     setActiveChatId(null);
@@ -1121,7 +1121,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
       console.log('[ProjectInit] Project created successfully:', project.id);
       setProjects(prev => [project, ...prev]);
       setProjectId(project.id);
-      localStorage.setItem('ollama_project_id', project.id);
+      localStorage.setItem('9router_project_id', project.id);
       
       const newChatId = Date.now().toString();
       const userMessage: Message = {
@@ -1135,7 +1135,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
       console.log('[ProjectInit] Sending initialization chat message...');
       // Send the initialization message
-      const chatResponse = await fetch('/api/ollama/chat', {
+      const chatResponse = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

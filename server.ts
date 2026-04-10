@@ -663,7 +663,7 @@ async function startServer() {
       const git = simpleGit(paths.workspace);
       await git.init();
       await git.addConfig('user.name', username);
-      await git.addConfig('user.email', `${username}@ollama.web`);
+      await git.addConfig('user.email', `${username}@9router.web`);
       await fs.writeFile(path.join(paths.workspace, '.gitkeep'), '');
       await git.add('.');
       await git.commit('Initial project commit');
@@ -1026,30 +1026,6 @@ async function startServer() {
     }
   });
 
-  // API: Get error logs (legacy support)
-  app.get('/api/logs/errors', async (req, res) => {
-    try {
-      const data = await fs.readFile(SYSTEM_LOG_FILE, 'utf-8');
-      const entries = data.split(/(?=\[(?:DEBUG|ERROR|RELEASE)\])/);
-      const errorLogs = entries.filter(entry => entry.includes('[ERROR]')).slice(-50);
-      res.json({ logs: errorLogs });
-    } catch (error) {
-      res.status(500).json({ error: 'Không thể đọc nhật ký lỗi' });
-    }
-  });
-
-  // API: Get chat debug logs (legacy support)
-  app.get('/api/logs/chat-debug', async (req, res) => {
-    try {
-      const data = await fs.readFile(SYSTEM_LOG_FILE, 'utf-8');
-      const entries = data.split(/(?=\[(?:DEBUG|ERROR|RELEASE)\])/);
-      const debugLogs = entries.filter(entry => entry.includes('[CHAT_DEBUG]')).slice(-50);
-      res.json({ logs: debugLogs });
-    } catch (error) {
-      res.status(500).json({ error: 'Không thể đọc nhật ký gỡ lỗi chat' });
-    }
-  });
-
   // API: Get user role
   app.get('/api/user/role', async (req, res) => {
     const username = req.headers['x-username'] as string;
@@ -1128,151 +1104,6 @@ async function startServer() {
     }
   });
 
-  // API: Kill process
-  app.post('/api/system/processes/kill', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-
-    try {
-      const isUserAdmin = await isAdmin(username);
-      if (!isUserAdmin) {
-        return res.status(403).json({ error: 'Access denied. Only administrators can kill processes.' });
-      }
-
-      const { pid } = req.body;
-      if (!pid) return res.status(400).json({ error: 'PID is required' });
-      
-      // Using sudo to allow non-root users (like thompson) to kill processes if configured in sudoers
-      exec(`sudo kill -9 ${pid}`, (error, stdout, stderr) => {
-        if (error) {
-          logger.error(`Failed to kill process ${pid} for ${username}`, error);
-          return res.status(500).json({ error: error.message });
-        }
-        logger.release(`Process ${pid} killed by ${username}`);
-        res.json({ success: true });
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to kill process' });
-    }
-  });
-
-  // API: Get swap configuration
-  app.get('/api/system/swap/config', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    try {
-      // Allow all authenticated users to read swap config for monitoring
-      const [swappiness, swapDevices] = await Promise.all([
-        execAsync('cat /proc/sys/vm/swappiness').then(r => parseInt(r.stdout.trim())).catch(() => 60),
-        execAsync('swapon --show --bytes --noheadings').then(r => {
-          const lines = r.stdout.trim().split('\n').filter(l => l);
-          if (lines.length === 0) throw new Error('No swap devices from swapon');
-          return lines.map(line => {
-            const parts = line.split(/\s+/);
-            return {
-              name: parts[0],
-              type: parts[1],
-              size: parseInt(parts[2]),
-              used: parseInt(parts[3]),
-              priority: parseInt(parts[4])
-            };
-          });
-        }).catch(async () => {
-          // Fallback to /proc/swaps
-          try {
-            const swaps = await execAsync('cat /proc/swaps').then(r => r.stdout);
-            const lines = swaps.trim().split('\n').slice(1); // Skip header
-            return lines.map(line => {
-              const parts = line.split(/\s+/);
-              return {
-                name: parts[0],
-                type: parts[1],
-                size: parseInt(parts[2]) * 1024, // KB to Bytes
-                used: parseInt(parts[3]) * 1024, // KB to Bytes
-                priority: parseInt(parts[4])
-              };
-            });
-          } catch (e) {
-            return [];
-          }
-        })
-      ]);
-
-      res.json({ swappiness, swapDevices });
-    } catch (error) {
-      logger.error('Failed to get swap config', error);
-      res.status(500).json({ error: 'Failed to get swap config' });
-    }
-  });
-
-  // API: Set swappiness
-  app.post('/api/system/swap/swappiness', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    const { value } = req.body;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    if (typeof value !== 'number' || value < 0 || value > 100) return res.status(400).json({ error: 'Invalid swappiness value (0-100)' });
-
-    try {
-      const isUserAdmin = await isAdmin(username);
-      if (!isUserAdmin) return res.status(403).json({ error: 'Admin privileges required' });
-
-      await execAsync(`sudo sysctl vm.swappiness=${value}`);
-      res.json({ success: true, swappiness: value });
-    } catch (error: any) {
-      logger.error('Failed to set swappiness', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // API: Setup swap file
-  app.post('/api/system/swap/setup', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    const { sizeGB, path = '/swapfile' } = req.body;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    if (!sizeGB || sizeGB <= 0) return res.status(400).json({ error: 'Invalid swap size' });
-
-    try {
-      const isUserAdmin = await isAdmin(username);
-      if (!isUserAdmin) return res.status(403).json({ error: 'Admin privileges required' });
-
-      logger.release(`Setting up ${sizeGB}GB swap file at ${path} for ${username}...`);
-      
-      // Sequence of commands to create and enable swap
-      await execAsync(`sudo fallocate -l ${sizeGB}G ${path}`);
-      await execAsync(`sudo chmod 600 ${path}`);
-      await execAsync(`sudo mkswap ${path}`);
-      await execAsync(`sudo swapon ${path}`);
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      logger.error('Failed to setup swap', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // API: Remove swap file
-  app.post('/api/system/swap/remove', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    const { path } = req.body;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-    if (!path) return res.status(400).json({ error: 'Missing swap path' });
-
-    try {
-      const isUserAdmin = await isAdmin(username);
-      if (!isUserAdmin) return res.status(403).json({ error: 'Admin privileges required' });
-
-      logger.release(`Removing swap file at ${path} for ${username}...`);
-      
-      await execAsync(`sudo swapoff ${path}`);
-      await execAsync(`sudo rm ${path}`);
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      logger.error('Failed to remove swap', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // API: Get services
   app.get('/api/system/services', async (req, res) => {
     try {
@@ -1281,58 +1112,6 @@ async function startServer() {
     } catch (error) {
       logger.error('Failed to get services', error);
       res.status(500).json({ error: 'Failed to get services' });
-    }
-  });
-
-  // API: Control service
-  app.post('/api/system/services/control', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-
-    try {
-      const isUserAdmin = await isAdmin(username);
-      if (!isUserAdmin) {
-        return res.status(403).json({ error: 'Access denied. Only administrators can control services.' });
-      }
-
-      const { service, action } = req.body; // action: start, stop, restart
-      if (!service || !action) return res.status(400).json({ error: 'Service and action are required' });
-      
-      // Using sudo to allow non-root users (like thompson) to control services if configured in sudoers
-      exec(`sudo systemctl ${action} ${service}`, (error, stdout, stderr) => {
-        if (error) {
-          logger.error(`Failed to ${action} service ${service} for ${username}`, error);
-          return res.status(500).json({ error: error.message });
-        }
-        logger.release(`Service ${service} ${action}ed by ${username}`);
-        res.json({ success: true });
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to control service' });
-    }
-  });
-
-  // API: Shutdown
-  app.post('/api/system/shutdown', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-
-    try {
-      const isUserAdmin = await isAdmin(username);
-      if (!isUserAdmin) {
-        return res.status(403).json({ error: 'Access denied. Only administrators can shutdown the system.' });
-      }
-
-      logger.release(`System shutdown initiated by ${username}`);
-      exec('sudo shutdown +1', (error, stdout, stderr) => {
-        if (error) {
-          logger.error(`Failed to initiate shutdown for ${username}`, error);
-          return res.status(500).json({ error: error.message });
-        }
-        res.json({ success: true });
-      });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to initiate shutdown' });
     }
   });
 
@@ -1374,34 +1153,6 @@ async function startServer() {
     } catch (error) {
       logger.error('Lỗi thực thi terminal:', error);
       res.status(500).json({ error: 'Không thể thực thi lệnh' });
-    }
-  });
-
-  // API: Terminal completion
-  app.post('/api/system/terminal/complete', async (req, res) => {
-    const username = req.headers['x-username'] as string;
-    if (!username) return res.status(400).json({ error: 'Username header required' });
-
-    try {
-      const isUserAdmin = await isAdmin(username);
-      if (!isUserAdmin) return res.json({ suggestions: [] });
-
-      const { command } = req.body;
-      if (!command) return res.json({ suggestions: [] });
-      
-      // Basic completion using bash compgen
-      // We look at the last word of the command
-      const lastWord = command.split(' ').pop() || '';
-      // Use bash -c to run compgen. We include both files (-f) and commands (-c)
-      const cmd = `bash -c "compgen -f ${lastWord} && compgen -c ${lastWord}"`;
-      
-      exec(cmd, (error, stdout, stderr) => {
-        // Filter out empty strings and duplicates
-        const suggestions = Array.from(new Set(stdout.split('\n').map(s => s.trim()).filter(s => s !== ''))).slice(0, 20);
-        res.json({ suggestions });
-      });
-    } catch (error) {
-      res.json({ suggestions: [] });
     }
   });
 

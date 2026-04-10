@@ -89,7 +89,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [localAccounts, setLocalAccounts] = useState(aiAccounts);
   const [localActiveAccount, setLocalActiveAccount] = useState(activeAiAccount);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
-  const [isConfirmingShutdown, setIsConfirmingShutdown] = useState(false);
   
   const hasChanges = 
     localPrompt !== systemPrompt || 
@@ -134,30 +133,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const updateParam = (key: keyof ModelParameters, value: any) => {
     setLocalParameters(prev => ({ ...prev, [key]: value }));
-  };
-
-  const handleShutdown = async () => {
-    if (!isConfirmingShutdown) {
-      setIsConfirmingShutdown(true);
-      setTimeout(() => setIsConfirmingShutdown(false), 3000);
-      return;
-    }
-    try {
-      const res = await fetch('/api/system/shutdown', { 
-        method: 'POST',
-        headers: {
-          'x-username': username || ''
-        }
-      });
-      if (res.ok) {
-        toast.success('System will shut down in 1 minute.');
-      } else {
-        toast.error('Failed to initiate shutdown.');
-      }
-    } catch (e) {
-      toast.error('Error connecting to server.');
-    }
-    setIsConfirmingShutdown(false);
   };
 
   const tabs = [
@@ -424,29 +399,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
                 <p className="text-[11px] text-text-secondary leading-relaxed">
                   All AI processing and model management are now handled by the backend server for improved security and reliability when deployed on a VPS.
-                </p>
-              </div>
-
-              <div className="p-4 bg-red-500/10 rounded-xl border border-red-500/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
-                    <Power size={16} />
-                    System Power
-                  </div>
-                  <button
-                    onClick={handleShutdown}
-                    className={`text-xs font-bold px-4 py-2 rounded-lg transition-all shadow-sm flex items-center gap-2 ${
-                      isConfirmingShutdown 
-                        ? "bg-red-500 hover:bg-red-600 text-white" 
-                        : "bg-bg-secondary text-red-400 border border-red-500/20 hover:bg-red-500/10"
-                    }`}
-                  >
-                    <Power size={14} />
-                    {isConfirmingShutdown ? "Click to Confirm Shutdown" : "Shutdown Server (1 Min)"}
-                  </button>
-                </div>
-                <p className="text-[11px] text-text-secondary leading-relaxed">
-                  This will schedule a full system shutdown in 1 minute. Use this if you are running the application on a dedicated machine or VPS and want to power it off.
                 </p>
               </div>
 
