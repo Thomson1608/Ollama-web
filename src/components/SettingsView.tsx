@@ -9,7 +9,6 @@ import {
   Brain,
   Trash2,
   Save,
-  BarChart,
   Power,
   Activity,
   Cpu,
@@ -22,7 +21,6 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectionStatus, Memory, ModelParameters } from '../types';
-import { StatsView } from './StatsView';
 import { MemoryEditor } from './MemoryEditor';
 import { SystemControl } from './SystemControl';
 import { SystemLogView } from './SystemLogView';
@@ -54,7 +52,7 @@ interface SettingsViewProps {
   setTheme: (theme: 'dark' | 'light' | 'system') => void;
 }
 
-type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'stats' | 'logs';
+type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'logs';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   systemPrompt,
@@ -140,7 +138,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { id: 'memory', label: 'Long-term Memory', icon: Brain },
     { id: 'prompt', label: 'System Prompt', icon: UserCircle },
     { id: 'model', label: 'Model Defaults', icon: Cpu },
-    { id: 'stats', label: 'Chat Statistics', icon: BarChart },
     { id: 'logs', label: 'System Logs', icon: Terminal },
   ] as const;
 
@@ -593,12 +590,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   )} />
                 </button>
               </div>
-            </div>
-          )}
-
-          {activeTab === 'stats' && (
-            <div className="bg-bg-secondary rounded-3xl border border-border-primary shadow-sm overflow-hidden">
-              <StatsView />
             </div>
           )}
 
