@@ -43,13 +43,14 @@ interface ChatViewProps {
   handleSendMessage: (e?: React.FormEvent, isRetry?: boolean, image?: string | null) => void;
   createNewChat: () => void;
   connectionStatus: ConnectionStatus;
+  generationStatus?: string;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   onUpdateSystemPrompt: (prompt: string) => void;
   username?: string | null;
   projectId?: string | null;
 }
 
-const ThoughtBlock = ({ children }: { children: React.ReactNode }) => {
+const ThoughtBlock = ({ children, isStreaming }: { children: React.ReactNode, isStreaming?: boolean }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   
   return (
@@ -59,7 +60,11 @@ const ThoughtBlock = ({ children }: { children: React.ReactNode }) => {
         className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-bold text-accent-primary uppercase tracking-widest hover:bg-bg-tertiary transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Cpu size={14} className={cn(isExpanded && "animate-pulse")} />
+          {isStreaming ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <Cpu size={14} />
+          )}
           <span>Thinking Process</span>
         </div>
         <ChevronDown size={14} className={cn("transition-transform duration-300", isExpanded && "rotate-180")} />
@@ -70,7 +75,7 @@ const ThoughtBlock = ({ children }: { children: React.ReactNode }) => {
         className="overflow-hidden"
       >
         <div className="px-4 pb-4 text-xs text-text-primary/80 italic leading-relaxed border-t border-border-primary pt-2">
-          {children}
+          {children || (isStreaming && <span className="animate-pulse">Analyzing request...</span>)}
         </div>
       </motion.div>
     </div>
@@ -212,6 +217,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
   handleSendMessage,
   createNewChat,
   connectionStatus,
+  generationStatus,
   messagesEndRef,
   onUpdateSystemPrompt,
   username,
@@ -349,7 +355,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
     return parts.map((part, i) => {
       if (part.startsWith('<thought>') && part.endsWith('</thought>')) {
         const thought = part.match(/<thought>([\s\S]*?)<\/thought>/)?.[1] || '';
-        return <ThoughtBlock key={i}>{thought}</ThoughtBlock>;
+        return <ThoughtBlock key={i} isStreaming={isStreaming && i === parts.length - 1}>{thought}</ThoughtBlock>;
       }
 
       if (part.startsWith('<tool_call>') && part.endsWith('</tool_call>')) {
@@ -370,7 +376,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       // Handle incomplete tags during streaming
       if (part.includes('<thought>') && !part.includes('</thought>')) {
         const thought = part.split('<thought>')[1];
-        return <ThoughtBlock key={i}>{thought}</ThoughtBlock>;
+        return <ThoughtBlock key={i} isStreaming={isStreaming}>{thought}</ThoughtBlock>;
       }
 
       if (part.includes('<tool_call>') && !part.includes('</tool_call>')) {
@@ -629,15 +635,25 @@ export const ChatView: React.FC<ChatViewProps> = ({
             ))}
             {(isLoading || isAiTypingGlobally) && (
               <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-accent-primary text-white animate-pulse">
-                  <Cpu size={16} />
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-accent-primary text-white">
+                  <Loader2 size={16} className="animate-spin" />
                 </div>
-                <div className="bg-bg-secondary border border-border-primary p-4 rounded-2xl">
-                  <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-accent-primary rounded-full animate-bounce" />
-                    <div className="w-1.5 h-1.5 bg-accent-primary rounded-full animate-bounce [animation-delay:0.2s]" />
-                    <div className="w-1.5 h-1.5 bg-accent-primary rounded-full animate-bounce [animation-delay:0.4s]" />
+                <div className="bg-bg-secondary border border-border-primary p-4 rounded-2xl flex flex-col gap-2 min-w-[200px]">
+                  <div className="flex items-center gap-2 text-xs font-medium text-text-primary">
+                    <Globe size={14} className="text-accent-primary animate-pulse" />
+                    <span>{generationStatus || 'Waiting for 9Router response...'}</span>
                   </div>
+                  <div className="h-1 w-full bg-bg-tertiary rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ x: '-100%' }}
+                      animate={{ x: '100%' }}
+                      transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                      className="h-full w-1/2 bg-accent-primary"
+                    />
+                  </div>
+                  <p className="text-[10px] text-text-secondary italic">
+                    Connecting to local AI proxy...
+                  </p>
                 </div>
               </div>
             )}

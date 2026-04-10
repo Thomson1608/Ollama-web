@@ -171,6 +171,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [currentView, setCurrentView] = useState<ViewType>(() => (localStorage.getItem('ollama_current_view') as ViewType) || 'chat');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [generationStatus, setGenerationStatus] = useState<string>('');
   const [generatingChatIds, setGeneratingChatIds] = useState<Set<string>>(new Set());
   const [models, setModels] = useState<AIModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ollama_selected_model') || '');
@@ -950,6 +951,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
     }
     
     setIsLoading(true);
+    setGenerationStatus('Initializing connection...');
+    
     if (currentChatId) {
       setGeneratingChatIds(prev => {
         const next = new Set(prev);
@@ -963,7 +966,16 @@ If the user asks you to write code, you should provide it in a markdown code blo
     // Create new abort controller for this chat
     chatAbortController.current = new AbortController();
 
+    const statusTimer = setTimeout(() => {
+      setGenerationStatus('Connection is taking longer than expected. Still waiting...');
+    }, 5000);
+
+    const longWaitTimer = setTimeout(() => {
+      setGenerationStatus('9Router is processing. This might take a while for large models...');
+    }, 15000);
+
     try {
+      setGenerationStatus('Sending request to 9Router...');
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 
@@ -1003,6 +1015,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
       // We just wait for the request to complete. 
       // Socket.io handles all the UI updates (messages, typing status).
+      setGenerationStatus('Receiving response...');
       await response.text();
       
     } catch (error: any) {
@@ -1021,7 +1034,10 @@ If the user asks you to write code, you should provide it in a markdown code blo
       }
       console.error(error);
     } finally {
+      clearTimeout(statusTimer);
+      clearTimeout(longWaitTimer);
       setIsLoading(false);
+      setGenerationStatus('');
       if (currentChatId) {
         setGeneratingChatIds(prev => {
           const next = new Set(prev);
@@ -1232,6 +1248,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     handleSendMessage={handleSendMessage}
                     createNewChat={createNewChat}
                     connectionStatus={connectionStatus}
+                    generationStatus={generationStatus}
                     messagesEndRef={messagesEndRef}
                     onUpdateSystemPrompt={(prompt) => activeChatId && updateChatSystemPrompt(activeChatId, prompt)}
                     username={username}
