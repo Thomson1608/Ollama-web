@@ -1010,6 +1010,58 @@ async function startServer() {
     }
   });
 
+  // API: Tailscale Up
+  app.post('/api/system/tailscale/up', async (req, res) => {
+    try {
+      const { authKey, hostname, ephemeral, extraArgs, controlUrl, tags } = req.body;
+      
+      let command = 'tailscale up';
+      if (authKey) command += ` --authkey=${authKey}`;
+      if (hostname) command += ` --hostname=${hostname}`;
+      if (ephemeral) command += ` --ephemeral`;
+      if (controlUrl) command += ` --login-server=${controlUrl}`;
+      if (tags && tags.length > 0) command += ` --advertise-tags=${tags.join(',')}`;
+      if (extraArgs) command += ` ${extraArgs}`;
+
+      const maskedCommand = authKey ? command.replace(authKey, '***') : command;
+      logger.release(`Tailscale: Executing command: ${maskedCommand}`);
+      
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      try {
+        const { stdout, stderr } = await execAsync(command);
+        logger.release(`Tailscale: Success. stdout: ${stdout}`);
+        if (stderr) logger.error(`Tailscale: stderr: ${stderr}`);
+        res.json({ success: true, stdout, stderr });
+      } catch (error: any) {
+        logger.error(`Tailscale: Error executing command: ${error.message}`);
+        res.status(500).json({ error: error.message, stderr: error.stderr });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API: Tailscale Status
+  app.get('/api/system/tailscale/status', async (req, res) => {
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execAsync = promisify(exec);
+
+      try {
+        const { stdout } = await execAsync('tailscale status --json');
+        res.json(JSON.parse(stdout));
+      } catch (error: any) {
+        res.status(500).json({ error: error.message });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // API: Clear logs
   app.delete('/api/logs', async (req, res) => {
     try {

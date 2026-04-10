@@ -19,7 +19,7 @@ import {
   Group, 
   Separator 
 } from 'react-resizable-panels';
-import { Chat, Message, AIModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
+import { Chat, Message, AIModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project, TailscaleConfig } from './types';
 import { cn } from './lib/utils';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -166,6 +166,22 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [memory, setMemory] = useState<Memory>({ facts: [] });
   const [isSyncing, setIsSyncing] = useState(false);
   const [projectType, setProjectType] = useState<'research' | 'coding'>('coding');
+  const [tailscaleConfig, setTailscaleConfig] = useState<TailscaleConfig>(() => {
+    const saved = localStorage.getItem('tailscale_config');
+    return saved ? JSON.parse(saved) : {
+      authKey: '',
+      hostname: '',
+      ephemeral: false,
+      extraArgs: '',
+      controlUrl: '',
+      tags: []
+    };
+  });
+
+  // Sync Tailscale config to localStorage
+  useEffect(() => {
+    localStorage.setItem('tailscale_config', JSON.stringify(tailscaleConfig));
+  }, [tailscaleConfig]);
 
   // Load project type on mount or when projectId changes
   useEffect(() => {
@@ -1417,6 +1433,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     username={username}
                     theme={theme}
                     setTheme={setTheme}
+                    tailscale={tailscaleConfig}
+                    setTailscale={setTailscaleConfig}
                   />
                 )}
               </>

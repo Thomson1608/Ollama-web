@@ -17,10 +17,11 @@ import {
   Sun,
   Moon,
   Monitor,
-  Network
+  Network,
+  Shield
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { ConnectionStatus, Memory, ModelParameters } from '../types';
+import { ConnectionStatus, Memory, ModelParameters, TailscaleConfig } from '../types';
 import { MemoryEditor } from './MemoryEditor';
 import { SystemControl } from './SystemControl';
 import { SystemLogView } from './SystemLogView';
@@ -50,9 +51,11 @@ interface SettingsViewProps {
   username?: string | null;
   theme: 'dark' | 'light' | 'system';
   setTheme: (theme: 'dark' | 'light' | 'system') => void;
+  tailscale: TailscaleConfig;
+  setTailscale: (config: TailscaleConfig) => void;
 }
 
-type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'logs';
+type TabType = 'general' | 'memory' | 'prompt' | 'model' | 'logs' | 'tailscale';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   systemPrompt,
@@ -76,7 +79,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   connectionStatus,
   username,
   theme,
-  setTheme
+  setTheme,
+  tailscale,
+  setTailscale
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const [localPrompt, setLocalPrompt] = useState(systemPrompt);
@@ -87,6 +92,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [localAccounts, setLocalAccounts] = useState(aiAccounts);
   const [localActiveAccount, setLocalActiveAccount] = useState(activeAiAccount);
   const [localMemory, setLocalMemory] = useState<string[]>(memory.facts);
+  const [localTailscale, setLocalTailscale] = useState<TailscaleConfig>(tailscale);
   
   const hasChanges = 
     localPrompt !== systemPrompt || 
@@ -96,7 +102,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     JSON.stringify(localAccounts) !== JSON.stringify(aiAccounts) ||
     localActiveAccount !== activeAiAccount ||
     JSON.stringify(localMemory) !== JSON.stringify(memory.facts) ||
-    JSON.stringify(localParameters) !== JSON.stringify(parameters);
+    JSON.stringify(localParameters) !== JSON.stringify(parameters) ||
+    JSON.stringify(localTailscale) !== JSON.stringify(tailscale);
 
   // Update local state if parent state changes
   useEffect(() => {
@@ -108,7 +115,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLocalRouterApiKey(routerApiKey);
     setLocalAccounts(aiAccounts);
     setLocalActiveAccount(activeAiAccount);
-  }, [systemPrompt, memory, parameters, use9Router, routerUrl, routerApiKey, aiAccounts, activeAiAccount]);
+    setLocalTailscale(tailscale);
+  }, [systemPrompt, memory, parameters, use9Router, routerUrl, routerApiKey, aiAccounts, activeAiAccount, tailscale]);
 
   const handleSave = () => {
     setSystemPrompt(localPrompt);
@@ -118,6 +126,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setRouterApiKey(localRouterApiKey);
     setAiAccounts(localAccounts);
     setActiveAiAccount(localActiveAccount);
+    setTailscale(localTailscale);
     // Update memory via API
     fetch('/api/memory', {
       method: 'POST',
@@ -133,8 +142,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLocalParameters(prev => ({ ...prev, [key]: value }));
   };
 
+  const updateTailscale = (key: keyof TailscaleConfig, value: any) => {
+    setLocalTailscale(prev => ({ ...prev, [key]: value }));
+  };
+
   const tabs = [
     { id: 'general', label: 'General Setting', icon: Globe },
+    { id: 'tailscale', label: 'Tailscale', icon: Shield },
     { id: 'memory', label: 'Long-term Memory', icon: Brain },
     { id: 'prompt', label: 'System Prompt', icon: UserCircle },
     { id: 'model', label: 'Model Defaults', icon: Cpu },
@@ -407,6 +421,140 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <h3 className="text-lg font-bold text-text-primary">System Control & Monitoring</h3>
                 </div>
                 <SystemControl username={username} />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'tailscale' && (
+            <div className="bg-bg-secondary p-6 rounded-xl border border-border-primary shadow-sm space-y-8 flex flex-col">
+              <div className="space-y-4 flex-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-bold text-text-primary flex items-center gap-2">
+                    <Shield size={16} className="text-accent-primary" />
+                    Tailscale Configuration
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-text-secondary bg-bg-tertiary px-2 py-0.5 rounded-full border border-border-primary">
+                      <Activity size={10} />
+                      NETWORK SETTINGS
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-xs text-text-secondary leading-relaxed">
+                  Configure Tailscale for secure networking. This allows your AI to communicate with other devices in your Tailnet.
+                </p>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-text-secondary">Auth Key</label>
+                    <input 
+                      type="password"
+                      value={localTailscale.authKey || ''}
+                      onChange={(e) => updateTailscale('authKey', e.target.value)}
+                      placeholder="tskey-auth-..."
+                      className="w-full bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                    />
+                    <p className="text-[10px] text-text-secondary">Your Tailscale auth key (reusable or one-time).</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-text-secondary">Hostname</label>
+                      <input 
+                        type="text"
+                        value={localTailscale.hostname || ''}
+                        onChange={(e) => updateTailscale('hostname', e.target.value)}
+                        placeholder="ai-studio-vps"
+                        className="w-full bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-text-secondary">Control URL (Optional)</label>
+                      <input 
+                        type="text"
+                        value={localTailscale.controlUrl || ''}
+                        onChange={(e) => updateTailscale('controlUrl', e.target.value)}
+                        placeholder="https://controlplane.tailscale.com"
+                        className="w-full bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-bg-tertiary rounded-xl border border-border-primary">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-bg-primary rounded-xl flex items-center justify-center text-accent-primary shadow-sm">
+                        <Power size={20} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-text-primary">Ephemeral Node</h4>
+                        <p className="text-[10px] text-text-secondary">Automatically remove node when it goes offline</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => updateTailscale('ephemeral', !localTailscale.ephemeral)}
+                      className={cn(
+                        "w-10 h-5 rounded-full transition-all relative",
+                        localTailscale.ephemeral ? "bg-accent-primary" : "bg-bg-tertiary border border-border-primary"
+                      )}
+                    >
+                      <div className={cn(
+                        "absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all",
+                        localTailscale.ephemeral ? "left-5" : "left-0.5"
+                      )} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-text-secondary">Extra Arguments</label>
+                    <input 
+                      type="text"
+                      value={localTailscale.extraArgs || ''}
+                      onChange={(e) => updateTailscale('extraArgs', e.target.value)}
+                      placeholder="--advertise-exit-node --accept-routes"
+                      className="w-full bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                    />
+                    <p className="text-[10px] text-text-secondary">Additional flags for the Tailscale up command.</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-text-secondary">Tags (Comma separated)</label>
+                    <input 
+                      type="text"
+                      value={localTailscale.tags?.join(', ') || ''}
+                      onChange={(e) => updateTailscale('tags', e.target.value.split(',').map(t => t.trim()).filter(t => t))}
+                      placeholder="tag:server, tag:ai"
+                      className="w-full bg-bg-primary border border-border-primary rounded-lg px-3 py-2 text-sm text-text-primary focus:ring-2 focus:ring-accent-primary/20 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-border-primary">
+                  <button 
+                    className="w-full bg-accent-primary text-white py-3 rounded-xl font-bold hover:bg-accent-primary/90 transition-all shadow-lg shadow-accent-primary/20 flex items-center justify-center gap-2"
+                    onClick={async () => {
+                      try {
+                        toast.loading('Applying Tailscale configuration...');
+                        const res = await fetch('/api/system/tailscale/up', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify(localTailscale)
+                        });
+                        if (res.ok) {
+                          toast.success('Tailscale configuration applied successfully!');
+                        } else {
+                          const err = await res.json();
+                          toast.error(`Failed to apply Tailscale: ${err.error || 'Unknown error'}`);
+                        }
+                      } catch (e) {
+                        toast.error('Error communicating with server.');
+                      }
+                    }}
+                  >
+                    <Activity size={18} />
+                    Apply & Connect
+                  </button>
+                </div>
               </div>
             </div>
           )}

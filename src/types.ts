@@ -56,9 +56,19 @@ export interface Memory {
   facts: string[];
 }
 
+export interface TailscaleConfig {
+  authKey?: string;
+  hostname?: string;
+  ephemeral?: boolean;
+  extraArgs?: string;
+  controlUrl?: string;
+  tags?: string[];
+}
+
 export interface Config {
   systemPrompt: string;
   parameters: ModelParameters;
+  tailscale?: TailscaleConfig;
 }
 
 export interface WorkspaceFile {
