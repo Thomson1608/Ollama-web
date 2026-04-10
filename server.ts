@@ -1927,33 +1927,58 @@ async function startServer() {
 
   app.get('/api/ai/models', async (req, res) => {
     try {
-      const modelsUrl = ROUTER_URL.includes('/chat/completions') 
-        ? ROUTER_URL.replace('/chat/completions', '/models')
-        : (ROUTER_URL.endsWith('/') ? ROUTER_URL + 'models' : ROUTER_URL + '/models');
+      const testUrl = req.query.url as string;
+      const testKey = req.query.key as string;
+      
+      const baseUrl = testUrl || ROUTER_URL;
+      const apiKey = testKey || ROUTER_API_KEY;
 
-      logger.debug(`AI Proxy: Fetching models from ${modelsUrl}`);
+      let modelsUrl = baseUrl.includes('/chat/completions') 
+        ? baseUrl.replace('/chat/completions', '/models')
+        : (baseUrl.endsWith('/') ? baseUrl + 'models' : baseUrl + '/models');
+      
+      // If it's a local URL and doesn't have /v1, try adding it if it fails
+      // But for now let's stick to the provided URL
+      
+      logger.debug(`AI Proxy: Fetching models from ${modelsUrl} (using ${testUrl ? 'test params' : 'global config'})`);
+      
       const response = await fetch(modelsUrl, {
         headers: {
-          'Authorization': `Bearer ${ROUTER_API_KEY}`
+          'Authorization': `Bearer ${apiKey}`
         }
       }).catch(err => {
         throw new Error(`Connection failed: ${err.message}`);
       });
+
       if (!response.ok) {
-        throw new Error(`AI Proxy returned ${response.status}: ${await response.text()}`);
+        const errorText = await response.text();
+        logger.error(`AI Proxy error ${response.status}: ${errorText}`);
+        throw new Error(`AI Proxy returned ${response.status}: ${errorText}`);
       }
+
       const data = await response.json();
       // Map OpenAI format to generic format
-      const models = (data.data || []).map((m: any) => ({
-        name: m.id,
-        model: m.id,
-        details: { family: 'ai-proxy' }
-      }));
+      let models = [];
+      if (Array.isArray(data.data)) {
+        models = data.data.map((m: any) => ({
+          name: m.id,
+          model: m.id,
+          details: { family: 'ai-proxy' }
+        }));
+      } else if (Array.isArray(data)) {
+        // Some local proxies return a simple array
+        models = data.map((m: any) => ({
+          name: typeof m === 'string' ? m : (m.id || m.name),
+          model: typeof m === 'string' ? m : (m.id || m.name),
+          details: { family: 'ai-proxy' }
+        }));
+      }
+
       logger.debug('AI Proxy: Models fetched successfully', { count: models.length });
       return res.json({ models });
     } catch (error) {
       logger.error('Proxy Error: Models fetch failed', error);
-      res.status(500).json({ error: 'Failed to fetch models' });
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to fetch models' });
     }
   });
 

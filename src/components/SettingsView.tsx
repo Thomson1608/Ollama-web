@@ -268,11 +268,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     <button 
                       className="bg-bg-tertiary border border-border-primary text-text-primary px-3 py-2 rounded-lg text-sm font-medium hover:bg-bg-secondary"
                       onClick={async () => {
-                        // Logic test connection
                         const activeAccount = localAccounts.find(a => a.name === localActiveAccount);
                         if (activeAccount) {
-                          // Call backend to test connection
-                          console.log('Testing connection for:', activeAccount.name);
+                          try {
+                            const params = new URLSearchParams();
+                            if (localRouterUrl) params.append('url', localRouterUrl);
+                            params.append('key', activeAccount.apiKey);
+                            
+                            const res = await fetch(`/api/ai/models?${params.toString()}`, {
+                              headers: { 'x-username': username || '' }
+                            });
+                            if (res.ok) {
+                              toast.success(`Successfully connected with account: ${activeAccount.name}`);
+                            } else {
+                              const errData = await res.json();
+                              toast.error(`Failed to connect: ${errData.error || 'Unknown error'}`);
+                            }
+                          } catch (e) {
+                            toast.error('Error connecting to server.');
+                          }
+                        } else {
+                          toast.error('Please select an account to test.');
                         }
                       }}
                     >
@@ -332,13 +348,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             className="bg-bg-tertiary border border-border-primary text-text-primary px-3 py-2 rounded-lg text-sm font-medium hover:bg-bg-secondary"
                             onClick={async () => {
                               try {
-                                const res = await fetch('/api/ai/models', {
+                                const params = new URLSearchParams();
+                                if (localRouterUrl) params.append('url', localRouterUrl);
+                                if (localRouterApiKey) params.append('key', localRouterApiKey);
+                                
+                                const res = await fetch(`/api/ai/models?${params.toString()}`, {
                                   headers: { 'x-username': username || '' }
                                 });
                                 if (res.ok) {
                                   toast.success('Successfully connected to AI Proxy!');
                                 } else {
-                                  toast.error('Failed to connect to AI Proxy. Please check your URL and API Key.');
+                                  const errData = await res.json();
+                                  toast.error(`Failed to connect: ${errData.error || 'Unknown error'}`);
                                 }
                               } catch (e) {
                                 toast.error('Error connecting to server.');
