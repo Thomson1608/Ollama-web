@@ -416,18 +416,27 @@ If the user asks you to write code, you should provide it in a markdown code blo
           return [newChat, ...prev];
         }
 
-        return prev.map(c => 
-          c.id === chatId 
-            ? { 
-                ...c, 
-                messages: c.messages.map((m, idx) => 
-                  (m.role === 'assistant' && idx === c.messages.length - 1) 
-                    ? { ...m, content: m.content + chunk } 
-                    : m
-                ) 
+        return prev.map(c => {
+          if (c.id === chatId) {
+            const updatedMessages = c.messages.map((m, idx) => {
+              if (m.role === 'assistant' && idx === c.messages.length - 1) {
+                const newContent = m.content + chunk;
+                
+                // Update generation status based on content
+                if (newContent.includes('<thought>') && !newContent.includes('</thought>')) {
+                  setGenerationStatus('Model is thinking...');
+                } else if (newContent.includes('</thought>') && newContent.lastIndexOf('</thought>') > newContent.lastIndexOf('<thought>')) {
+                  setGenerationStatus('Model is responding...');
+                }
+
+                return { ...m, content: newContent };
               }
-            : c
-        );
+              return m;
+            });
+            return { ...c, messages: updatedMessages };
+          }
+          return c;
+        });
       });
     });
 

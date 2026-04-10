@@ -22,7 +22,8 @@ import {
   Copy,
   Check,
   Sparkles,
-  MousePointer2
+  MousePointer2,
+  Brain
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
@@ -75,7 +76,16 @@ const ThoughtBlock = ({ children, isStreaming }: { children: React.ReactNode, is
         className="overflow-hidden"
       >
         <div className="px-4 pb-4 text-xs text-text-primary/80 italic leading-relaxed border-t border-border-primary pt-2">
-          {children || (isStreaming && <span className="animate-pulse">Analyzing request...</span>)}
+          {children || (isStreaming && (
+            <div className="flex items-center gap-2 py-1">
+              <div className="flex gap-1">
+                <div className="w-1 h-1 bg-accent-primary rounded-full animate-bounce" />
+                <div className="w-1 h-1 bg-accent-primary rounded-full animate-bounce [animation-delay:0.2s]" />
+                <div className="w-1 h-1 bg-accent-primary rounded-full animate-bounce [animation-delay:0.4s]" />
+              </div>
+              <span className="animate-pulse text-accent-primary font-medium">Deep reasoning in progress...</span>
+            </div>
+          ))}
         </div>
       </motion.div>
     </div>
@@ -230,6 +240,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isLastMessageThinking = activeChat?.messages[activeChat.messages.length - 1]?.role === 'assistant' && 
+    activeChat.messages[activeChat.messages.length - 1].content.includes('<thought>') && 
+    !activeChat.messages[activeChat.messages.length - 1].content.includes('</thought>');
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -375,8 +389,23 @@ export const ChatView: React.FC<ChatViewProps> = ({
       
       // Handle incomplete tags during streaming
       if (part.includes('<thought>') && !part.includes('</thought>')) {
-        const thought = part.split('<thought>')[1];
-        return <ThoughtBlock key={i} isStreaming={isStreaming}>{thought}</ThoughtBlock>;
+        const [textBefore, thought] = part.split('<thought>');
+        return (
+          <React.Fragment key={i}>
+            {textBefore && (
+              <Markdown
+                components={{
+                  code({ node, className, children, ...props }: any) {
+                    return <code className={className} {...props}>{children}</code>;
+                  }
+                }}
+              >
+                {textBefore}
+              </Markdown>
+            )}
+            <ThoughtBlock key={`${i}-thought`} isStreaming={isStreaming}>{thought}</ThoughtBlock>
+          </React.Fragment>
+        );
       }
 
       if (part.includes('<tool_call>') && !part.includes('</tool_call>')) {
@@ -640,8 +669,16 @@ export const ChatView: React.FC<ChatViewProps> = ({
                 </div>
                 <div className="bg-bg-secondary border border-border-primary p-4 rounded-2xl flex flex-col gap-2 min-w-[200px]">
                   <div className="flex items-center gap-2 text-xs font-medium text-text-primary">
-                    <Globe size={14} className="text-accent-primary animate-pulse" />
-                    <span>{generationStatus || 'Waiting for 9Router response...'}</span>
+                    {isLastMessageThinking ? (
+                      <Brain size={14} className="text-accent-primary animate-pulse" />
+                    ) : (
+                      <Globe size={14} className="text-accent-primary animate-pulse" />
+                    )}
+                    <span>
+                      {isLastMessageThinking 
+                        ? 'Model is thinking...' 
+                        : (generationStatus || 'Waiting for 9Router response...')}
+                    </span>
                   </div>
                   <div className="h-1 w-full bg-bg-tertiary rounded-full overflow-hidden">
                     <motion.div 
