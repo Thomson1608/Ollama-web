@@ -32,26 +32,12 @@ export interface Chat {
 
 export interface AIModel {
   name: string;
-  modified_at: string;
-  size: number;
-  digest: string;
-  details: {
-    format: string;
-    family: string;
-    families: string[] | null;
-    parameter_size: string;
-    quantization_level: string;
-  };
-}
-
-export interface ActiveModel {
-  name: string;
   model: string;
-  size: number;
-  digest: string;
-  details: any;
-  expires_at: string;
-  size_vram: number;
+  details?: {
+    family?: string;
+    parameter_size?: string;
+    quantization_level?: string;
+  };
 }
 
 export interface Project {
@@ -62,7 +48,7 @@ export interface Project {
   lastPackageJsonHash?: string;
 }
 
-export type ViewType = 'chat' | 'models' | 'pull' | 'workspace' | 'settings' | 'project-init' | 'project-list';
+export type ViewType = 'chat' | 'workspace' | 'settings' | 'project-init' | 'project-list';
 export type ConnectionStatus = 'connected' | 'disconnected' | 'checking';
 
 export interface Memory {

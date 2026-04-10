@@ -1916,15 +1916,6 @@ async function startServer() {
 
   // --- AI Proxy Endpoints ---
 
-  // Stop model
-  app.post('/api/ai/stop', async (req, res) => {
-    const { model } = req.body;
-    if (!model) return res.status(400).json({ error: 'Model name required' });
-
-    logger.release(`AI Proxy: Stop model ${model} ignored (not applicable for this proxy)`);
-    return res.json({ status: 'success', message: `Model ${model} stopped (simulated)` });
-  });
-
   app.get('/api/ai/models', async (req, res) => {
     try {
       const testUrl = req.query.url as string;
@@ -1979,16 +1970,6 @@ async function startServer() {
     } catch (error) {
       logger.error('Proxy Error: Models fetch failed', error);
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to fetch models' });
-    }
-  });
-
-  // List active models
-  app.get('/api/ai/active', async (req, res) => {
-    try {
-      return res.json({ models: [] });
-    } catch (error) {
-      logger.error('AI Active Models Error:', error);
-      res.status(500).json({ error: 'Failed to fetch active models' });
     }
   });
 
@@ -2357,26 +2338,6 @@ async function startServer() {
       await updateStats('fail');
       io.emit(`chat:status:${username}`, { loading: false, chatId });
       res.status(500).json({ error: 'Failed to communicate with AI Proxy' });
-    }
-  });
-
-  // Pull model with streaming
-  app.post('/api/ai/pull', async (req, res) => {
-    try {
-      return res.json({ status: 'success' });
-    } catch (error) {
-      logger.error('AI Pull Error:', error);
-      res.status(500).json({ error: 'Failed to pull model' });
-    }
-  });
-
-  // Delete model
-  app.delete('/api/ai/delete', async (req, res) => {
-    try {
-      return res.json({ status: 'success' });
-    } catch (error) {
-      logger.error('AI Delete Error:', error);
-      res.status(500).json({ error: 'Failed to delete model' });
     }
   });
 

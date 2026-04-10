@@ -9,8 +9,6 @@ import { io, Socket } from 'socket.io-client';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { ChatView } from './components/ChatView';
-import { ModelsView } from './components/ModelsView';
-import { PullView } from './components/PullView';
 import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
 import { LoginView } from './components/LoginView';
@@ -21,7 +19,7 @@ import {
   Group, 
   Separator 
 } from 'react-resizable-panels';
-import { Chat, Message, AIModel, ActiveModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
+import { Chat, Message, AIModel, ViewType, ConnectionStatus, Memory, ToolCall, ModelParameters, Project } from './types';
 import { cn } from './lib/utils';
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: Error | null }> {
@@ -174,47 +172,14 @@ If the user asks you to write code, you should provide it in a markdown code blo
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [generatingChatIds, setGeneratingChatIds] = useState<Set<string>>(new Set());
-  const [pullingModel, setPullingModel] = useState<{ name: string; progress: number; status: string } | null>(null);
   const [models, setModels] = useState<AIModel[]>([]);
-  const [runningModels, setRunningModels] = useState<ActiveModel[]>([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ollama_selected_model') || '');
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('checking');
-  const [newModelName, setNewModelName] = useState('');
-  const [modelSearchQuery, setModelSearchQuery] = useState('');
-  const [isStoppingModel, setIsStoppingModel] = useState<string | null>(null);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [workspaceRefreshTrigger, setWorkspaceRefreshTrigger] = useState(0);
-  const [modelFilter, setModelFilter] = useState<'local' | 'cloud-local'>('local');
-
-  const allAIModels = [
-    'llama3.2', 'llama3.1', 'llama3', 'llama2', 'mistral', 'mistral-nemo', 'mixtral',
-    'phi3', 'phi3.5', 'gemma2', 'gemma', 'qwen2.5', 'qwen2', 'deepseek-v2', 'deepseek-coder',
-    'codellama', 'llava', 'dolphin-mistral', 'dolphin-llama3', 'orca-mini', 'vicuna',
-    'tinydolphin', 'openhermes', 'starcoder2', 'stable-code', 'medllama2', 'wizard-vicuna',
-    'sqlcoder', 'nous-hermes2', 'stable-beluga', 'yarn-llama2', 'command-r', 'command-r-plus',
-    'nomic-embed-text', 'mxbai-embed-large', 'all-minilm', 'snowflake-arctic-embed',
-    'moondream', 'bakllava', 'tinyllama', 'stable-diffusion', 'stable-video-diffusion'
-  ];
-
-  const popularModels = [
-    { name: 'llama3.2', description: 'Lightweight and efficient', type: 'local' },
-    { name: 'llama3.1', description: 'Most capable open model', type: 'local' },
-    { name: 'mistral', description: 'High performance 7B model', type: 'local' },
-    { name: 'phi3', description: 'Microsoft\'s efficient small model', type: 'local' },
-    { name: 'gemma2', description: 'Google\'s lightweight open model', type: 'local' },
-    { name: 'qwen2.5', description: 'Alibaba\'s powerful language model', type: 'local' },
-    { name: 'deepseek-v2', description: 'Strong reasoning and coding model', type: 'local' },
-    { name: 'codellama', description: 'Specialized for code generation', type: 'local' },
-    { name: 'claude-3-5-sonnet-20240620', description: 'Anthropic\'s most intelligent model', type: 'cloud' },
-    { name: 'claude-3-opus-20240229', description: 'Anthropic\'s most powerful model', type: 'cloud' },
-    { name: 'claude-3-haiku-20240307', description: 'Anthropic\'s fastest model', type: 'cloud' },
-  ];
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const pullAbortController = useRef<AbortController | null>(null);
   const chatAbortController = useRef<AbortController | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const lastUserMessageRef = useRef<string>('');
@@ -538,19 +503,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
       setWorkspaceRefreshTrigger(prev => prev + 1);
     });
 
-    socket.on('ai:pull:progress', (data) => {
-      if (data.status) {
-        const progress = data.completed && data.total ? (data.completed / data.total) * 100 : 0;
-        setPullingModel({ name: data.name, status: data.status, progress });
-        
-        if (data.status === 'success') {
-          toast.success(`Model ${data.name} updated successfully!`);
-          setPullingModel(null);
-          checkConnection();
-        }
-      }
-    });
-
     return () => {
       console.log('Socket.io: Disconnecting client...');
       socket.disconnect();
@@ -637,18 +589,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
     fetchInitialData();
   }, [username]);
 
-  const fetchRunningModels = async () => {
-    try {
-      const response = await fetch('/api/ai/active');
-      if (response.ok) {
-        const data = await response.json();
-        setRunningModels(data.models || []);
-      }
-    } catch (error) {
-      // Silently fail for background polling
-    }
-  };
-
   const checkConnection = async (testUrl?: string, testKey?: string) => {
     setConnectionStatus('checking');
     try {
@@ -673,7 +613,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
         }
         
         setConnectionStatus('connected');
-        fetchRunningModels();
       } else {
         setConnectionStatus('disconnected');
       }
@@ -764,35 +703,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
     localStorage.setItem('ollama_selected_model', selectedModel);
   }, [selectedModel]);
 
-  // Poll for running models
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (connectionStatus === 'connected') {
-        fetchRunningModels();
-      }
-    }, isLoading ? 1000 : 5000); // Poll every 1s if loading, 5s otherwise
-    return () => clearInterval(interval);
-  }, [connectionStatus, isLoading]);
-
-  // Check if model is still running while loading
-  useEffect(() => {
-    if (isLoading && runningModels.length > 0) {
-      const isModelRunning = runningModels.some(m => m.name === selectedModel);
-      if (!isModelRunning) {
-        // Model crashed!
-        setIsLoading(false);
-        if (activeChatId) {
-          setGeneratingChatIds(prev => {
-            const next = new Set(prev);
-            next.delete(activeChatId);
-            return next;
-          });
-        }
-        toast.error('Model stopped unexpectedly.');
-      }
-    }
-  }, [isLoading, runningModels, selectedModel, activeChatId]);
-
   useEffect(() => {
     scrollToBottom();
   }, [activeChat?.messages, isLoading]);
@@ -836,142 +746,10 @@ If the user asks you to write code, you should provide it in a markdown code blo
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const stopModel = async (name: string) => {
-    setIsStoppingModel(name);
-    try {
-      const response = await fetch('/api/ai/stop', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: name }),
-      });
-
-      if (response.ok) {
-        toast.success(`Model ${name} stopped`);
-        await fetchRunningModels();
-      } else {
-        throw new Error('Failed to stop model');
-      }
-    } catch (error) {
-      toast.error(`Error stopping model ${name}`);
-    } finally {
-      setIsStoppingModel(null);
-    }
-  };
-
   const handleSelectModel = async (name: string) => {
-    // If there are running models, stop them first
-    if (runningModels.length > 0) {
-      const runningModel = runningModels[0]; // Assuming only one should be running
-      if (runningModel.name !== name) {
-        toast.info(`Stopping ${runningModel.name} before starting ${name}...`);
-        await stopModel(runningModel.name);
-      }
-    }
-    
     setSelectedModel(name);
     setCurrentView('chat');
     if (!activeChatId) createNewChat();
-  };
-
-  useEffect(() => {
-    if (newModelName.trim().length > 0) {
-      const filtered = allAIModels
-        .filter(m => m.toLowerCase().includes(newModelName.toLowerCase()))
-        .filter(m => !models.some(installed => installed.name.split(':')[0] === m))
-        .slice(0, 10);
-      setSuggestions(filtered);
-      setShowSuggestions(true);
-    } else {
-      setSuggestions([]);
-      setShowSuggestions(false);
-    }
-  }, [newModelName, models, allAIModels]);
-
-  const pullModel = async (nameOverride?: string) => {
-    const modelName = (nameOverride || newModelName).trim();
-    if (!modelName) return;
-    
-    setPullingModel({ name: modelName, progress: 0, status: 'Starting...' });
-    setNewModelName('');
-    setShowSuggestions(false);
-
-    pullAbortController.current = new AbortController();
-
-    try {
-      // We just initiate the update, Socket.io handles the progress updates
-      const response = await fetch('/api/ai/pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: modelName }),
-        signal: pullAbortController.current.signal,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.text();
-        let errorMessage = 'Failed to pull model';
-        try {
-          const parsed = JSON.parse(errorData);
-          if (parsed.error) {
-            errorMessage = parsed.error;
-            if (parsed.signin_url) {
-              errorMessage = `Model requires authentication or does not exist. Please check the model name or sign in: ${parsed.signin_url}`;
-            }
-          }
-        } catch (e) {
-          errorMessage = errorData || errorMessage;
-        }
-        throw new Error(errorMessage);
-      }
-      
-      // Wait for completion (the endpoint stays open until done)
-      await response.text();
-      
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        toast.info(`Pulling ${modelName} cancelled`);
-      } else {
-        const message = error.message || `Failed to pull model ${modelName}`;
-        if (message.includes('usage limit')) {
-          toast.error('AI Cloud Limit Reached: You have reached your weekly usage limit for cloud models. Please upgrade your account or try again later.', {
-            duration: 6000
-          });
-        } else {
-          toast.error(`Error: ${message}`);
-        }
-        console.error(error);
-      }
-    } finally {
-      setPullingModel(null);
-      pullAbortController.current = null;
-    }
-  };
-
-  const cancelPull = () => {
-    if (pullAbortController.current) {
-      pullAbortController.current.abort();
-    }
-  };
-
-  const deleteModel = async (name: string) => {
-    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
-
-    try {
-      const response = await fetch('/api/ai/delete', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      });
-
-      if (response.ok) {
-        toast.success(`Model ${name} deleted`);
-        if (selectedModel === name) setSelectedModel('');
-        checkConnection();
-      } else {
-        throw new Error('Failed to delete model');
-      }
-    } catch (error) {
-      toast.error(`Error deleting model ${name}`);
-    }
   };
 
   const handleInstallDependencies = async () => {
@@ -1404,7 +1182,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
           selectedModel={selectedModel}
           setSelectedModel={setSelectedModel}
           models={models}
-          runningModels={runningModels}
           connectionStatus={connectionStatus}
           checkConnection={checkConnection}
           workspaceHost={workspaceHost}
@@ -1511,47 +1288,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
                   </div>
                 )}
                 
-                {currentView === 'models' && (
-                  <div className="flex-1 overflow-y-auto bg-bg-secondary">
-                    <ModelsView 
-                      models={models}
-                      runningModels={runningModels}
-                      connectionStatus={connectionStatus}
-                      modelSearchQuery={modelSearchQuery}
-                      setModelSearchQuery={setModelSearchQuery}
-                      deleteModel={deleteModel}
-                      stopModel={stopModel}
-                      isStoppingModel={isStoppingModel}
-                      setSelectedModel={handleSelectModel}
-                      setCurrentView={setCurrentView}
-                      activeChatId={activeChatId}
-                      createNewChat={createNewChat}
-                      formatSize={formatSize}
-                      modelFilter={modelFilter}
-                      setModelFilter={setModelFilter}
-                      popularModels={popularModels}
-                    />
-                  </div>
-                )}
-
-                {currentView === 'pull' && (
-                  <div className="flex-1 overflow-y-auto bg-bg-secondary">
-                    <PullView 
-                      newModelName={newModelName}
-                      setNewModelName={setNewModelName}
-                      pullModel={pullModel}
-                      pullingModel={pullingModel}
-                      cancelPull={cancelPull}
-                      showSuggestions={showSuggestions}
-                      setShowSuggestions={setShowSuggestions}
-                      suggestions={suggestions}
-                      popularModels={popularModels}
-                      modelFilter={modelFilter}
-                      setModelFilter={setModelFilter}
-                    />
-                  </div>
-                )}
-
                 {currentView === 'settings' && (
                   <SettingsView 
                     systemPrompt={systemPrompt}

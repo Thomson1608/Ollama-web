@@ -3,11 +3,9 @@ import {
   Plus, 
   MessageSquare, 
   Trash2, 
-  Cpu, 
   Terminal,
   RefreshCw,
   Settings,
-  Download,
   Folder,
   BarChart,
   LogOut,
@@ -240,32 +238,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           
           {username === 'admin' && (
             <>
-              <button 
-                onClick={() => {
-                  setCurrentView('models');
-                  if (isMobile) setIsSidebarOpen(false);
-                }}
-                className={cn(
-                  "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-                  currentView === 'models' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
-                )}
-                title="Models"
-              >
-                <Cpu size={16} />
-              </button>
-              <button 
-                onClick={() => {
-                  setCurrentView('pull');
-                  if (isMobile) setIsSidebarOpen(false);
-                }}
-                className={cn(
-                  "flex items-center justify-center gap-2 p-2 rounded-lg text-sm transition-colors",
-                  currentView === 'pull' ? "bg-accent-primary/10 text-accent-primary font-medium" : "hover:bg-bg-tertiary text-text-secondary hover:text-text-primary"
-                )}
-                title="Update"
-              >
-                <Download size={16} />
-              </button>
               <button 
                 onClick={() => {
                   setCurrentView('workspace');

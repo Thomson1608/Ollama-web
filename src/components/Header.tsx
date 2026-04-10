@@ -9,7 +9,7 @@ import {
   Settings,
   ChevronDown
 } from 'lucide-react';
-import { AIModel, ActiveModel, ViewType, ConnectionStatus } from '../types';
+import { AIModel, ViewType, ConnectionStatus } from '../types';
 import { cn } from '../lib/utils';
 
 interface HeaderProps {
@@ -19,7 +19,6 @@ interface HeaderProps {
   selectedModel: string;
   setSelectedModel: (model: string) => void;
   models: AIModel[];
-  runningModels: ActiveModel[];
   connectionStatus: ConnectionStatus;
   checkConnection: () => void;
   workspaceHost: string;
@@ -37,7 +36,6 @@ export const Header: React.FC<HeaderProps> = ({
   selectedModel,
   setSelectedModel,
   models,
-  runningModels,
   connectionStatus,
   checkConnection,
   workspaceHost,
@@ -54,27 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  const runningModel = runningModels.find(rm => rm.name === selectedModel || rm.model === selectedModel);
-
-  const formatExpiresAt = (expiresAt: string) => {
-    if (!expiresAt) return '';
-    try {
-      const date = new Date(expiresAt);
-      const diffMs = date.getTime() - now.getTime();
-      if (diffMs <= 0) return 'Expiring...';
-      
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffSecs = Math.floor((diffMs % 60000) / 1000);
-      
-      if (diffMins > 0) {
-        return `${diffMins}m ${diffSecs}s`;
-      }
-      return `${diffSecs}s`;
-    } catch (e) {
-      return expiresAt;
-    }
-  };
 
   return (
     <header className="h-16 bg-bg-primary/80 backdrop-blur-md border-b border-border-primary flex items-center justify-between px-2 md:px-4 sticky top-0 z-10">
@@ -105,14 +82,11 @@ export const Header: React.FC<HeaderProps> = ({
                       !m.name.toLowerCase().includes('flux') && 
                       !m.name.toLowerCase().includes('stable-diffusion') &&
                       !m.name.toLowerCase().includes('sdxl')
-                    ).map(m => {
-                      const isRunning = runningModels.some(rm => rm.name === m.name || rm.model === m.name);
-                      return (
-                        <option key={m.name} value={m.name}>
-                          {m.name} {isRunning ? ' (Active)' : ''}
-                        </option>
-                      );
-                    })}
+                    ).map(m => (
+                      <option key={m.name} value={m.name}>
+                        {m.name}
+                      </option>
+                    ))}
                   </optgroup>
                   </>
                 )}
@@ -128,19 +102,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="bg-transparent text-xs md:text-sm font-semibold text-text-primary focus:outline-none max-w-[100px] md:max-w-[120px] truncate"
               />
             </div>
-            {runningModel && (
-              <div className="flex flex-col border-l border-border-primary pl-2 md:pl-4 shrink-0">
-                <span className="text-[8px] md:text-[10px] font-medium text-text-secondary uppercase tracking-wider">Expiry</span>
-                <span className="text-[10px] md:text-xs font-mono font-bold text-accent-primary bg-accent-primary/10 px-1 py-0.5 rounded">
-                  {formatExpiresAt(runningModel.expires_at)}
-                </span>
-              </div>
-            )}
           </div>
-        ) : currentView === 'models' ? (
-          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Models</span>
-        ) : currentView === 'pull' ? (
-          <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Update</span>
         ) : currentView === 'workspace' ? (
           <span className="font-bold text-text-primary shrink-0 text-sm md:text-base">Workspace</span>
         ) : currentView === 'project-list' ? (
