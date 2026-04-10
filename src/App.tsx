@@ -637,6 +637,56 @@ If the user asks you to write code, you should provide it in a markdown code blo
     fetchInitialData();
   }, [username]);
 
+  const fetchRunningModels = async () => {
+    try {
+      const response = await fetch('/api/ai/active');
+      if (response.ok) {
+        const data = await response.json();
+        setRunningModels(data.models || []);
+      }
+    } catch (error) {
+      // Silently fail for background polling
+    }
+  };
+
+  const checkConnection = async (testUrl?: string, testKey?: string) => {
+    setConnectionStatus('checking');
+    try {
+      const params = new URLSearchParams();
+      if (testUrl) params.append('url', testUrl);
+      if (testKey) params.append('key', testKey);
+      
+      const response = await fetch(`/api/ai/models${params.toString() ? '?' + params.toString() : ''}`);
+      if (response.ok) {
+        const data = await response.json();
+        const fetchedModels = data.models || [];
+        setModels(fetchedModels);
+        
+        if (fetchedModels.length > 0 && !selectedModel) {
+          // Prioritize non-image models for initial selection
+          const chatModel = fetchedModels.find((m: any) => 
+            !m.name.toLowerCase().includes('flux') && 
+            !m.name.toLowerCase().includes('stable-diffusion') &&
+            !m.name.toLowerCase().includes('sdxl')
+          );
+          setSelectedModel(chatModel ? chatModel.name : fetchedModels[0].name);
+        }
+        
+        setConnectionStatus('connected');
+        fetchRunningModels();
+      } else {
+        setConnectionStatus('disconnected');
+      }
+    } catch (error) {
+      console.error('Connection error:', error);
+      setConnectionStatus('disconnected');
+      toast.error('Cannot connect to AI Proxy via backend. Please check your configuration.', {
+        id: 'connection-error',
+        duration: 5000,
+      });
+    }
+  };
+
   // Sync to backend whenever chats change
   useEffect(() => {
     if (!isInitialized || !username) return;
@@ -695,6 +745,8 @@ If the user asks you to write code, you should provide it in a markdown code blo
             workspaceHost 
           }),
         });
+        // After successful sync, re-check connection to update status
+        checkConnection();
       } catch (error) {
         console.error('Failed to sync config to backend:', error);
       }
@@ -782,52 +834,6 @@ If the user asks you to write code, you should provide it in a markdown code blo
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  const checkConnection = async () => {
-    setConnectionStatus('checking');
-    try {
-      const response = await fetch('/api/ai/models');
-      if (response.ok) {
-        const data = await response.json();
-        const fetchedModels = data.models || [];
-        setModels(fetchedModels);
-        
-        if (fetchedModels.length > 0 && !selectedModel) {
-          // Prioritize non-image models for initial selection
-          const chatModel = fetchedModels.find((m: any) => 
-            !m.name.toLowerCase().includes('flux') && 
-            !m.name.toLowerCase().includes('stable-diffusion') &&
-            !m.name.toLowerCase().includes('sdxl')
-          );
-          setSelectedModel(chatModel ? chatModel.name : fetchedModels[0].name);
-        }
-        
-        setConnectionStatus('connected');
-        fetchRunningModels();
-      } else {
-        setConnectionStatus('disconnected');
-      }
-    } catch (error) {
-      console.error('Connection error:', error);
-      setConnectionStatus('disconnected');
-      toast.error('Cannot connect to AI Proxy via backend. Please check your configuration.', {
-        id: 'connection-error',
-        duration: 5000,
-      });
-    }
-  };
-
-  const fetchRunningModels = async () => {
-    try {
-      const response = await fetch('/api/ai/active');
-      if (response.ok) {
-        const data = await response.json();
-        setRunningModels(data.models || []);
-      }
-    } catch (error) {
-      // Silently fail for background polling
-    }
   };
 
   const stopModel = async (name: string) => {
@@ -1580,6 +1586,7 @@ If the user asks you to write code, you should provide it in a markdown code blo
                     memory={memory}
                     clearMemory={clearMemory}
                     saveSettings={saveSettings}
+                    checkConnection={checkConnection}
                     connectionStatus={connectionStatus}
                     username={username}
                     theme={theme}

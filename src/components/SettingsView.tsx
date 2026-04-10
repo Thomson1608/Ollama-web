@@ -47,6 +47,7 @@ interface SettingsViewProps {
   memory: Memory;
   clearMemory: () => void;
   saveSettings: () => void;
+  checkConnection: (url?: string, key?: string) => void;
   connectionStatus: ConnectionStatus;
   username?: string | null;
   theme: 'dark' | 'light' | 'system';
@@ -73,6 +74,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   memory,
   clearMemory,
   saveSettings,
+  checkConnection,
   connectionStatus,
   username,
   theme,
@@ -280,6 +282,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             });
                             if (res.ok) {
                               toast.success(`Successfully connected with account: ${activeAccount.name}`);
+                              // Update global status
+                              checkConnection(localRouterUrl, activeAccount.apiKey);
                             } else {
                               const errData = await res.json();
                               toast.error(`Failed to connect: ${errData.error || 'Unknown error'}`);
@@ -357,6 +361,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                                 });
                                 if (res.ok) {
                                   toast.success('Successfully connected to AI Proxy!');
+                                  // Trigger global connection check with these values to update status immediately
+                                  checkConnection(localRouterUrl, localRouterApiKey);
                                 } else {
                                   const errData = await res.json();
                                   toast.error(`Failed to connect: ${errData.error || 'Unknown error'}`);
