@@ -906,33 +906,31 @@ async function startServer() {
       
       await dbService.saveConfig(username, { systemPrompt, parameters });
       
-      // Update global settings if user is admin
-      if (await isAdmin(username)) {
-        const updates: any = {};
-        if (use9Router !== undefined) {
-          USE_9ROUTER = use9Router;
-          updates.use9Router = use9Router;
-          logger.release(`System: Updated global USE_9ROUTER to ${USE_9ROUTER} by ${username}`);
-        }
-        if (routerUrl !== undefined) {
-          ROUTER_URL = routerUrl;
-          updates.routerUrl = routerUrl;
-          logger.release(`System: Updated global ROUTER_URL to ${ROUTER_URL} by ${username}`);
-        }
-        if (routerApiKey !== undefined) {
-          ROUTER_API_KEY = routerApiKey;
-          updates.routerApiKey = routerApiKey;
-          logger.release(`System: Updated global ROUTER_API_KEY by ${username}`);
-        }
-        if (workspaceHost !== undefined) {
-          WORKSPACE_HOST = workspaceHost;
-          updates.workspaceHost = workspaceHost;
-          logger.release(`System: Updated global Workspace Host to ${WORKSPACE_HOST} by ${username}`);
-        }
-        
-        if (Object.keys(updates).length > 0) {
-          await setDoc(doc(db, 'system', 'config'), updates, { merge: true });
-        }
+      // Update global settings
+      const updates: any = {};
+      if (use9Router !== undefined) {
+        USE_9ROUTER = use9Router;
+        updates.use9Router = use9Router;
+        logger.release(`System: Updated global USE_9ROUTER to ${USE_9ROUTER} by ${username}`);
+      }
+      if (routerUrl !== undefined) {
+        ROUTER_URL = routerUrl;
+        updates.routerUrl = routerUrl;
+        logger.release(`System: Updated global ROUTER_URL to ${ROUTER_URL} by ${username}`);
+      }
+      if (routerApiKey !== undefined) {
+        ROUTER_API_KEY = routerApiKey;
+        updates.routerApiKey = routerApiKey;
+        logger.release(`System: Updated global ROUTER_API_KEY by ${username}`);
+      }
+      if (workspaceHost !== undefined) {
+        WORKSPACE_HOST = workspaceHost;
+        updates.workspaceHost = workspaceHost;
+        logger.release(`System: Updated global Workspace Host to ${WORKSPACE_HOST} by ${username}`);
+      }
+      
+      if (Object.keys(updates).length > 0) {
+        await setDoc(doc(db, 'system', 'config'), updates, { merge: true });
       }
       
       io.emit(`config:updated:${username}`, config);
