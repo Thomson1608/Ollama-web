@@ -122,8 +122,9 @@ AVAILABLE TOOLS:
 3. write_file: {"name": "path/to/file", "content": "..."} - Write/Update file.
 4. delete_file: {"name": "path/to/file"} - Delete file or directory.
 5. run_command: {"command": "..."} - Execute any shell command in the workspace.
+6. search_files: {"pattern": "..."} - Search for a pattern in all files (grep).
 
-Your goal is to be a proactive, highly capable developer who gets things done directly in the workspace.`;
+Your goal is to be a proactive, highly capable developer who gets things done directly in the workspace. For refactoring tasks, use 'list_files' and 'search_files' to understand the project structure and usages before making changes.`;
 
   const USER_SYSTEM_PROMPT = `You are a helpful AI assistant. 
 Your goal is to provide clear, accurate, and helpful information to the user.

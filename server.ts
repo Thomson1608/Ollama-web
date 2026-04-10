@@ -1829,281 +1829,169 @@ async function startServer() {
       res.setHeader('Content-Type', 'application/x-ndjson');
       res.setHeader('Transfer-Encoding', 'chunked');
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No reader available');
+      const processStream = async (currentMessages: any[], isLoop = false) => {
+        const body = { ...finalBody, messages: currentMessages };
+        const streamResponse = await fetch(targetUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        });
 
-      let assistantContent = '';
-      let lastProcessedToolCallIndex = 0;
-      let buffer = '';
-      const decoder = new TextDecoder();
-      
-      const userMessage = messages[messages.length - 1];
-      const assistantMessage = { role: 'assistant', content: '', timestamp: Date.now() };
+        if (!streamResponse.ok) throw new Error(`AI Proxy returned ${streamResponse.status}`);
 
-      activeGenerations.set(chatId, {
-        chatId,
-        username,
-        model,
-        userMessage,
-        assistantMessage
-      });
+        const reader = streamResponse.body?.getReader();
+        if (!reader) throw new Error('No reader available');
 
-      // Emit start event via Socket.io
-      io.emit(`chat:start:${username}`, {
-        chatId,
-        model,
-        userMessage,
-        assistantMessage
-      });
-      io.emit(`chat:status:${username}`, { loading: true, chatId });
+        let assistantContent = '';
+        let lastProcessedToolCallIndex = 0;
+        let buffer = '';
+        const decoder = new TextDecoder();
+        const toolCalls: any[] = [];
 
-      let lastChunkTime = Date.now();
-      const heartbeatInterval = setInterval(() => {
-        const now = Date.now();
-        if (now - lastChunkTime > 5000) {
-          io.emit(`chat:status:${username}`, { 
-            loading: true, 
-            chatId, 
-            status: 'Model is still processing...',
-            isHeartbeat: true 
-          });
-        }
-      }, 5000);
-
-      try {
         while (true) {
           const { done, value } = await reader.read();
-          lastChunkTime = Date.now();
-          if (done) {
-          if (buffer.trim()) {
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+          
+          // Process lines for streaming to client
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            let contentChunk = '';
             try {
-              let contentChunk = '';
-              if (buffer.startsWith('data: ')) {
-                const dataStr = buffer.slice(6).trim();
+              if (line.startsWith('data: ')) {
+                const dataStr = line.slice(6).trim();
                 if (dataStr !== '[DONE]') {
                   const json = JSON.parse(dataStr);
-                  if (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) {
+                  if (json.choices?.[0]?.delta?.content) {
                     contentChunk = json.choices[0].delta.content;
                   }
                 }
               } else {
-                const json = JSON.parse(buffer);
-                if (json.message?.content) {
-                  contentChunk = json.message.content;
-                }
-              }
-              if (contentChunk) {
-                assistantContent += contentChunk;
-                const gen = activeGenerations.get(chatId);
-                if (gen) gen.assistantMessage.content = assistantContent;
-                io.emit(`chat:chunk:${username}`, { chatId, chunk: contentChunk });
+                const json = JSON.parse(line);
+                if (json.message?.content) contentChunk = json.message.content;
               }
             } catch (e) {}
-          }
-          
-          const newContent = assistantContent.substring(lastProcessedToolCallIndex);
-          let latestIndex = lastProcessedToolCallIndex;
 
-          const xmlRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
-          let match;
-          while ((match = xmlRegex.exec(newContent)) !== null) {
+            if (contentChunk) {
+              assistantContent += contentChunk;
+              const gen = activeGenerations.get(chatId);
+              if (gen) gen.assistantMessage.content = assistantContent;
+              io.emit(`chat:chunk:${username}`, { chatId, chunk: contentChunk });
+              res.write(line + '\n');
+            }
+          }
+        }
+
+        // Final check for tool calls in the complete assistant content
+        const xmlRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
+        let match;
+        while ((match = xmlRegex.exec(assistantContent)) !== null) {
+          try {
+            let jsonString = match[1].trim();
+            if (jsonString.startsWith('```')) {
+              jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+            }
+            let call;
             try {
-              let jsonString = match[1].trim();
-              if (jsonString.startsWith('```')) {
-                jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+              call = JSON.parse(jsonString);
+            } catch (e) {
+              const nameMatch = jsonString.match(/<name>([\s\S]*?)<\/name>/);
+              const argsMatch = jsonString.match(/<arguments>([\s\S]*?)<\/arguments>/);
+              if (nameMatch && argsMatch) {
+                call = { name: nameMatch[1].trim(), args: JSON.parse(argsMatch[1].trim()) };
               }
-              let call;
-              try {
-                call = JSON.parse(jsonString);
-              } catch (parseError) {
-                const nameMatch = jsonString.match(/<name>([\s\S]*?)<\/name>/);
-                const argsMatch = jsonString.match(/<arguments>([\s\S]*?)<\/arguments>/);
-                if (nameMatch && argsMatch) {
-                  call = {
-                    name: nameMatch[1].trim(),
-                    args: JSON.parse(argsMatch[1].trim())
-                  };
-                } else {
-                  throw parseError;
-                }
-              }
+            }
+            if (call) {
               const toolName = call.tool || call.name;
               const toolArgs = call.args || call.arguments || call;
-              if (toolName) {
-                executeToolCall(chatId, { tool: toolName, args: toolArgs }, username, projectId);
-              }
-            } catch (e) {
-              logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
+              if (toolName) toolCalls.push({ tool: toolName, args: toolArgs });
             }
-            latestIndex = Math.max(latestIndex, lastProcessedToolCallIndex + match.index + match[0].length);
-          }
+          } catch (e) {}
+        }
 
+        // Heuristic check if no XML tool calls found
+        if (toolCalls.length === 0) {
           const mdRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
-          while ((match = mdRegex.exec(newContent)) !== null) {
+          while ((match = mdRegex.exec(assistantContent)) !== null) {
             try {
               const jsonString = match[1].trim();
-              let calls;
-              try {
-                calls = JSON.parse(jsonString);
-                if (!Array.isArray(calls)) {
-                  calls = [calls];
-                }
-              } catch (e) {
-                // Heuristic: If it's not JSON, check if there's a filename hint before the block
-                // Look for [filename.ts] or similar in the text before the match
-                const textBefore = newContent.substring(0, match.index);
-                const filenameHintRegex = /(?:\[|`|file:?\s*)([\w./-]+\.[\w]+)(?:\]|`|:?)/i;
-                const hintMatch = textBefore.match(filenameHintRegex);
-                
-                if (hintMatch && username === 'admin') {
-                  const filename = hintMatch[1];
-                  logger.release(`Heuristic: Detected code block for ${filename} for ${username}`);
-                  executeToolCall(chatId, {
-                    tool: 'write_file',
-                    args: { name: filename, content: jsonString }
-                  }, username, projectId);
-                }
-                continue;
-              }
-              
+              let calls = JSON.parse(jsonString);
+              if (!Array.isArray(calls)) calls = [calls];
               for (const call of calls) {
-                if (call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
-                  const isInsideXml = newContent.substring(0, match.index).lastIndexOf('<tool_call>') > newContent.substring(0, match.index).lastIndexOf('</tool_call>');
-                  if (!isInsideXml) {
-                    executeToolCall(chatId, call, username, projectId);
-                  }
+                if (call?.tool && call?.args && ['list_files', 'read_file', 'write_file', 'delete_file', 'run_command', 'search_files'].includes(call.tool)) {
+                  toolCalls.push(call);
                 }
               }
-            } catch (e) {}
-            latestIndex = Math.max(latestIndex, lastProcessedToolCallIndex + match.index + match[0].length);
-          }
-
-          lastProcessedToolCallIndex = latestIndex;
-          io.emit(`chat:status:${username}`, { loading: false, chatId });
-          break;
-        }
-        
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-        
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          
-          let contentChunk = '';
-          try {
-            if (line.startsWith('data: ')) {
-              const dataStr = line.slice(6).trim();
-              if (dataStr !== '[DONE]') {
-                const json = JSON.parse(dataStr);
-                if (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) {
-                  contentChunk = json.choices[0].delta.content;
-                }
-              }
-            } else {
-              const json = JSON.parse(line);
-              if (json.message?.content) {
-                contentChunk = json.message.content;
+            } catch (e) {
+              // Heuristic for code blocks without JSON
+              const textBefore = assistantContent.substring(0, match.index);
+              const filenameHintRegex = /(?:\[|`|file:?\s*)([\w./-]+\.[\w]+)(?:\]|`|:?)/i;
+              const hintMatch = textBefore.match(filenameHintRegex);
+              if (hintMatch && username === 'admin') {
+                toolCalls.push({ tool: 'write_file', args: { name: hintMatch[1], content: match[1].trim() } });
               }
             }
-          } catch (e) {
-            // Ignore parse errors for incomplete lines or non-JSON
+          }
+        }
+
+        if (toolCalls.length > 0) {
+          const toolResults = [];
+          for (const call of toolCalls) {
+            const result = await executeToolCall(chatId, call, username, projectId);
+            toolResults.push({ tool: call.tool, result });
           }
 
-          if (contentChunk) {
-            assistantContent += contentChunk;
-            const gen = activeGenerations.get(chatId);
-            if (gen) gen.assistantMessage.content = assistantContent;
-            
-            io.emit(`chat:chunk:${username}`, { chatId, chunk: contentChunk });
-            
-            const newContent = assistantContent.substring(lastProcessedToolCallIndex);
-              let latestIndex = lastProcessedToolCallIndex;
+          const toolResultMessage = {
+            role: 'system',
+            content: `Tool Execution Results:\n${toolResults.map(r => `Tool: ${r.tool}\nResult: ${typeof r.result === 'string' ? r.result : JSON.stringify(r.result)}`).join('\n\n')}\n\nPlease analyze these results and continue your task.`
+          };
 
-              const xmlRegex = /<tool_call>([\s\S]*?)<\/tool_call>/g;
-              let match;
-              while ((match = xmlRegex.exec(newContent)) !== null) {
-                try {
-                  let jsonString = match[1].trim();
-                  if (jsonString.startsWith('```')) {
-                    jsonString = jsonString.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-                  }
-                  let call;
-                  try {
-                    call = JSON.parse(jsonString);
-                  } catch (parseError) {
-                    const nameMatch = jsonString.match(/<name>([\s\S]*?)<\/name>/);
-                    const argsMatch = jsonString.match(/<arguments>([\s\S]*?)<\/arguments>/);
-                    if (nameMatch && argsMatch) {
-                      call = {
-                        name: nameMatch[1].trim(),
-                        args: JSON.parse(argsMatch[1].trim())
-                      };
-                    } else {
-                      throw parseError;
-                    }
-                  }
-                  const toolName = call.tool || call.name;
-                  const toolArgs = call.args || call.arguments || call;
-                  if (toolName) {
-                    executeToolCall(chatId, { tool: toolName, args: toolArgs }, username, projectId);
-                  }
-                } catch (e) {
-                  logger.error(`Stream Tool Error: Failed to parse tool call in ${chatId}`, e);
-                }
-                latestIndex = Math.max(latestIndex, lastProcessedToolCallIndex + match.index + match[0].length);
-              }
-
-              const mdRegex = /```(?:json)?\s*([\s\S]*?)\s*```/g;
-              while ((match = mdRegex.exec(newContent)) !== null) {
-                try {
-                  const jsonString = match[1].trim();
-                  let calls = JSON.parse(jsonString);
-                  if (!Array.isArray(calls)) {
-                    calls = [calls];
-                  }
-                  
-                      for (const call of calls) {
-                        if (call && call.tool && call.args && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
-                          const isInsideXml = newContent.substring(0, match.index).lastIndexOf('<tool_call>') > newContent.substring(0, match.index).lastIndexOf('</tool_call>');
-                          if (!isInsideXml) {
-                            executeToolCall(chatId, call, username, projectId);
-                          }
-                        }
-                      }
-                } catch (e) {}
-                latestIndex = Math.max(latestIndex, lastProcessedToolCallIndex + match.index + match[0].length);
-              }
-
-              lastProcessedToolCallIndex = latestIndex;
-            }
+          const nextMessages = [...currentMessages, { role: 'assistant', content: assistantContent }, toolResultMessage];
+          // Recursive call for agentic loop (limit to 10 turns to prevent infinite loops)
+          if (currentMessages.length < 20) {
+            await processStream(nextMessages, true);
+          }
+        } else {
+          // Final assistant message
+          assistantContentFinal = assistantContent;
         }
-        
-        res.write(value);
+      };
+
+      let assistantContentFinal = '';
+      const assistantMessage = { role: 'assistant', content: '', timestamp: Date.now() };
+      activeGenerations.set(chatId, { chatId, username, model, userMessage: messages[messages.length - 1], assistantMessage });
+
+      io.emit(`chat:start:${username}`, { chatId, model, userMessage: messages[messages.length - 1], assistantMessage });
+      io.emit(`chat:status:${username}`, { loading: true, chatId });
+
+      let lastChunkTime = Date.now();
+      const heartbeatInterval = setInterval(() => {
+        if (Date.now() - lastChunkTime > 5000) {
+          io.emit(`chat:status:${username}`, { loading: true, chatId, status: 'Agent is thinking/working...', isHeartbeat: true });
+        }
+      }, 5000);
+
+      try {
+        await processStream(enrichedMessages);
+      } finally {
+        clearInterval(heartbeatInterval);
+        activeGenerations.delete(chatId);
       }
-    } catch (error) {
-      logger.error(`Stream Error for ${chatId}:`, error);
-      io.emit(`chat:error:${username}`, { chatId, error: error instanceof Error ? error.message : String(error) });
-      await updateStats('fail');
-    } finally {
-      clearInterval(heartbeatInterval);
-      activeGenerations.delete(chatId);
-    }
 
-      io.emit(`chat:end:${username}`, { chatId, finalContent: assistantContent });
+      io.emit(`chat:end:${username}`, { chatId, finalContent: assistantContentFinal });
       io.emit(`chat:status:${username}`, { loading: false, chatId });
-      logger.release(`AI Proxy: Chat session complete for ${chatId} (${username}) in project ${projectId}`);
-      
-      // Save assistant message to DB
-      await dbService.addMessage(projectId, chatId, { role: 'assistant', content: assistantContent, timestamp: Date.now() });
+      await dbService.addMessage(projectId, chatId, { role: 'assistant', content: assistantContentFinal, timestamp: Date.now() });
       io.emit(`chats:updated:${username}`, { projectId });
-
-      // Post-chat logic
-      extractMemory(chatId, model, [...messages, { role: 'assistant', content: assistantContent, timestamp: Date.now() }], username, projectId);
+      extractMemory(chatId, model, [...messages, { role: 'assistant', content: assistantContentFinal, timestamp: Date.now() }], username, projectId);
       autoCommit(username, `AI update in chat ${chatId}`, projectId);
-      
       res.end();
       await updateStats('success');
+      return;
       
     } catch (error) {
       activeGenerations.delete(chatId);
@@ -2116,31 +2004,31 @@ async function startServer() {
 
   // --- End AI Proxy Endpoints ---
 
-  async function executeToolCall(chatId: string, call: any, username: string, projectId: string) {
+  async function executeToolCall(chatId: string, call: any, username: string, projectId: string): Promise<any> {
     try {
       const paths = getUserPaths(username, projectId);
       
       // Check if user is admin for workspace tools
-      if (username !== 'admin' && ['list_files', 'read_file', 'write_file', 'delete_file'].includes(call.tool)) {
+      if (username !== 'admin' && ['list_files', 'read_file', 'write_file', 'delete_file', 'run_command', 'search_files'].includes(call.tool)) {
+        const errorMsg = `Error: Access denied. Only administrators can perform workspace operations.`;
         logger.error(`Unauthorized tool access attempt by ${username}: ${call.tool}`);
-        io.emit(`tool:result:${username}`, { 
-          chatId, 
-          tool: call.tool, 
-          result: `Error: Access denied. Only administrators can perform workspace operations.` 
-        });
-        return;
+        io.emit(`tool:result:${username}`, { chatId, tool: call.tool, result: errorMsg });
+        return errorMsg;
       }
 
       logger.debug(`Executing tool ${call.tool} for ${username}`, call.args);
+      let result: any = null;
+
       switch (call.tool) {
         case 'list_files':
           try {
             const allFiles = await getAllFiles(paths.workspace, paths.workspace);
-            io.emit(`tool:result:${username}`, { chatId, tool: 'list_files', result: allFiles.map(f => f.name) });
+            result = allFiles.map(f => f.name);
+            io.emit(`tool:result:${username}`, { chatId, tool: 'list_files', result });
             logger.release(`Tool list_files success for ${username}: ${allFiles.length} files`);
-          } catch (e) {
+          } catch (e: any) {
+            result = `Error listing files: ${e.message}`;
             logger.error(`Tool list_files failed for ${username}`, e);
-            throw e;
           }
           break;
         case 'read_file':
@@ -2148,12 +2036,12 @@ async function startServer() {
             const safeName = path.normalize(call.args.name).replace(/^(\.\.[\/\\])+/, '');
             const filePath = path.join(paths.workspace, safeName);
             try {
-              const fileContent = await fs.readFile(filePath, 'utf-8');
-              io.emit(`tool:result:${username}`, { chatId, tool: 'read_file', result: fileContent });
+              result = await fs.readFile(filePath, 'utf-8');
+              io.emit(`tool:result:${username}`, { chatId, tool: 'read_file', result });
               logger.release(`Tool read_file success for ${username}: ${safeName}`);
-            } catch (e) {
+            } catch (e: any) {
+              result = `Error reading file ${safeName}: ${e.message}`;
               logger.error(`Tool read_file failed for ${username}: ${safeName}`, e);
-              throw e;
             }
           }
           break;
@@ -2164,15 +2052,15 @@ async function startServer() {
             const dirPath = path.dirname(filePath);
             
             try {
-              // Ensure directory exists
               await fs.mkdir(dirPath, { recursive: true });
               await fs.writeFile(filePath, call.args.content, 'utf-8');
+              result = `Successfully wrote to ${safeName}`;
               io.emit(`workspace:updated:${username}`);
-              io.emit(`tool:result:${username}`, { chatId, tool: 'write_file', result: `Successfully wrote to ${safeName}` });
+              io.emit(`tool:result:${username}`, { chatId, tool: 'write_file', result });
               logger.release(`Tool write_file success for ${username}: ${safeName}`);
-            } catch (e) {
+            } catch (e: any) {
+              result = `Error writing to ${safeName}: ${e.message}`;
               logger.error(`Tool write_file failed for ${username}: ${safeName}`, e);
-              throw e;
             }
           }
           break;
@@ -2182,12 +2070,13 @@ async function startServer() {
             const filePath = path.join(paths.workspace, safeName);
             try {
               await fs.unlink(filePath);
+              result = `Successfully deleted ${safeName}`;
               io.emit(`workspace:updated:${username}`);
-              io.emit(`tool:result:${username}`, { chatId, tool: 'delete_file', result: `Successfully deleted ${safeName}` });
+              io.emit(`tool:result:${username}`, { chatId, tool: 'delete_file', result });
               logger.release(`Tool delete_file success for ${username}: ${safeName}`);
-            } catch (e) {
+            } catch (e: any) {
+              result = `Error deleting ${safeName}: ${e.message}`;
               logger.error(`Tool delete_file failed for ${username}: ${safeName}`, e);
-              throw e;
             }
           }
           break;
@@ -2195,20 +2084,38 @@ async function startServer() {
           if (call.args.command) {
             try {
               const { stdout, stderr } = await execAsync(call.args.command, { cwd: paths.workspace });
-              const result = stdout || stderr || 'Command executed successfully (no output)';
+              result = stdout || stderr || 'Command executed successfully (no output)';
               io.emit(`workspace:updated:${username}`);
               io.emit(`tool:result:${username}`, { chatId, tool: 'run_command', result });
               logger.release(`Tool run_command success for ${username}: ${call.args.command}`);
             } catch (e: any) {
+              result = `Error: ${e.message}`;
               logger.error(`Tool run_command failed for ${username}: ${call.args.command}`, e);
               io.emit(`workspace:updated:${username}`);
-              io.emit(`tool:result:${username}`, { chatId, tool: 'run_command', result: `Error: ${e.message}` });
+              io.emit(`tool:result:${username}`, { chatId, tool: 'run_command', result });
             }
           }
           break;
+        case 'search_files':
+          if (call.args.pattern) {
+            try {
+              const { stdout, stderr } = await execAsync(`grep -rIn "${call.args.pattern}" .`, { cwd: paths.workspace });
+              result = stdout || stderr || 'No matches found';
+              io.emit(`tool:result:${username}`, { chatId, tool: 'search_files', result });
+              logger.release(`Tool search_files success for ${username}: ${call.args.pattern}`);
+            } catch (e: any) {
+              result = e.code === 1 ? 'No matches found' : `Error searching files: ${e.message}`;
+              io.emit(`tool:result:${username}`, { chatId, tool: 'search_files', result });
+            }
+          }
+          break;
+        default:
+          result = `Error: Unknown tool ${call.tool}`;
       }
-    } catch (error) {
+      return result;
+    } catch (error: any) {
       logger.error(`Tool execution failed (${call.tool}) for ${chatId} (${username})`, error);
+      return `Error executing tool: ${error.message}`;
     }
   }
 
