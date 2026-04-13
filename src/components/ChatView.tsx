@@ -447,7 +447,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
              )}
              <div className="my-3 inline-flex items-center gap-2 px-3 py-2 bg-bg-tertiary border border-border-primary rounded-lg text-sm font-medium text-text-primary shadow-sm animate-pulse">
                <Loader2 className="animate-spin text-accent-primary" size={16} />
-               <span>Updating workspace...</span>
+               <span>{generationStatus?.includes('Executing tool') ? generationStatus : 'Updating workspace...'}</span>
              </div>
            </React.Fragment>
          );

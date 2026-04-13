@@ -106,10 +106,10 @@ export const dbService = {
   updateProject: async (id: string, data: any) => {
     await updateDoc(doc(db, 'projects', id), data);
   },
-  createProject: async (userId: string, name: string, details: string) => {
+  createProject: async (userId: string, name: string, details: string, type: 'research' | 'coding' = 'coding') => {
     const id = 'proj_' + Date.now().toString();
     await setDoc(doc(db, 'projects', id), {
-      id, userId, name, details, createdAt: Date.now()
+      id, userId, name, details, type, createdAt: Date.now()
     });
     return id;
   },
@@ -154,14 +154,21 @@ export const dbService = {
   },
   addMessage: async (projectId: string, chatId: string, msg: any) => {
     const id = 'msg_' + Date.now().toString() + Math.random().toString(36).substring(2, 5);
-    await setDoc(doc(db, 'projects', projectId, 'chats', chatId, 'messages', id), {
+    const msgData = {
       id,
       chatId,
       role: msg.role,
-      content: msg.content,
+      content: msg.content || '',
       images: msg.images || [],
       timestamp: msg.timestamp || Date.now()
-    });
+    };
+    
+    // Also store tool calls if present
+    if (msg.tool_calls) {
+      (msgData as any).tool_calls = msg.tool_calls;
+    }
+    
+    await setDoc(doc(db, 'projects', projectId, 'chats', chatId, 'messages', id), msgData);
   },
 
   // Memory operations

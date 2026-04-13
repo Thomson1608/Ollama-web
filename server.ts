@@ -735,20 +735,27 @@ async function startServer() {
     try {
       const chats = req.body;
       for (const chat of chats) {
-        // Check if chat exists (Firestore check)
         const chatRef = doc(db, 'projects', projectId, 'chats', chat.id);
         const chatSnap = await getDoc(chatRef);
         if (!chatSnap.exists()) {
           await dbService.createChat(projectId, chat);
-          for (const msg of chat.messages) {
-            await dbService.addMessage(projectId, chat.id, msg);
-          }
         } else {
           await dbService.updateChatTitle(projectId, chat.id, chat.title);
+        }
+        
+        // Always sync messages
+        const existingMessages = await dbService.getMessages(projectId, chat.id);
+        const existingIds = new Set(existingMessages.map((m: any) => m.id));
+        
+        for (const msg of chat.messages) {
+          if (!msg.id || !existingIds.has(msg.id)) {
+            await dbService.addMessage(projectId, chat.id, msg);
+          }
         }
       }
       res.json({ success: true });
     } catch (error) {
+      logger.error('Không thể lưu danh sách chat:', error);
       res.status(500).json({ error: 'Không thể lưu danh sách chat' });
     }
   });
@@ -1996,9 +2003,11 @@ async function startServer() {
         if (toolCalls.length > 0) {
           const toolResults = [];
           for (const call of toolCalls) {
+            io.emit(`chat:status:${username}`, { loading: true, chatId, status: `Executing tool: ${call.tool}...` });
             const result = await executeToolCall(chatId, call, username, projectId);
             toolResults.push({ tool: call.tool, result });
           }
+          io.emit(`chat:status:${username}`, { loading: true, chatId, status: 'Analyzing tool results...' });
 
           const toolResultMessage = {
             role: 'system',
@@ -2062,14 +2071,6 @@ async function startServer() {
     try {
       const paths = getUserPaths(username, projectId);
       
-      // Check if user is admin for workspace tools
-      if (username !== 'admin' && ['list_files', 'read_file', 'write_file', 'delete_file', 'run_command', 'search_files'].includes(call.tool)) {
-        const errorMsg = `Error: Access denied. Only administrators can perform workspace operations.`;
-        logger.error(`Unauthorized tool access attempt by ${username}: ${call.tool}`);
-        io.emit(`tool:result:${username}`, { chatId, tool: call.tool, result: errorMsg });
-        return errorMsg;
-      }
-
       logger.debug(`Executing tool ${call.tool} for ${username}`, call.args);
       let result: any = null;
 

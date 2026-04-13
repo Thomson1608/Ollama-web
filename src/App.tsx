@@ -610,6 +610,13 @@ If the user asks you to write code, you should provide it in a markdown code blo
       try {
         const headers = { 'x-username': username };
         
+        // Ensure user is initialized in DB
+        await fetch('/api/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        });
+
         // Fetch config
         const configRes = await fetch('/api/config', { headers });
         if (configRes.ok) {
@@ -865,13 +872,13 @@ If the user asks you to write code, you should provide it in a markdown code blo
     if (isMobile) setIsSidebarOpen(false);
 
     try {
-      await fetch('/api/chats', {
+      await fetch(`/api/chats?projectId=${projectId}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'x-username': username
         },
-        body: JSON.stringify({ projectId, chat: newChat })
+        body: JSON.stringify([newChat])
       });
     } catch (error) {
       console.error('Failed to create chat', error);
