@@ -45,8 +45,8 @@ Hệ thống được thiết kế theo kiến trúc Client-Server:
 - **Models View:** `models` (danh sách model đã cài), `runningModels` (model đang chạy).
 - **Pull View:** `pullingModel` (trạng thái tải model: `progress`, `status`).
 - **Workspace View:** `files` (Array of WorkspaceFile: `name`, `isDirectory`, `size`, `mtime`), `terminalOutput` (lịch sử lệnh), `history` (Git log).
-- **Settings View:** `systemPrompt` (string), `globalParameters` (temperature, topP, topK, maxTokens, jsonMode).
-- **System Control View:** `stats` (CPU, RAM, Disk), `processes` (PID, Name, Status, CPU%, MEM%, User), `services`.
+- **Settings View:** `systemPrompt` (string), `globalParameters` (temperature, topP, topK, maxTokens, jsonMode), `tailscaleConfig` (authKey, hostname, ephemeral, controlUrl, tags).
+- **System Control View:** `stats` (CPU, RAM, Disk), `processes` (PID, Name, Status, CPU%, MEM%, User), `services`, `tailscaleStatus`.
 
 ### 2.3 Data Schema (Firebase Firestore)
 
@@ -55,11 +55,11 @@ Cấu trúc phân cấp chi tiết:
   - `{ id, username, role }`
   - **Configs Sub-collection:** `/users/{userId}/configs/default` -> `{ userId, systemPrompt, parameters }`
 - **Projects Collection:** `/projects/{projectId}`
-  - `{ id, userId, name, details, createdAt, lastPackageJsonHash }`
+  - `{ id, userId, name, details, type, createdAt, lastPackageJsonHash }`
   - **Chats Sub-collection:** `/projects/{projectId}/chats/{chatId}`
     - `{ id, projectId, title, model, createdAt, systemPrompt, isClosed }`
     - **Messages Sub-collection:** `/projects/{projectId}/chats/{chatId}/messages/{messageId}`
-      - `{ id, chatId, role, content, timestamp, images }`
+      - `{ id, chatId, role, content, timestamp, images, tool_calls }`
   - **Memories Sub-collection:** `/projects/{projectId}/memories/{memoryId}`
     - `{ id, projectId, content, timestamp }`
 - **Stats Collection:** `/stats/{statKey}` -> `{ key, value }` (e.g., `sent`, `success`, `fail`)
@@ -80,6 +80,7 @@ Cấu trúc phân cấp chi tiết:
   - Thu thập thông số hệ thống (CPU, RAM, Disk, Swap) sử dụng `systeminformation`.
   - Quản lý Swap: Cấu hình `swappiness` (độ ưu tiên dùng RAM/Swap) và quản lý tệp tin Swap (tạo/xóa).
   - Quản lý process và service.
+  - **Tailscale Integration:** Cấu hình và quản lý kết nối mạng riêng ảo Tailscale. Hỗ trợ `tailscale up` với các tham số tùy chỉnh (authKey, hostname, tags) và theo dõi trạng thái node thời gian thực.
 - **Terminal Module:** Thực thi lệnh shell, hỗ trợ tab-completion bằng `bash compgen`.
 
 ---
@@ -101,13 +102,16 @@ Cấu trúc phân cấp chi tiết:
   - **Phải (Trên):** Code Editor / Diff Viewer / Preview App (Iframe).
   - **Phải (Dưới):** Terminal tích hợp.
 - **SystemControl:** Monitor (CPU/RAM/Disk), Processes (Bảng có thể sort/kill), Services (Start/Stop), Terminal hệ thống.
+- **SettingsView:** Cấu hình AI (System Prompt, Parameters), cấu hình Workspace Host, và cấu hình **Tailscale** (Mã xác thực, Tên máy, Tags, v.v.).
 
 ### 3.2 Tool Calling & Agent Logic
 
 Hệ thống biến AI thành một "Agent" thực thụ thông qua:
 1. **System Prompt:** Cung cấp hướng dẫn về cách sử dụng công cụ.
 2. **Tool Parsing:** Backend lắng nghe stream từ AI, nếu thấy thẻ `<tool_call>` sẽ tạm dừng stream, thực thi công cụ và gửi kết quả về cho AI (hoặc hiển thị lên UI).
-3. **Danh sách công cụ:**
+3. **Dynamic Status Updates:** Cập nhật trạng thái thực thi tool thời gian thực qua Socket.IO (ví dụ: "Executing tool: write_file..."), giúp người dùng theo dõi tiến độ chính xác.
+4. **Permission Management:** Cho phép tất cả người dùng thực thi các công cụ workspace (đọc/ghi file, chạy lệnh) trong không gian làm việc của riêng họ, không còn giới hạn chỉ cho Admin.
+5. **Danh sách công cụ:**
    - `list_files`: Liệt kê tệp tin.
    - `read_file`: Đọc nội dung tệp.
    - `write_file`: Ghi/Cập nhật tệp (kèm auto-commit).
